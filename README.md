@@ -9,6 +9,16 @@ A high-performance, multi-threaded Mandelbrot set visualizer implementation in C
 
 This project demonstrates efficient real-time fractal rendering by leveraging CPU threading (pthreads) and low-level optimizations. It features an interactive explorer with infinite zoom capabilities and customizable rendering parameters.
 
+## The Math
+
+The Mandelbrot set is the set of complex numbers $c$ for which the function $f_c(z) = z^2 + c$ does not diverge when iterated from $z = 0$.
+
+In simple terms:
+1. Start with $z = 0$.
+2. Calculate the next value: $z_{new} = z_{old}^2 + c$.
+3. Repeat. If the magnitude $|z|$ stays small forever, the point $c$ is inside the set (colored black).
+4. If $|z|$ explodes (escapes to infinity), the point is outside. The color represents **how fast** it escaped.
+
 ## Features
 
 - **Real-time Rendering:** Optimized arithmetic for smooth navigation.
