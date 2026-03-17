@@ -26,6 +26,7 @@ In simple terms:
 
 - **Real-time Rendering:** Optimized arithmetic for smooth navigation.
 - **Multi-threading:** Dynamic workload distribution across available CPU cores.
+- **CPU Powered:** Pure software rendering without GPU acceleration (for educational purposes). [Read more](docs/GPU_INFO.md).
 - **Interactive Controls:** Mouse-based panning and zooming.
 - **State Management:** Undo/Redo history stack for view navigation.
 - **Cross-Platform:** Compatible with Linux, macOS, and Windows (via MSYS2).
