@@ -1,0 +1,28 @@
+# Object files
+*.o
+*.obj
+
+# Libraries
+*.a
+*.lib
+*.so
+*.dll
+*.dylib
+
+# Executables
+mandelbrot
+mandelbrot.exe
+*.out
+*.app
+
+# Debugging
+*.dSYM/
+*.suo
+*.pdb
+*.idb
+.vscode/
+.idea/
+
+# OS specific
+.DS_Store
+Thumbs.db
