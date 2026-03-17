@@ -1,13 +1,16 @@
-# Mandelbrot C
+# Mandelbrot C (ノ*゜▽゜*)
 
 [![Build Status](https://github.com/tiw302/mandelbrot-c/actions/workflows/build.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-A high-performance, multi-threaded Mandelbrot set visualizer implementation in C using SDL2.
+A simple, multi-threaded Mandelbrot set explorer written in C.
+This is my attempt to learn low-level graphics and thread management. It is not perfect, but I tried to make it clean and fast. (´｡• ᵕ •｡`)
+
+---
+
+Hi! I am currently diving into C programming and wanted to build something visual to understand pointers and memory better. This project is the result of my experiments with SDL2 and pthreads. I hope you find it interesting! ヽ(>∀<☆)ノ
 
 ![Mandelbrot Screenshot](assets/screenshot.png)
-
-This project demonstrates efficient real-time fractal rendering by leveraging CPU threading (pthreads) and low-level optimizations. It features an interactive explorer with infinite zoom capabilities and customizable rendering parameters.
 
 ## The Math
 
@@ -22,7 +25,7 @@ In simple terms:
 ## Features
 
 - **Real-time Rendering:** Optimized arithmetic for smooth navigation.
-- **Multi-threading:** dynamic workload distribution across available CPU cores.
+- **Multi-threading:** Dynamic workload distribution across available CPU cores.
 - **Interactive Controls:** Mouse-based panning and zooming.
 - **State Management:** Undo/Redo history stack for view navigation.
 - **Cross-Platform:** Compatible with Linux, macOS, and Windows (via MSYS2).
@@ -96,8 +99,12 @@ make clean
 Rendering parameters can be tuned in `include/config.h` to balance performance and visual fidelity:
 
 - `MAX_ITERATIONS`: Controls the detail level of the fractal boundary.
-- `THREAD_COUNT`: number of parallel threads (set to match CPU cores).
+- `THREAD_COUNT`: Number of parallel threads (set to match CPU cores).
 - `ESCAPE_RADIUS`: Mathematical threshold for the set calculation.
+
+## Contributing (o_ _)o
+
+I am still learning, so if you spot any bugs or have suggestions for improvements (especially around memory safety!), I would really appreciate your help. Feel free to open an issue or pull request. Thank you! (⌒▽⌒)
 
 ## License
 
