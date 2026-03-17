@@ -31,19 +31,26 @@ int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
-    // Check for help flag
-    if (argc > 1 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
-        printf("Mandelbrot Set Renderer\n");
-        printf("Usage: %s [options]\n\n", argv[0]);
-        printf("Controls:\n");
-        printf("  Left Click + Drag  Zoom in\n");
-        printf("  Right Click + Drag Pan\n");
-        printf("  Ctrl + Z           Undo last zoom\n");
-        printf("  R                  Reset view\n");
-        printf("  Q / Esc            Quit\n\n");
-        printf("Options:\n");
-        printf("  -h, --help         Show this help message\n");
-        return 0;
+    // Check for flags
+    if (argc > 1) {
+        if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
+            printf("mandelbrot-c version 1.0.0\n");
+            return 0;
+        }
+        if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
+            printf("Usage of %s:\n", argv[0]);
+            printf("  -h, --help\n");
+            printf("        Show this help message and exit\n");
+            printf("  -v, --version\n");
+            printf("        Print version and exit\n\n");
+            printf("Interactive Controls:\n");
+            printf("  [Mouse Left]   Drag to Zoom in\n");
+            printf("  [Mouse Right]  Drag to Pan view\n");
+            printf("  [Ctrl + Z]     Undo last zoom\n");
+            printf("  [R]            Reset view\n");
+            printf("  [Esc / Q]      Quit\n");
+            return 0;
+        }
     }
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
