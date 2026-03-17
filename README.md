@@ -26,14 +26,34 @@ This project demonstrates efficient real-time fractal rendering by leveraging CP
 
 ### Installation
 
-**Linux (Debian/Ubuntu)**
+**Debian / Ubuntu**
 ```bash
 sudo apt install libsdl2-dev libsdl2-ttf-dev
+```
+
+**Arch Linux**
+```bash
+sudo pacman -S sdl2 sdl2_ttf
+```
+
+**Fedora**
+```bash
+sudo dnf install SDL2-devel SDL2_ttf-devel
+```
+
+**Void Linux**
+```bash
+sudo xbps-install -S SDL2-devel SDL2_ttf-devel
 ```
 
 **macOS**
 ```bash
 brew install sdl2 sdl2_ttf
+```
+
+**Windows (MSYS2)**
+```bash
+pacman -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_ttf
 ```
 
 ## Build & Run
