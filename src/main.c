@@ -31,6 +31,21 @@ int main(int argc, char *argv[]) {
     (void)argc;
     (void)argv;
 
+    // Check for help flag
+    if (argc > 1 && (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0)) {
+        printf("Mandelbrot Set Renderer\n");
+        printf("Usage: %s [options]\n\n", argv[0]);
+        printf("Controls:\n");
+        printf("  Left Click + Drag  Zoom in\n");
+        printf("  Right Click + Drag Pan\n");
+        printf("  Ctrl + Z           Undo last zoom\n");
+        printf("  R                  Reset view\n");
+        printf("  Q / Esc            Quit\n\n");
+        printf("Options:\n");
+        printf("  -h, --help         Show this help message\n");
+        return 0;
+    }
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return 1;
