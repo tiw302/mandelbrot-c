@@ -1,6 +1,11 @@
 # Mandelbrot C
 
+[![Build Status](https://github.com/tiw302/mandelbrot-c/actions/workflows/build.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+
 A high-performance, multi-threaded Mandelbrot set visualizer implementation in C using SDL2.
+
+![Mandelbrot Screenshot](assets/screenshot.png)
 
 This project demonstrates efficient real-time fractal rendering by leveraging CPU threading (pthreads) and low-level optimizations. It features an interactive explorer with infinite zoom capabilities and customizable rendering parameters.
 
