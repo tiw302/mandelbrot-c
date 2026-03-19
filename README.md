@@ -72,7 +72,9 @@ pacman -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_ttf
 
 ## Build & Run
 
-The project uses a standard Makefile for compilation.
+The project uses a standard Makefile for compilation. 
+
+> **Friendly tip:** If you run into build errors, please double-check that you have the [Prerequisites](#prerequisites) installed!
 
 ```bash
 # Build the application
