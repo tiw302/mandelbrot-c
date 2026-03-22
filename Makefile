@@ -3,7 +3,7 @@
 
 CC = gcc
 CFLAGS = -Wall -Wextra -O3 -march=native -Iinclude
-LDFLAGS = -lm
+LDFLAGS = -lm -lz
 
 # Detect operating system
 UNAME_S := $(shell uname -s 2>/dev/null || echo Windows)
@@ -19,39 +19,39 @@ endif
 
 # Platform-specific configuration
 ifeq ($(DETECTED_OS),Linux)
-    # Linux: use pkg-config for SDL2
-    CFLAGS += $(shell pkg-config --cflags sdl2 SDL2_ttf 2>/dev/null || echo "-I/usr/include/SDL2")
+    CFLAGS  += $(shell pkg-config --cflags sdl2 SDL2_ttf 2>/dev/null || echo "-I/usr/include/SDL2")
     LDFLAGS += $(shell pkg-config --libs sdl2 SDL2_ttf 2>/dev/null || echo "-lSDL2 -lSDL2_ttf")
     LDFLAGS += -lpthread
 endif
 
 ifeq ($(DETECTED_OS),Darwin)
-    # macOS: use pkg-config or Homebrew paths
     SDL_CFLAGS := $(shell pkg-config --cflags sdl2 SDL2_ttf 2>/dev/null)
-    SDL_LIBS := $(shell pkg-config --libs sdl2 SDL2_ttf 2>/dev/null)
-    
+    SDL_LIBS   := $(shell pkg-config --libs sdl2 SDL2_ttf 2>/dev/null)
+
     ifeq ($(SDL_CFLAGS),)
-        # Fallback to Homebrew paths
         HOMEBREW_PREFIX := $(shell brew --prefix 2>/dev/null || echo /opt/homebrew)
-        CFLAGS += -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/include/SDL2
+        CFLAGS  += -I$(HOMEBREW_PREFIX)/include -I$(HOMEBREW_PREFIX)/include/SDL2
         LDFLAGS += -L$(HOMEBREW_PREFIX)/lib
         SDL_LIBS := -lSDL2 -lSDL2_ttf
     endif
-    
-    CFLAGS += $(SDL_CFLAGS)
+
+    CFLAGS  += $(SDL_CFLAGS)
     LDFLAGS += $(SDL_LIBS) -lpthread
 endif
 
 ifeq ($(DETECTED_OS),Windows)
-    # Windows (MSYS2/MinGW): use pkg-config
-    CFLAGS += $(shell pkg-config --cflags sdl2 SDL2_ttf 2>/dev/null || echo "-I/mingw64/include/SDL2")
+    CFLAGS  += $(shell pkg-config --cflags sdl2 SDL2_ttf 2>/dev/null || echo "-I/mingw64/include/SDL2")
     LDFLAGS += $(shell pkg-config --libs sdl2 SDL2_ttf 2>/dev/null || echo "-lmingw32 -lSDL2main -lSDL2 -lSDL2_ttf")
     LDFLAGS += -lpthread -mwindows
 endif
 
 # Source and object files
-SRCDIR = src
-SOURCES = $(SRCDIR)/main.c $(SRCDIR)/mandelbrot.c $(SRCDIR)/renderer.c
+SRCDIR  = src
+SOURCES = $(SRCDIR)/main.c \
+          $(SRCDIR)/mandelbrot.c \
+          $(SRCDIR)/renderer.c \
+          $(SRCDIR)/julia.c \
+          $(SRCDIR)/screenshot.c
 OBJECTS = $(SOURCES:.c=.o)
 
 # Default target
@@ -137,11 +137,15 @@ help:
 	@echo "  make help     - Show this help"
 	@echo ""
 	@echo "Current configuration:"
-	@echo "  OS: $(DETECTED_OS)"
+	@echo "  OS:       $(DETECTED_OS)"
 	@echo "  Compiler: $(CC)"
-	@echo "  Target: $(TARGET)"
+	@echo "  Target:   $(TARGET)"
 
 # Dependencies
-$(SRCDIR)/main.o: include/config.h include/mandelbrot.h include/renderer.h
+$(SRCDIR)/main.o:       include/config.h include/mandelbrot.h include/julia.h \
+                        include/renderer.h include/screenshot.h
 $(SRCDIR)/mandelbrot.o: include/mandelbrot.h include/config.h
-$(SRCDIR)/renderer.o: include/renderer.h include/mandelbrot.h include/config.h
+$(SRCDIR)/julia.o:      include/julia.h include/mandelbrot.h include/config.h
+$(SRCDIR)/renderer.o:   include/renderer.h include/mandelbrot.h include/julia.h \
+                        include/config.h
+$(SRCDIR)/screenshot.o: include/screenshot.h
