@@ -11,6 +11,7 @@ This is my attempt to learn low-level graphics and thread management. It is not 
 Hi! I am currently diving into C programming and wanted to build something visual to understand pointers and memory better. This project is the result of my experiments with SDL2 and pthreads. I hope you find it interesting! ヽ(>∀<☆)ノ
 
 ![Mandelbrot Screenshot](assets/screenshot.png)
+![Mandelbrot Screenshot](assets/screenshot2.png)
 
 ## The Math
 
