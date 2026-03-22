@@ -5,46 +5,59 @@
 #include "config.h"
 #include "mandelbrot.h"
 
-// Structure to pass data to each rendering thread
+/* Selects which fractal the render threads should compute. */
+typedef enum {
+    RENDER_MANDELBROT = 0,
+    RENDER_JULIA      = 1
+} RenderMode;
+
+/*
+ * Work packet passed to each render thread.
+ * Both Mandelbrot and Julia modes share this struct; julia_c is only
+ * meaningful when mode == RENDER_JULIA.
+ */
 typedef struct {
-    int id;                // Thread ID
-    Uint32* pixels;        // Pointer to the pixel buffer
-    int pitch;             // Pitch of the pixel buffer
-    int start_y;           // Starting Y coordinate for this thread
-    int end_y;             // Ending Y coordinate for this thread
-    int window_width;      // Current width of the window
-    int window_height;     // Current height of the window
-    double re_min, re_max; // Real axis bounds
-    double im_min, im_max; // Imaginary axis bounds
+    int        id;
+    Uint32    *pixels;
+    int        pitch;
+    int        start_y;
+    int        end_y;
+    int        window_width;
+    int        window_height;
+    double     re_min, re_max;
+    double     im_min, im_max;
+    RenderMode mode;     /* which fractal to render */
+    complex_t  julia_c;  /* fixed c parameter for Julia mode */
 } thread_data_t;
 
 /**
- * @brief Function executed by each rendering thread.
+ * @brief Map an iteration count to an RGB colour using sine-wave gradients.
  *
- * @param arg A pointer to thread_data_t containing rendering parameters.
- * @return NULL
+ * Points inside the set (iterations == MAX_ITERATIONS) are rendered black.
  */
-void* render_thread(void* arg);
+void get_color(int iterations, Uint8 *r, Uint8 *g, Uint8 *b);
+
+/** @brief Thread entry point -- renders the horizontal band defined in arg. */
+void *render_thread(void *arg);
 
 /**
- * @brief Renders the Mandelbrot set using multiple threads.
- *
- * @param pixels Pointer to the pixel buffer to write to.
- * @param pitch Pitch of the pixel buffer.
- * @param window_width The current width of the window.
- * @param window_height The current height of the window.
- * @param re_min Minimum real value of the complex plane.
- * @param re_max Maximum real value of the complex plane.
- * @param im_min Minimum imaginary value of the complex plane.
- * @param im_max Maximum imaginary value of the complex plane.
+ * @brief Render the Mandelbrot set into `pixels` using THREAD_COUNT threads.
  */
-void render_mandelbrot_threaded(Uint32* pixels, int pitch,
-                                 int window_width, int window_height,
-                                 double re_min, double re_max,
-                                 double im_min, double im_max);
+void render_mandelbrot_threaded(Uint32 *pixels, int pitch,
+                                int window_width, int window_height,
+                                double re_min, double re_max,
+                                double im_min, double im_max);
 
+/**
+ * @brief Render the Julia set J_c into `pixels` using THREAD_COUNT threads.
+ *
+ * @param julia_c  The fixed complex parameter that defines which Julia set to draw.
+ *                 Typically the complex-plane coordinate under the mouse cursor.
+ */
+void render_julia_threaded(Uint32 *pixels, int pitch,
+                           int window_width, int window_height,
+                           double re_min, double re_max,
+                           double im_min, double im_max,
+                           complex_t julia_c);
 
-// Function to map iterations to a color (black to red gradient)
-void get_color(int iterations, Uint8* r, Uint8* g, Uint8* b);
-
-#endif // RENDERER_H
+#endif /* RENDERER_H */
