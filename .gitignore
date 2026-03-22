@@ -38,3 +38,6 @@ Thumbs.db
 undo/
 .netrwhist
 *~
+
+# Screenshots
+mandelbrot_*.png
