@@ -135,6 +135,28 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - `THREAD_COUNT`: Number of parallel threads (set to match CPU cores).
 - `ESCAPE_RADIUS`: Mathematical threshold for the set calculation.
 
+## Roadmap
+
+### Performance Optimization
+- [ ] Implement dynamic load balancing using a work queue or tiled rendering to improve CPU utilization across cores.
+- [ ] Replace real-time trigonometric color calculations with a pre-calculated Look-Up Table (LUT).
+- [ ] Implement smooth coloring algorithms using fractional iteration counts.
+- [ ] Explore SIMD (AVX/AVX2) vectorization to process multiple pixels per instruction.
+
+### Features and Exploration
+- [ ] Integrate arbitrary-precision arithmetic libraries (e.g., GNU MPFR) to support deep zooms beyond the limits of double precision.
+- [ ] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
+- [ ] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
+
+### Advanced Backends
+- [ ] Develop a GPU-accelerated backend using OpenGL Compute Shaders or Vulkan.
+- [ ] Port the project to WebAssembly using Emscripten for browser-based execution.
+
+### Engineering Improvements
+- [ ] Migrate the build system from Makefile to CMake for better cross-platform support.
+- [ ] Add unit tests for core mathematical functions.
+- [ ] Implement automatic CPU core detection to dynamically set the thread count.
+
 ## Contributing (o_ _)o
 
 I am still learning, so if you spot any bugs or have suggestions for improvements (especially around memory safety!), I would really appreciate your help. Feel free to open an issue or pull request. Thank you! (⌒▽⌒)
