@@ -6,26 +6,37 @@
 #include <stdio.h>
 #include <math.h>
 
+/* Global Look-Up Table for iteration-to-color mapping */
+static Uint8 color_lut[MAX_ITERATIONS + 1][3];
+
+void init_renderer(void) {
+    /*
+     * Pre-calculate the sin-wave palette.
+     * Points inside the set (iterations == MAX_ITERATIONS) are black.
+     */
+    double freq = 0.1;
+    for (int i = 0; i < MAX_ITERATIONS; i++) {
+        color_lut[i][0] = (Uint8)(sin(freq * i + 0) * 127 + 128);
+        color_lut[i][1] = (Uint8)(sin(freq * i + 2) * 127 + 128);
+        color_lut[i][2] = (Uint8)(sin(freq * i + 4) * 127 + 128);
+    }
+    /* Inside set */
+    color_lut[MAX_ITERATIONS][0] = 0;
+    color_lut[MAX_ITERATIONS][1] = 0;
+    color_lut[MAX_ITERATIONS][2] = 0;
+}
+
 /*
- * Maps an iteration count to an RGB colour.
- *
- * Points inside the set (iterations == MAX_ITERATIONS) are black.
- * Escaping points are coloured using sine waves offset by phase so that
- * R, G, and B cycle at slightly different rates, producing smooth gradients.
- *
- * Tweak `freq` or the phase offsets (+0, +2, +4) to change the palette.
+ * Maps an iteration count to an RGB colour using the pre-calculated LUT.
  */
 void get_color(int iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
-    if (iterations == MAX_ITERATIONS) {
-        *r = *g = *b = 0;
-        return;
-    }
+    /* Boundary check just in case, though MAX_ITERATIONS is the cap */
+    if (iterations < 0) iterations = 0;
+    if (iterations > MAX_ITERATIONS) iterations = MAX_ITERATIONS;
 
-    /* sin() returns -1..1; scale to 0..255 */
-    double freq = 0.1;
-    *r = (Uint8)(sin(freq * iterations + 0) * 127 + 128);
-    *g = (Uint8)(sin(freq * iterations + 2) * 127 + 128);
-    *b = (Uint8)(sin(freq * iterations + 4) * 127 + 128);
+    *r = color_lut[iterations][0];
+    *g = color_lut[iterations][1];
+    *b = color_lut[iterations][2];
 }
 
 #include <stdatomic.h>

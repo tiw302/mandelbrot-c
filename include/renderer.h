@@ -32,6 +32,11 @@ typedef struct {
 } thread_data_t;
 
 /**
+ * @brief Initialize the renderer (e.g., pre-calculate the color LUT).
+ */
+void init_renderer(void);
+
+/**
  * @brief Map an iteration count to an RGB colour using sine-wave gradients.
  *
  * Points inside the set (iterations == MAX_ITERATIONS) are rendered black.

@@ -132,6 +132,7 @@ int main(int argc, char *argv[]) {
     SDL_Rect zoom_rect    = {0, 0, 0, 0};
     Uint32   render_time  = 0;
 
+    init_renderer();
     print_controls();
 
     /* --------------------------------------------------------------------- */
