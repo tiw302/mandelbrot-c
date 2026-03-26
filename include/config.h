@@ -5,25 +5,20 @@
 #define WINDOW_WIDTH    1280
 #define WINDOW_HEIGHT   720
 
-/* Iteration limit. Higher = more detail but slower.
-   Recommended: 500 (fast), 1000 (balanced), 2000+ (deep zooms) */
+/* Iteration limit: higher values increase detail but decrease performance */
 #define MAX_ITERATIONS  1000
 
-/* Escape radius. Standard is 2.0; higher values (like 10.0+) improve
-   smooth coloring accuracy. */
+/* Escape threshold: larger values improve smooth coloring accuracy */
 #define ESCAPE_RADIUS   10.0
 
-/* Number of render threads. Set this to your CPU core count.
-   Check with: nproc (Linux/Mac) or Task Manager > Performance (Windows) */
+/* Parallel rendering thread count */
 #define THREAD_COUNT    8
 
-/* Show the debug overlay (render time, coordinates, zoom level).
-   1 = visible, 0 = hidden */
+/* Debug overlay configuration */
 #define DEBUG_INFO      1
 #define FONT_SIZE       16
 
-/* Font paths -- the program tries each one in order until it finds a valid font.
-   If none are found, the debug overlay is silently disabled. */
+/* System-specific font fallback paths */
 #if defined(_WIN32) || defined(_WIN64)
     #define FONT_PATH_1  "C:\\Windows\\Fonts\\arial.ttf"
     #define FONT_PATH_2  "C:\\Windows\\Fonts\\segoeui.ttf"
@@ -41,10 +36,10 @@
     #define FONT_PATH_4  "/usr/share/fonts/noto/NotoSans-Regular.ttf"
 #endif
 
-/* How many zoom steps to remember for undo (Ctrl+Z) */
+/* Maximum steps for undo history (Ctrl+Z) */
 #define MAX_HISTORY_SIZE 100
 
-/* Starting view: centered slightly left of the origin to show the full set */
+/* Initial view coordinates and zoom level */
 #define INITIAL_CENTER_RE   -0.5
 #define INITIAL_CENTER_IM    0.0
 #define INITIAL_ZOOM         3.0

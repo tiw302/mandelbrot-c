@@ -1,23 +1,17 @@
 #ifndef MANDELBROT_H
 #define MANDELBROT_H
 
-#include "config.h" // For MAX_ITERATIONS
+#include "config.h"
 
-// Structure to represent a complex number
 typedef struct {
-    double re; // Real part
-    double im; // Imaginary part
+    double re;
+    double im;
 } complex_t;
 
 /**
- * @brief Checks if a given complex number belongs to the Mandelbrot set.
- *
- * This function calculates the number of iterations required for the magnitude
- * of z to exceed ESCAPE_RADIUS for a given complex number c.
- *
- * @param c The complex number to test.
- * @return The fractional number of iterations (0.0 to MAX_ITERATIONS).
+ * Returns fractional iteration count for point c in the Mandelbrot set.
+ * Returns MAX_ITERATIONS if the point is within the set.
  */
 double mandelbrot_check(complex_t c);
 
-#endif // MANDELBROT_H
+#endif
