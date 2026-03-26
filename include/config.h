@@ -9,8 +9,9 @@
    Recommended: 500 (fast), 1000 (balanced), 2000+ (deep zooms) */
 #define MAX_ITERATIONS  1000
 
-/* Escape radius. Standard is 2.0 -- no need to change this. */
-#define ESCAPE_RADIUS   2.0
+/* Escape radius. Standard is 2.0; higher values (like 10.0+) improve
+   smooth coloring accuracy. */
+#define ESCAPE_RADIUS   10.0
 
 /* Number of render threads. Set this to your CPU core count.
    Check with: nproc (Linux/Mac) or Task Manager > Performance (Windows) */

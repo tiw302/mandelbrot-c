@@ -19,8 +19,8 @@
  *
  * @param z  Starting point in the complex plane (varies over the screen).
  * @param c  Fixed Julia parameter chosen by the user (mouse position on Mandelbrot).
- * @return   Iteration count before |z| > ESCAPE_RADIUS, or MAX_ITERATIONS if inside.
+ * @return   Fractional iteration count before |z| > ESCAPE_RADIUS.
  */
-int julia_check(complex_t z, complex_t c);
+double julia_check(complex_t z, complex_t c);
 
 #endif /* JULIA_H */

@@ -27,16 +27,27 @@ void init_renderer(void) {
 }
 
 /*
- * Maps an iteration count to an RGB colour using the pre-calculated LUT.
+ * Maps a fractional iteration count to an RGB colour using linear interpolation
+ * between pre-calculated LUT entries.
  */
-void get_color(int iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
-    /* Boundary check just in case, though MAX_ITERATIONS is the cap */
-    if (iterations < 0) iterations = 0;
-    if (iterations > MAX_ITERATIONS) iterations = MAX_ITERATIONS;
+void get_color(double iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
+    if (iterations >= MAX_ITERATIONS) {
+        *r = *g = *b = 0;
+        return;
+    }
 
-    *r = color_lut[iterations][0];
-    *g = color_lut[iterations][1];
-    *b = color_lut[iterations][2];
+    if (iterations < 0) iterations = 0;
+
+    int i = (int)iterations;
+    double t = iterations - i;
+
+    /* Interpolate between color_lut[i] and color_lut[i+1] */
+    int i2 = i + 1;
+    if (i2 > MAX_ITERATIONS) i2 = MAX_ITERATIONS;
+
+    *r = (Uint8)(color_lut[i][0] * (1.0 - t) + color_lut[i2][0] * t);
+    *g = (Uint8)(color_lut[i][1] * (1.0 - t) + color_lut[i2][1] * t);
+    *b = (Uint8)(color_lut[i][2] * (1.0 - t) + color_lut[i2][2] * t);
 }
 
 #include <stdatomic.h>
@@ -61,7 +72,7 @@ void *render_thread(void *arg) {
             point.re = data->re_min + (double)x * re_factor;
             point.im = data->im_min + (double)y * im_factor;
 
-            int iterations;
+            double iterations;
             if (data->mode == RENDER_JULIA)
                 iterations = julia_check(point, data->julia_c);
             else

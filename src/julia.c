@@ -1,4 +1,5 @@
 #include "julia.h"
+#include <math.h>
 
 /*
  * Julia iteration is identical to Mandelbrot arithmetic -- the only difference
@@ -8,7 +9,7 @@
  * This separation keeps mandelbrot.c focused on the Mandelbrot set and makes
  * the distinction between the two sets explicit in the code.
  */
-int julia_check(complex_t z, complex_t c) {
+double julia_check(complex_t z, complex_t c) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
@@ -21,11 +22,14 @@ int julia_check(complex_t z, complex_t c) {
         z.re = next_re;
         z.im = next_im;
 
-        if (z.re * z.re + z.im * z.im > escape_radius_sq)
-            return iterations;
+        double mag_sq = z.re * z.re + z.im * z.im;
+        if (mag_sq > escape_radius_sq) {
+            /* Smooth coloring formula */
+            return (double)iterations + 2.0 - log2(log(mag_sq));
+        }
 
         iterations++;
     }
 
-    return MAX_ITERATIONS;
+    return (double)MAX_ITERATIONS;
 }

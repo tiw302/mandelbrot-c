@@ -16,9 +16,8 @@ typedef struct {
  * of z to exceed ESCAPE_RADIUS for a given complex number c.
  *
  * @param c The complex number to test.
- * @return The number of iterations (0 to MAX_ITERATIONS). If it reaches MAX_ITERATIONS,
- *         it's considered to be in the set.
+ * @return The fractional number of iterations (0.0 to MAX_ITERATIONS).
  */
-int mandelbrot_check(complex_t c);
+double mandelbrot_check(complex_t c);
 
 #endif // MANDELBROT_H

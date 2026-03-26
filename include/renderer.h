@@ -41,7 +41,7 @@ void init_renderer(void);
  *
  * Points inside the set (iterations == MAX_ITERATIONS) are rendered black.
  */
-void get_color(int iterations, Uint8 *r, Uint8 *g, Uint8 *b);
+void get_color(double iterations, Uint8 *r, Uint8 *g, Uint8 *b);
 
 /** @brief Thread entry point -- renders the horizontal band defined in arg. */
 void *render_thread(void *arg);
