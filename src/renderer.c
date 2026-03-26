@@ -28,9 +28,10 @@ void get_color(int iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
     *b = (Uint8)(sin(freq * iterations + 4) * 127 + 128);
 }
 
+#include <stdatomic.h>
+
 /*
- * Thread entry point. Renders the horizontal band defined by
- * data->start_y .. data->end_y (exclusive).
+ * Thread entry point. Renders the next available row from the work queue.
  *
  * Branches on data->mode to choose between Mandelbrot and Julia iteration.
  * The arithmetic is identical; only the starting conditions differ.
@@ -42,7 +43,8 @@ void *render_thread(void *arg) {
     double re_factor = (data->re_max - data->re_min) / data->window_width;
     double im_factor = (data->im_max - data->im_min) / data->window_height;
 
-    for (int y = data->start_y; y < data->end_y; y++) {
+    int y;
+    while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
         for (int x = 0; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
@@ -67,29 +69,22 @@ void *render_thread(void *arg) {
 }
 
 /*
- * Internal helper: spawns THREAD_COUNT threads, divides the image into
- * horizontal bands, waits for all threads to finish.
- *
- * Both render_mandelbrot_threaded and render_julia_threaded delegate here,
- * passing the appropriate mode and julia_c values.
+ * Internal helper: spawns THREAD_COUNT threads and uses an atomic counter
+ * to dynamically distribute rows among them.
  */
 static void dispatch_threads(Uint32 *pixels, int pitch,
                               int window_width, int window_height,
                               double re_min, double re_max,
                               double im_min, double im_max,
                               RenderMode mode, complex_t julia_c) {
-    pthread_t     threads[THREAD_COUNT];
-    thread_data_t thread_data[THREAD_COUNT];
-
-    int rows_per_thread = window_height / THREAD_COUNT;
-    int remaining_rows  = window_height % THREAD_COUNT;
+    pthread_t      threads[THREAD_COUNT];
+    thread_data_t  thread_data[THREAD_COUNT];
+    atomic_int     next_row = 0;
 
     for (int i = 0; i < THREAD_COUNT; i++) {
         thread_data[i].id            = i;
         thread_data[i].pixels        = pixels;
         thread_data[i].pitch         = pitch;
-        thread_data[i].start_y       = i * rows_per_thread;
-        thread_data[i].end_y         = thread_data[i].start_y + rows_per_thread;
         thread_data[i].window_width  = window_width;
         thread_data[i].window_height = window_height;
         thread_data[i].re_min        = re_min;
@@ -98,10 +93,7 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
         thread_data[i].im_max        = im_max;
         thread_data[i].mode          = mode;
         thread_data[i].julia_c       = julia_c;
-
-        /* Give any leftover rows to the last thread */
-        if (i == THREAD_COUNT - 1)
-            thread_data[i].end_y += remaining_rows;
+        thread_data[i].next_row      = &next_row;
 
         if (pthread_create(&threads[i], NULL, render_thread, &thread_data[i]) != 0) {
             fprintf(stderr, "Failed to create thread %d\n", i);

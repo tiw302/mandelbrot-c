@@ -11,23 +11,24 @@ typedef enum {
     RENDER_JULIA      = 1
 } RenderMode;
 
+#include <stdatomic.h>
+
 /*
  * Work packet passed to each render thread.
  * Both Mandelbrot and Julia modes share this struct; julia_c is only
  * meaningful when mode == RENDER_JULIA.
  */
 typedef struct {
-    int        id;
-    Uint32    *pixels;
-    int        pitch;
-    int        start_y;
-    int        end_y;
-    int        window_width;
-    int        window_height;
-    double     re_min, re_max;
-    double     im_min, im_max;
-    RenderMode mode;     /* which fractal to render */
-    complex_t  julia_c;  /* fixed c parameter for Julia mode */
+    int              id;
+    Uint32          *pixels;
+    int              pitch;
+    int              window_width;
+    int              window_height;
+    double           re_min, re_max;
+    double           im_min, im_max;
+    RenderMode       mode;     /* which fractal to render */
+    complex_t        julia_c;  /* fixed c parameter for Julia mode */
+    atomic_int      *next_row; /* shared atomic counter for dynamic load balancing */
 } thread_data_t;
 
 /**
