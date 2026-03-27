@@ -77,6 +77,25 @@ int main(int argc, char *argv[]) {
     ViewState history[MAX_HISTORY_SIZE];
     int       history_count = 0;
 
+    /* Tour mode state */
+    const ViewState tour_path[] = {
+        {INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM},       // Starting point
+        {-0.743643887074537, 0.131825904145753, 1.0},             // First zoom point
+        {-0.743643887074537, 0.131825904145753, 10.0},            // Deeper zoom
+        {-0.743643887074537, 0.131825904145753, 100.0},           // Even deeper zoom
+        {-0.162736800339303, 0.878583137739572, 50.0},            // Move to a different region
+        {0.275275641098809, 0.006942671571179, 200.0},           // Zoom into another area
+        {0.275275641098809, 0.006942671571179, 500.0},
+        {-0.458345355141416, -0.633156886463435, 1000.0},         // Another interesting region
+        {-0.458345355141416, -0.633156886463435, 5000.0},
+        {-0.458345355141416, -0.633156886463435, 50000.0}        // Extreme zoom
+    };
+    int num_tour_points = sizeof(tour_path) / sizeof(tour_path[0]);
+    int current_tour_point_idx = 0;
+    int tour_mode = 0; // 0: off, 1: playing
+    Uint32 tour_start_time = 0;
+    const double TOUR_DURATION_PER_SEGMENT = 5000.0; // 5 seconds per segment
+
     int          julia_mode = 0;
     complex_t    julia_c    = {-0.7, 0.27};
     JuliaSession julia_session = {{0}, 0};
@@ -122,6 +141,7 @@ int main(int argc, char *argv[]) {
                     view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                     history_count = 0;
                     julia_session.active = 0;
+                    tour_mode = 0; // Stop tour on reset
                     SDL_SetWindowTitle(window, "Mandelbrot Explorer");
                     needs_redraw = 1;
                 } else if (event.key.keysym.sym == SDLK_j) {
@@ -135,16 +155,34 @@ int main(int argc, char *argv[]) {
                         view = (ViewState){JULIA_CENTER_RE, JULIA_CENTER_IM, JULIA_ZOOM};
                         julia_mode = 1;
                         history_count = 0;
+                        tour_mode = 0; // Stop tour on mode switch
                         SDL_SetWindowTitle(window, "Julia Explorer");
                     } else {
                         if (julia_session.active) view = julia_session.mandelbrot_view;
                         julia_mode = 0;
                         history_count = 0;
+                        tour_mode = 0; // Stop tour on mode switch
                         SDL_SetWindowTitle(window, "Mandelbrot Explorer");
                     }
                     needs_redraw = 1;
                 } else if (event.key.keysym.sym == SDLK_s) {
                     save_screenshot(renderer, win_w, win_h);
+                } else if (event.key.keysym.sym == SDLK_t) { // Toggle tour mode
+                    tour_mode = !tour_mode;
+                    if (tour_mode) {
+                        current_tour_point_idx = 0;
+                        tour_start_time = SDL_GetTicks();
+                        // Reset view to the first tour point if not already there
+                        if (view.center_re != tour_path[current_tour_point_idx].center_re ||
+                            view.center_im != tour_path[current_tour_point_idx].center_im ||
+                            view.zoom != tour_path[current_tour_point_idx].zoom) {
+                            view = tour_path[current_tour_point_idx];
+                        }
+                        SDL_SetWindowTitle(window, "Mandelbrot Explorer - Tour Mode");
+                    } else {
+                        SDL_SetWindowTitle(window, "Mandelbrot Explorer");
+                    }
+                    needs_redraw = 1;
                 }
                 break;
 
@@ -201,6 +239,31 @@ int main(int argc, char *argv[]) {
                 }
                 break;
             }
+        }
+
+        // Tour mode animation logic
+        if (tour_mode) {
+            Uint32 now = SDL_GetTicks();
+            double elapsed_time = (double)(now - tour_start_time);
+            double t = fmin(elapsed_time / TOUR_DURATION_PER_SEGMENT, 1.0);
+
+            ViewState from_view = tour_path[current_tour_point_idx];
+            ViewState to_view = tour_path[(current_tour_point_idx + 1) % num_tour_points]; // Loop back to start
+
+            view.center_re = from_view.center_re + (to_view.center_re - from_view.center_re) * t;
+            view.center_im = from_view.center_im + (to_view.center_im - from_view.center_im) * t;
+            view.zoom = from_view.zoom + (to_view.zoom - from_view.zoom) * t;
+
+            if (t >= 1.0) {
+                current_tour_point_idx = (current_tour_point_idx + 1) % num_tour_points;
+                tour_start_time = now;
+                // If we completed a full loop and are back to the start, stop tour.
+                if (current_tour_point_idx == 0) {
+                    tour_mode = 0;
+                    SDL_SetWindowTitle(window, "Mandelbrot Explorer");
+                }
+            }
+            needs_redraw = 1; // Force redraw for animation
         }
 
         if (needs_redraw) {
@@ -295,5 +358,6 @@ static void print_controls(void) {
     puts("  R          : Reset View");
     puts("  J          : Toggle Julia Mode");
     puts("  S          : Save Screenshot");
+    puts("  T          : Toggle Tour Mode (Press 'T' to start/stop)"); // Added tour mode control
     puts("  Q / ESC    : Quit");
 }
