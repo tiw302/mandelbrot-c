@@ -252,7 +252,11 @@ int main(int argc, char *argv[]) {
 
             view.center_re = from_view.center_re + (to_view.center_re - from_view.center_re) * t;
             view.center_im = from_view.center_im + (to_view.center_im - from_view.center_im) * t;
-            view.zoom = from_view.zoom + (to_view.zoom - from_view.zoom) * t;
+                // Calculate logarithmic zoom interpolation
+    double log_zoom_from = log(from_view.zoom);
+    double log_zoom_to = log(to_view.zoom);
+    double log_zoom_interpolated = log_zoom_from + (log_zoom_to - log_zoom_from) * t;
+    view.zoom = exp(log_zoom_interpolated);
 
             if (t >= 1.0) {
                 current_tour_point_idx = (current_tour_point_idx + 1) % num_tour_points;
