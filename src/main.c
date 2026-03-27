@@ -25,6 +25,7 @@ typedef struct {
 #define JULIA_CENTER_IM   0.0
 #define JULIA_ZOOM        4.0
 
+// Forward declarations for static functions used in main
 static void calculate_boundaries(double center_re, double center_im, double zoom,
                                   int width, int height,
                                   double *re_min, double *re_max,
@@ -39,7 +40,8 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1) {
         if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-            printf("mandelbrot-c 1.0.0\n");
+            printf("mandelbrot-c 1.0.0
+");
             return 0;
         }
         if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
@@ -303,6 +305,10 @@ int main(int argc, char *argv[]) {
             render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
             if (julia_mode) {
                 snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", julia_c.re, julia_c.im);
+                render_text(renderer, font, buf, 5, y, white);
+            }
+            if (tour_mode) { // Display tour progress if tour mode is active
+                snprintf(buf, sizeof(buf), "Tour: %d/%d", current_tour_point_idx + 1, num_tour_points);
                 render_text(renderer, font, buf, 5, y, white);
             }
         }
