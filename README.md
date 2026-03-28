@@ -39,6 +39,7 @@ A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ an
 - **Real-time Rendering:** Optimized arithmetic for smooth navigation.
 - **Multi-threading:** Dynamic workload distribution across available CPU cores.
 - **Julia Set Mode:** Press `J` to instantly switch to the Julia set defined by the point under your cursor. Move the mouse to morph the fractal live.
+- **Tour Mode:** Press `T` to start an automated "camera tour". In Mandelbrot mode, it zooms into interesting coordinates; in Julia mode, it animates the parameters for you.
 - **Screenshot Export:** Press `S` to save the current view as a timestamped PNG -- no extra libraries needed.
 - **CPU Powered:** Pure software rendering without GPU acceleration (for educational purposes). [Read more](docs/GPU_INFO.md).
 - **Interactive Controls:** Mouse-based panning and zooming.
@@ -112,6 +113,7 @@ make clean
 | **Reset View** | `R` |
 | **Toggle Julia Mode** | `J` |
 | **Save Screenshot** | `S` |
+| **Tour Mode** | `T` |
 | **Quit** | `Esc` or `Q` |
 
 ### Julia Mode
@@ -120,6 +122,13 @@ Press `J` while hovering over any point on the Mandelbrot set to jump into Julia
 The complex coordinate under your cursor becomes the parameter $c$ that defines the Julia set.
 Move your mouse around to morph the fractal in real time -- every position gives you a completely different shape.
 Press `J` again to return to the exact Mandelbrot view you left.
+
+### Tour Mode
+
+Press `T` to toggle the automated exploration mode:
+
+- **In Mandelbrot Mode:** The camera will automatically pan and zoom into a series of hand-picked, visually complex regions (the "Seahorse Valley," "Elephant Valley," etc.).
+- **In Julia Mode:** The $c$ parameter will smoothly glide between interesting sets, showcasing spirals, dendrites, and Siegel disks without any mouse input.
 
 ### Screenshots
 
@@ -146,7 +155,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 ### Features and Exploration
 - [ ] Integrate arbitrary-precision arithmetic libraries (e.g., GNU MPFR) to support deep zooms beyond the limits of double precision.
 - [ ] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
-- [ ] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
+- [x] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
 
 ### Advanced Backends
 - [ ] Develop a GPU-accelerated backend using OpenGL Compute Shaders or Vulkan.
