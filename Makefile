@@ -47,21 +47,26 @@ endif
 
 # Source and object files
 SRCDIR  = src
+OBJDIR  = obj
 SOURCES = $(SRCDIR)/main.c \
           $(SRCDIR)/mandelbrot.c \
           $(SRCDIR)/renderer.c \
           $(SRCDIR)/julia.c \
           $(SRCDIR)/screenshot.c
-OBJECTS = $(SOURCES:.c=.o)
+OBJECTS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
 
 # Default target
 .PHONY: all
-all: banner $(TARGET)
+all: banner $(OBJDIR) $(TARGET)
 	@echo ""
 	@echo "✓ Build complete!"
 	@echo ""
 	@echo "Run with: ./$(TARGET)"
 	@echo ""
+
+# Create object directory
+$(OBJDIR):
+	@mkdir -p $(OBJDIR)
 
 # Build executable
 $(TARGET): $(OBJECTS)
@@ -69,7 +74,7 @@ $(TARGET): $(OBJECTS)
 	@$(CC) $(OBJECTS) -o $(TARGET) $(LDFLAGS)
 
 # Compile source files
-$(SRCDIR)/%.o: $(SRCDIR)/%.c
+$(OBJDIR)/%.o: $(SRCDIR)/%.c
 	@echo "Compiling $<..."
 	@$(CC) $(CFLAGS) -c $< -o $@
 
@@ -86,7 +91,7 @@ banner:
 .PHONY: clean
 clean:
 	@echo "Cleaning build artifacts..."
-	@rm -f $(SRCDIR)/*.o $(TARGET)
+	@rm -rf $(OBJDIR) $(TARGET)
 	@echo "✓ Clean complete!"
 
 # Install (Linux/macOS only)
@@ -140,12 +145,13 @@ help:
 	@echo "  OS:       $(DETECTED_OS)"
 	@echo "  Compiler: $(CC)"
 	@echo "  Target:   $(TARGET)"
+	@echo "  Obj Dir:  $(OBJDIR)"
 
 # Dependencies
-$(SRCDIR)/main.o:       include/config.h include/mandelbrot.h include/julia.h \
+$(OBJDIR)/main.o:       include/config.h include/mandelbrot.h include/julia.h \
                         include/renderer.h include/screenshot.h
-$(SRCDIR)/mandelbrot.o: include/mandelbrot.h include/config.h
-$(SRCDIR)/julia.o:      include/julia.h include/mandelbrot.h include/config.h
-$(SRCDIR)/renderer.o:   include/renderer.h include/mandelbrot.h include/julia.h \
+$(OBJDIR)/mandelbrot.o: include/mandelbrot.h include/config.h
+$(OBJDIR)/julia.o:      include/julia.h include/mandelbrot.h include/config.h
+$(OBJDIR)/renderer.o:   include/renderer.h include/mandelbrot.h include/julia.h \
                         include/config.h
-$(SRCDIR)/screenshot.o: include/screenshot.h
+$(OBJDIR)/screenshot.o: include/screenshot.h
