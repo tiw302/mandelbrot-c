@@ -8,7 +8,7 @@ double julia_check(complex_t z, complex_t c) {
     while (iterations < MAX_ITERATIONS) {
         /* z_new = z^2 + c */
         double next_re = z.re * z.re - z.im * z.im + c.re;
-        double next_im = 2.0 * z.re * z.im + c.im;
+        double next_im = 2 * z.re * z.im + c.im;
         z.re = next_re;
         z.im = next_im;
 

@@ -9,7 +9,7 @@
 #define MAX_ITERATIONS  1000
 
 /* Escape threshold: larger values improve smooth coloring accuracy */
-#define ESCAPE_RADIUS   10.0
+#define ESCAPE_RADIUS   10
 
 /* Parallel rendering thread count */
 #define THREAD_COUNT    8

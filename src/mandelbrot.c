@@ -2,7 +2,7 @@
 #include <math.h>
 
 double mandelbrot_check(complex_t c) {
-    complex_t z = {0.0, 0.0};
+    complex_t z = {0, 0};
     int iterations = 0;
 
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
@@ -10,7 +10,7 @@ double mandelbrot_check(complex_t c) {
     while (iterations < MAX_ITERATIONS) {
         /* z_new = z^2 + c */
         double next_re = z.re * z.re - z.im * z.im + c.re;
-        double next_im = 2.0 * z.re * z.im + c.im;
+        double next_im = 2 * z.re * z.im + c.im;
         z.re = next_re;
         z.im = next_im;
 
