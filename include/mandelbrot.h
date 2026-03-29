@@ -8,10 +8,8 @@ typedef struct {
     double im;
 } complex_t;
 
-/**
- * Returns fractional iteration count for point c in the Mandelbrot set.
- * Returns MAX_ITERATIONS if the point is within the set.
- */
+// get iteration count for mandelbrot point
+// returns MAX_ITERATIONS if it's in the set
 double mandelbrot_check(complex_t c);
 
 #endif
