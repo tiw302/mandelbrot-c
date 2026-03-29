@@ -26,14 +26,14 @@ static void save_tga(const char *filename, uint32_t *pixels, int w, int h) {
     if (!f) return;
 
     TgaHeader header = {0};
-    header.image_type = 2; /* Uncompressed true-color */
+    header.image_type = 2; // raw true-color
     header.width = w;
     header.height = h;
     header.pixel_depth = 32;
-    header.image_descriptor = 0x20; /* Top-left origin */
+    header.image_descriptor = 0x20; // start from top-left
 
     fwrite(&header, sizeof(header), 1, f);
-    /* Convert ARGB to BGRA for TGA */
+    // TGA needs BGRA
     uint32_t *buf = malloc(w * h * 4);
     for (int i = 0; i < w * h; i++) {
         uint8_t a = (pixels[i] >> 24) & 0xFF;
