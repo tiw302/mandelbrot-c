@@ -10,14 +10,14 @@
 static Uint8 color_lut[MAX_ITERATIONS + 1][3];
 
 void init_renderer(void) {
-    /* Pre-calculate sine-wave palette */
+    // setup sine-wave palette
     double freq = 0.1;
     for (int i = 0; i < MAX_ITERATIONS; i++) {
         color_lut[i][0] = (Uint8)(sin(freq * i + 0) * 127 + 128);
         color_lut[i][1] = (Uint8)(sin(freq * i + 2) * 127 + 128);
         color_lut[i][2] = (Uint8)(sin(freq * i + 4) * 127 + 128);
     }
-    /* Set color for points within the set */
+    // points in the set are black
     color_lut[MAX_ITERATIONS][0] = 0;
     color_lut[MAX_ITERATIONS][1] = 0;
     color_lut[MAX_ITERATIONS][2] = 0;
@@ -34,7 +34,7 @@ void get_color(double iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
     int i = (int)iterations;
     double t = iterations - i;
 
-    /* Interpolate between LUT entries for smooth transitions */
+    // lerp between LUT entries for smoothness
     int i2 = i + 1;
     if (i2 > MAX_ITERATIONS) i2 = MAX_ITERATIONS;
 
@@ -49,7 +49,7 @@ void *render_thread(void *arg) {
     double re_factor = (data->re_max - data->re_min) / data->window_width;
     double im_factor = (data->im_max - data->im_min) / data->window_height;
 
-    /* Dynamic row assignment from atomic work queue */
+    // dynamic row assignment via atomic queue
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
         for (int x = 0; x < data->window_width; x++) {
@@ -66,7 +66,7 @@ void *render_thread(void *arg) {
             Uint8 r, g, b;
             get_color(iterations, &r, &g, &b);
 
-            /* Write to pixel buffer (ARGB8888) */
+            // write to ARGB pixel buffer
             data->pixels[y * (data->pitch / sizeof(Uint32)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
