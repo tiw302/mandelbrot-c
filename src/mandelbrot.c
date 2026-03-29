@@ -8,7 +8,7 @@ double mandelbrot_check(complex_t c) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < MAX_ITERATIONS) {
-        /* z_new = z^2 + c */
+        // z = z^2 + c
         double next_re = z.re * z.re - z.im * z.im + c.re;
         double next_im = 2 * z.re * z.im + c.im;
         z.re = next_re;
@@ -16,7 +16,7 @@ double mandelbrot_check(complex_t c) {
 
         double mag_sq = z.re * z.re + z.im * z.im;
         if (mag_sq > escape_radius_sq) {
-            /* Renormalized iteration count for smooth coloring */
+            // smooth coloring math
             return (double)iterations + 2.0 - log2(log(mag_sq));
         }
 
