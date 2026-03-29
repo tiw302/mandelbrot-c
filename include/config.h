@@ -1,24 +1,24 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
-/* Window dimensions */
+// display resolution
 #define WINDOW_WIDTH    1280
 #define WINDOW_HEIGHT   720
 
-/* Iteration limit: higher values increase detail but decrease performance */
+// more iterations = more detail, but slower
 #define MAX_ITERATIONS  1000
 
-/* Escape threshold: larger values improve smooth coloring accuracy */
+// bigger radius = smoother gradients
 #define ESCAPE_RADIUS   10
 
-/* Parallel rendering thread count */
+// worker threads for parallel rendering
 #define THREAD_COUNT    8
 
-/* Debug overlay configuration */
+// debug overlay toggle and text size
 #define DEBUG_INFO      1
 #define FONT_SIZE       16
 
-/* System-specific font fallback paths */
+// OS-specific font fallbacks
 #if defined(_WIN32) || defined(_WIN64)
     #define FONT_PATH_1  "C:\\Windows\\Fonts\\arial.ttf"
     #define FONT_PATH_2  "C:\\Windows\\Fonts\\segoeui.ttf"
@@ -36,12 +36,12 @@
     #define FONT_PATH_4  "/usr/share/fonts/noto/NotoSans-Regular.ttf"
 #endif
 
-/* Maximum steps for undo history (Ctrl+Z) */
+// undo history depth (ctrl+z)
 #define MAX_HISTORY_SIZE 100
 
-/* Initial view coordinates and zoom level */
+// default view
 #define INITIAL_CENTER_RE   -0.5
 #define INITIAL_CENTER_IM    0.0
 #define INITIAL_ZOOM         3.0
 
-#endif /* CONFIG_H */
+#endif // CONFIG_H
