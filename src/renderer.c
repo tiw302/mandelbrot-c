@@ -52,7 +52,33 @@ void *render_thread(void *arg) {
     // dynamic row assignment via atomic queue
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
-        for (int x = 0; x < data->window_width; x++) {
+        int x = 0;
+
+#ifdef __AVX2__
+        // process 4 pixels at a time with AVX2
+        for (; x <= data->window_width - 4; x += 4) {
+            double res_re[4], res_im[4], iterations[4];
+            for (int i = 0; i < 4; i++) {
+                res_re[i] = data->re_min + (double)(x + i) * re_factor;
+                res_im[i] = data->im_min + (double)y * im_factor;
+            }
+
+            if (data->mode == RENDER_JULIA)
+                julia_check_avx2(res_re, res_im, data->julia_c, iterations);
+            else
+                mandelbrot_check_avx2(res_re, res_im, iterations);
+
+            for (int i = 0; i < 4; i++) {
+                Uint8 r, g, b;
+                get_color(iterations[i], &r, &g, &b);
+                data->pixels[y * (data->pitch / sizeof(Uint32)) + (x + i)] =
+                    (0xFF << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+#endif
+
+        // remaining pixels
+        for (; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
             point.im = data->im_min + (double)y * im_factor;

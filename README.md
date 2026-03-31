@@ -150,7 +150,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [x] Implement dynamic load balancing using a work queue or tiled rendering to improve CPU utilization across cores.
 - [x] Replace real-time trigonometric color calculations with a pre-calculated Look-Up Table (LUT).
 - [x] Implement smooth coloring algorithms using fractional iteration counts.
-- [ ] Explore SIMD (AVX/AVX2) vectorization to process multiple pixels per instruction.
+- [x] Explore SIMD (AVX/AVX2) vectorization to process multiple pixels per instruction.
 
 ### Features and Exploration
 - [ ] Integrate arbitrary-precision arithmetic libraries (e.g., GNU MPFR) to support deep zooms beyond the limits of double precision.
