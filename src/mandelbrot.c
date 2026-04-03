@@ -1,13 +1,13 @@
 #include "mandelbrot.h"
 #include <math.h>
 
-double mandelbrot_check(complex_t c) {
+double mandelbrot_check(complex_t c, int max_iterations) {
     complex_t z = {0, 0};
     int iterations = 0;
 
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
-    while (iterations < MAX_ITERATIONS) {
+    while (iterations < max_iterations) {
         // z = z^2 + c
         double next_re = z.re * z.re - z.im * z.im + c.re;
         double next_im = 2 * z.re * z.im + c.im;
@@ -23,11 +23,11 @@ double mandelbrot_check(complex_t c) {
         iterations++;
     }
 
-    return (double)MAX_ITERATIONS;
+    return (double)max_iterations;
 }
 
 #ifdef __AVX2__
-void mandelbrot_check_avx2(const double *re, const double *im, double *results) {
+void mandelbrot_check_avx2(const double *re, const double *im, int max_iterations, double *results) {
     __m256d cre = _mm256_loadu_pd(re);
     __m256d cim = _mm256_loadu_pd(im);
     __m256d zre = _mm256_setzero_pd();
@@ -38,7 +38,7 @@ void mandelbrot_check_avx2(const double *re, const double *im, double *results) 
     __m256d escaped_mask = _mm256_setzero_pd();
     __m256d final_mag_sq = _mm256_setzero_pd();
 
-    for (int i = 0; i < MAX_ITERATIONS; i++) {
+    for (int i = 0; i < max_iterations; i++) {
         __m256d zre2 = _mm256_mul_pd(zre, zre);
         __m256d zim2 = _mm256_mul_pd(zim, zim);
         __m256d mag_sq = _mm256_add_pd(zre2, zim2);
@@ -64,8 +64,8 @@ void mandelbrot_check_avx2(const double *re, const double *im, double *results) 
     _mm256_storeu_pd(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 4; i++) {
-        if (res_iters[i] >= MAX_ITERATIONS - 1) {
-            results[i] = (double)MAX_ITERATIONS;
+        if (res_iters[i] >= max_iterations - 1) {
+            results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
         }

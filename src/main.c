@@ -164,6 +164,7 @@ int main(int argc, char *argv[]) {
     complex_t    julia_c       = {-0.7, 0.27};
     JuliaSession julia_session = {{0}, 0};
 
+    int      max_iterations = DEFAULT_ITERATIONS;
     int      running      = 1;
     int      needs_redraw = 1;
     int      is_panning   = 0, is_zooming = 0;
@@ -172,7 +173,7 @@ int main(int argc, char *argv[]) {
     SDL_Rect zoom_rect   = {0};
     Uint32   render_time = 0;
 
-    init_renderer();
+    init_renderer(max_iterations);
     print_controls();
 
     while (running) {
@@ -212,6 +213,8 @@ int main(int argc, char *argv[]) {
                     julia_session.active = 0;
                     tour_phase           = TOUR_IDLE;
                     julia_tour           = JULIA_TOUR_IDLE;
+                    max_iterations       = DEFAULT_ITERATIONS;
+                    init_renderer(max_iterations);
                     view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                     history_count = 0;
                     SDL_SetWindowTitle(window, "Mandelbrot Explorer");
@@ -243,6 +246,22 @@ int main(int argc, char *argv[]) {
 
                 } else if (event.key.keysym.sym == SDLK_s) {
                     save_screenshot(renderer, win_w, win_h);
+
+                } else if (event.key.keysym.sym == SDLK_UP) {
+                    int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
+                    if (max_iterations + step <= MAX_ITERATIONS_LIMIT) {
+                        max_iterations += step;
+                        init_renderer(max_iterations);
+                        needs_redraw = 1;
+                    }
+
+                } else if (event.key.keysym.sym == SDLK_DOWN) {
+                    int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
+                    if (max_iterations - step >= 10) {
+                        max_iterations -= step;
+                        init_renderer(max_iterations);
+                        needs_redraw = 1;
+                    }
 
                 } else if (event.key.keysym.sym == SDLK_t) {
 
@@ -462,10 +481,10 @@ int main(int argc, char *argv[]) {
 
             if (julia_mode)
                 render_julia_threaded(pixels, pitch, win_w, win_h,
-                                      re_min, re_max, im_min, im_max, julia_c);
+                                      re_min, re_max, im_min, im_max, julia_c, max_iterations);
             else
                 render_mandelbrot_threaded(pixels, pitch, win_w, win_h,
-                                           re_min, re_max, im_min, im_max);
+                                           re_min, re_max, im_min, im_max, max_iterations);
 
             SDL_UnlockTexture(texture);
             render_time  = SDL_GetTicks() - start;
@@ -560,8 +579,9 @@ static void print_controls(void) {
     puts("Mandelbrot Explorer Controls:");
     puts("  Left Drag       : Zoom into selection");
     puts("  Right Drag      : Pan");
+    puts("  Up / Down       : Adjust iterations (+/- 10, Shift for +/- 100)");
     puts("  Ctrl+Z          : Undo zoom");
-    puts("  R               : Reset view");
+    puts("  R               : Reset view / iterations");
     puts("  J               : Toggle Julia mode");
     puts("  S               : Save screenshot");
     puts("  T (Mandelbrot)  : Toggle auto-zoom tour");

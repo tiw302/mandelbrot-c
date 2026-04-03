@@ -6,7 +6,8 @@
 #define WINDOW_HEIGHT   720
 
 // more iterations = more detail, but slower
-#define MAX_ITERATIONS  1000
+#define DEFAULT_ITERATIONS 1000
+#define MAX_ITERATIONS_LIMIT 10000
 
 // bigger radius = smoother gradients
 #define ESCAPE_RADIUS   10

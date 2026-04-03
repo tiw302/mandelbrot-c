@@ -21,14 +21,15 @@ typedef struct {
     double           im_min, im_max;
     RenderMode       mode;
     complex_t        julia_c;
+    int              max_iterations;
     atomic_int      *next_row;
 } thread_data_t;
 
 // precompute LUT or other startup work
-void init_renderer(void);
+void init_renderer(int max_iterations);
 
 // map iteration to RGB color
-void get_color(double iterations, Uint8 *r, Uint8 *g, Uint8 *b);
+void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 *b);
 
 // main worker thread function
 void *render_thread(void *arg);
@@ -37,13 +38,15 @@ void *render_thread(void *arg);
 void render_mandelbrot_threaded(Uint32 *pixels, int pitch,
                                 int window_width, int window_height,
                                 double re_min, double re_max,
-                                double im_min, double im_max);
+                                double im_min, double im_max,
+                                int max_iterations);
 
 // multi-threaded julia renderer
 void render_julia_threaded(Uint32 *pixels, int pitch,
                            int window_width, int window_height,
                            double re_min, double re_max,
                            double im_min, double im_max,
-                           complex_t julia_c);
+                           complex_t julia_c,
+                           int max_iterations);
 
 #endif
