@@ -64,7 +64,7 @@ static const struct { double re, im; } JULIA_C_TARGETS[] = {
     {-0.7000,  0.2700},  // classic spiral
     {-0.4000,  0.6000},  // rabbit
     { 0.2850,  0.0100},  // coral
-    {-0.7269,  0.1889},  // siegel disk
+    {-0.7269,  0.1889},  // siel disk
     {-0.8000,  0.1560},  // dendrite
     {-0.1200, -0.7700},  // san marco dragon
     { 0.3000, -0.5000},  // islands
@@ -165,6 +165,7 @@ int main(int argc, char *argv[]) {
     JuliaSession julia_session = {{0}, 0};
 
     int      max_iterations = DEFAULT_ITERATIONS;
+    int      palette_idx    = 0;
     int      running      = 1;
     int      needs_redraw = 1;
     int      is_panning   = 0, is_zooming = 0;
@@ -173,8 +174,10 @@ int main(int argc, char *argv[]) {
     SDL_Rect zoom_rect   = {0};
     Uint32   render_time = 0;
 
-    init_renderer(max_iterations);
+    init_renderer(max_iterations, palette_idx);
     print_controls();
+
+    static const char *PALETTE_NAMES[] = {"Sine", "Grayscale", "Fire", "Electric"};
 
     while (running) {
         SDL_Event event;
@@ -214,7 +217,8 @@ int main(int argc, char *argv[]) {
                     tour_phase           = TOUR_IDLE;
                     julia_tour           = JULIA_TOUR_IDLE;
                     max_iterations       = DEFAULT_ITERATIONS;
-                    init_renderer(max_iterations);
+                    palette_idx          = 0;
+                    init_renderer(max_iterations, palette_idx);
                     view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                     history_count = 0;
                     SDL_SetWindowTitle(window, "Mandelbrot Explorer");
@@ -251,7 +255,7 @@ int main(int argc, char *argv[]) {
                     int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
                     if (max_iterations + step <= MAX_ITERATIONS_LIMIT) {
                         max_iterations += step;
-                        init_renderer(max_iterations);
+                        init_renderer(max_iterations, palette_idx);
                         needs_redraw = 1;
                     }
 
@@ -259,9 +263,14 @@ int main(int argc, char *argv[]) {
                     int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
                     if (max_iterations - step >= 10) {
                         max_iterations -= step;
-                        init_renderer(max_iterations);
+                        init_renderer(max_iterations, palette_idx);
                         needs_redraw = 1;
                     }
+
+                } else if (event.key.keysym.sym == SDLK_p) {
+                    palette_idx = (palette_idx + 1) % PALETTE_COUNT;
+                    init_renderer(max_iterations, palette_idx);
+                    needs_redraw = 1;
 
                 } else if (event.key.keysym.sym == SDLK_t) {
 
@@ -510,7 +519,8 @@ int main(int argc, char *argv[]) {
             snprintf(buf, sizeof(buf), "Center: (%.12f, %.12f)",
                      view.center_re, view.center_im);
             render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
-            snprintf(buf, sizeof(buf), "Zoom: %.6g", view.zoom);
+            snprintf(buf, sizeof(buf), "Zoom: %.6g | Iterations: %d | Palette: %s",
+                     view.zoom, max_iterations, PALETTE_NAMES[palette_idx]);
             render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
             if (julia_mode) {
                 snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", julia_c.re, julia_c.im);
@@ -580,6 +590,7 @@ static void print_controls(void) {
     puts("  Left Drag       : Zoom into selection");
     puts("  Right Drag      : Pan");
     puts("  Up / Down       : Adjust iterations (+/- 10, Shift for +/- 100)");
+    puts("  P               : Cycle color palettes");
     puts("  Ctrl+Z          : Undo zoom");
     puts("  R               : Reset view / iterations");
     puts("  J               : Toggle Julia mode");
