@@ -110,6 +110,8 @@ make clean
 | **Zoom In** | Left Mouse Drag |
 | **Pan** | Right Mouse Drag |
 | **Undo Zoom** | `Ctrl` + `Z` |
+| **Iterations** | `Up` / `Down` (Shift for x10) |
+| **Palettes** | `P` |
 | **Reset View** | `R` |
 | **Toggle Julia Mode** | `J` |
 | **Save Screenshot** | `S` |
@@ -140,7 +142,8 @@ The encoder is built on zlib with no extra dependencies.
 
 Rendering parameters can be tuned in `include/config.h` to balance performance and visual fidelity:
 
-- `MAX_ITERATIONS`: Controls the detail level of the fractal boundary.
+- `DEFAULT_ITERATIONS`: Controls the initial detail level.
+- `MAX_ITERATIONS_LIMIT`: Upper bound for runtime adjustments.
 - `THREAD_COUNT`: Number of parallel threads (set to match CPU cores).
 - `ESCAPE_RADIUS`: Mathematical threshold for the set calculation.
 
@@ -154,7 +157,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 
 ### Features and Exploration
 - [ ] Integrate arbitrary-precision arithmetic libraries (e.g., GNU MPFR) to support deep zooms beyond the limits of double precision.
-- [ ] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
+- [x] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
 - [x] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
 
 ### Advanced Backends

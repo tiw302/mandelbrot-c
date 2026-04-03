@@ -25,8 +25,10 @@ typedef struct {
     atomic_int      *next_row;
 } thread_data_t;
 
+#define PALETTE_COUNT 4
+
 // precompute LUT or other startup work
-void init_renderer(int max_iterations);
+void init_renderer(int max_iterations, int palette_idx);
 
 // map iteration to RGB color
 void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 *b);
