@@ -25,7 +25,9 @@ typedef struct {
     atomic_int      *next_row;
 } thread_data_t;
 
-#define PALETTE_COUNT 4
+#define PALETTE_COUNT 6
+
+extern const char *PALETTE_NAMES[PALETTE_COUNT];
 
 // precompute LUT or other startup work
 void init_renderer(int max_iterations, int palette_idx);

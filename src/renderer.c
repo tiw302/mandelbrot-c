@@ -17,6 +17,10 @@
 static Uint8 color_lut[MAX_ITERATIONS_LIMIT + 1][3];
 static int   actual_thread_count = 1;
 
+const char *PALETTE_NAMES[PALETTE_COUNT] = {
+    "Sine Wave", "Grayscale", "Fire", "Electric", "Ocean", "Inferno"
+};
+
 static int get_cpu_cores(void) {
 #if defined(_WIN32) || defined(_WIN64)
     SYSTEM_INFO sysinfo;
@@ -56,6 +60,16 @@ void init_renderer(int max_iterations, int palette_idx) {
             color_lut[i][0] = (Uint8)fmin(255, i * 1);
             color_lut[i][1] = (Uint8)fmin(255, i * 4);
             color_lut[i][2] = (Uint8)fmin(255, i * 8);
+            break;
+        case 4: // ocean
+            color_lut[i][0] = (Uint8)fmin(255, i * 0.5);
+            color_lut[i][1] = (Uint8)fmin(255, i * 2);
+            color_lut[i][2] = (Uint8)fmin(255, i * 5);
+            break;
+        case 5: // inferno
+            color_lut[i][0] = (Uint8)fmin(255, i * 8);
+            color_lut[i][1] = (Uint8)fmin(255, i * 2);
+            color_lut[i][2] = (Uint8)fmin(255, i * 0.5);
             break;
         default:
             color_lut[i][0] = color_lut[i][1] = color_lut[i][2] = 127;

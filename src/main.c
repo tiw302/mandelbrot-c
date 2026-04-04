@@ -92,8 +92,6 @@ int main(int argc, char *argv[]) {
     init_renderer(max_iterations, palette_idx);
     print_controls();
 
-    static const char *PALETTE_NAMES[] = {"Sine", "Grayscale", "Fire", "Electric"};
-
     while (running) {
         SDL_Event event;
         while (SDL_PollEvent(&event)) {
