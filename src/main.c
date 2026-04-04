@@ -365,24 +365,36 @@ int main(int argc, char *argv[]) {
         if (DEBUG_INFO && font) {
             char buf[256];
             SDL_Color white = {255, 255, 255, 255};
-            int y = 5;
+            int y_start = 5;
+            int y = y_start;
+            int line_h = FONT_SIZE + 2;
+            int num_lines = julia_mode ? 4 : 3;
+            if (m_tour.phase != TOUR_IDLE) num_lines++;
+            if (j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
+
+            // Draw semi-transparent background
+            SDL_Rect bg = {2, 2, 450, num_lines * line_h + 6};
+            SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 160);
+            SDL_RenderFillRect(renderer, &bg);
+
             snprintf(buf, sizeof(buf), "%s | Render: %u ms | Threads: %d",
                      julia_mode ? "JULIA" : "MANDELBROT", render_time, get_actual_thread_count());
-            render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
+            render_text(renderer, font, buf, 5, y, white); y += line_h;
             snprintf(buf, sizeof(buf), "Center: (%.12f, %.12f)",
                      view.center_re, view.center_im);
-            render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
+            render_text(renderer, font, buf, 5, y, white); y += line_h;
             snprintf(buf, sizeof(buf), "Zoom: %.6g | Iterations: %d | Palette: %s",
                      view.zoom, max_iterations, PALETTE_NAMES[palette_idx]);
-            render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
+            render_text(renderer, font, buf, 5, y, white); y += line_h;
             if (julia_mode) {
                 snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", julia_c.re, julia_c.im);
-                render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
+                render_text(renderer, font, buf, 5, y, white); y += line_h;
             }
             if (m_tour.phase != TOUR_IDLE) {
                 snprintf(buf, sizeof(buf), "Auto-Zoom [%s]  target #%d",
                          get_tour_phase_name(m_tour.phase), get_tour_target_idx(&m_tour) + 1);
-                render_text(renderer, font, buf, 5, y, white);
+                render_text(renderer, font, buf, 5, y, white); y += line_h;
             }
             if (j_tour.phase != JULIA_TOUR_IDLE) {
                 snprintf(buf, sizeof(buf), "Auto-c [%s]  #%d  (%.4f, %.4f)",
