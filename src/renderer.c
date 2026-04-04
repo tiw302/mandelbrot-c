@@ -4,12 +4,39 @@
 #include "config.h"
 #include <pthread.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <stdatomic.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+#include <windows.h>
+#elif defined(__APPLE__) || defined(__MACH__) || defined(__linux__) || defined(__FreeBSD__)
+#include <unistd.h>
+#endif
+
 static Uint8 color_lut[MAX_ITERATIONS_LIMIT + 1][3];
+static int   actual_thread_count = 1;
+
+static int get_cpu_cores(void) {
+#if defined(_WIN32) || defined(_WIN64)
+    SYSTEM_INFO sysinfo;
+    GetSystemInfo(&sysinfo);
+    return sysinfo.dwNumberOfProcessors;
+#elif defined(_SC_NPROCESSORS_ONLN)
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#else
+    return 1; // fallback
+#endif
+}
 
 void init_renderer(int max_iterations, int palette_idx) {
+    if (actual_thread_count == 1) {
+        int cores = get_cpu_cores();
+        actual_thread_count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
+        if (actual_thread_count < 1) actual_thread_count = 1;
+        if (actual_thread_count > 64) actual_thread_count = 64; // reasonable cap
+    }
+
     for (int i = 0; i < max_iterations; i++) {
         switch (palette_idx) {
         case 0: // sine-wave (original)
@@ -39,6 +66,10 @@ void init_renderer(int max_iterations, int palette_idx) {
     color_lut[max_iterations][0] = 0;
     color_lut[max_iterations][1] = 0;
     color_lut[max_iterations][2] = 0;
+}
+
+int get_actual_thread_count(void) {
+    return actual_thread_count;
 }
 
 void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
@@ -125,11 +156,17 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
                               double im_min, double im_max,
                               RenderMode mode, complex_t julia_c,
                               int max_iterations) {
-    pthread_t      threads[THREAD_COUNT];
-    thread_data_t  thread_data[THREAD_COUNT];
-    atomic_int     next_row = 0;
+    pthread_t      *threads     = malloc(sizeof(pthread_t) * actual_thread_count);
+    thread_data_t  *thread_data = malloc(sizeof(thread_data_t) * actual_thread_count);
+    atomic_int      next_row    = 0;
 
-    for (int i = 0; i < THREAD_COUNT; i++) {
+    if (!threads || !thread_data) {
+        fprintf(stderr, "Failed to allocate thread resources\n");
+        free(threads); free(thread_data);
+        return;
+    }
+
+    for (int i = 0; i < actual_thread_count; i++) {
         thread_data[i] = (thread_data_t){
             .id = i,
             .pixels = pixels,
@@ -149,11 +186,15 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
         if (pthread_create(&threads[i], NULL, render_thread, &thread_data[i]) != 0) {
             fprintf(stderr, "Failed to spawn thread %d\n", i);
             for (int j = 0; j < i; j++) pthread_join(threads[j], NULL);
+            free(threads); free(thread_data);
             return;
         }
     }
 
-    for (int i = 0; i < THREAD_COUNT; i++) pthread_join(threads[i], NULL);
+    for (int i = 0; i < actual_thread_count; i++) pthread_join(threads[i], NULL);
+
+    free(threads);
+    free(thread_data);
 }
 
 void render_mandelbrot_threaded(Uint32 *pixels, int pitch,

@@ -12,8 +12,8 @@
 // bigger radius = smoother gradients
 #define ESCAPE_RADIUS   10
 
-// worker threads for parallel rendering
-#define THREAD_COUNT    8
+// worker threads for parallel rendering (0 = auto-detect)
+#define DEFAULT_THREAD_COUNT 0
 
 // debug overlay toggle and text size
 #define DEBUG_INFO      1

@@ -30,6 +30,9 @@ typedef struct {
 // precompute LUT or other startup work
 void init_renderer(int max_iterations, int palette_idx);
 
+// get the number of threads actually being used
+int get_actual_thread_count(void);
+
 // map iteration to RGB color
 void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 *b);
 

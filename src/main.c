@@ -514,7 +514,7 @@ int main(int argc, char *argv[]) {
             SDL_Color white = {255, 255, 255, 255};
             int y = 5;
             snprintf(buf, sizeof(buf), "%s | Render: %u ms | Threads: %d",
-                     julia_mode ? "JULIA" : "MANDELBROT", render_time, THREAD_COUNT);
+                     julia_mode ? "JULIA" : "MANDELBROT", render_time, get_actual_thread_count());
             render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
             snprintf(buf, sizeof(buf), "Center: (%.12f, %.12f)",
                      view.center_re, view.center_im);
