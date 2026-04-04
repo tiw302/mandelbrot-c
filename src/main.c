@@ -324,6 +324,32 @@ int main(int argc, char *argv[]) {
                 }
                 break;
 
+            case SDL_MOUSEWHEEL:
+                {
+                    double zoom_factor = (event.wheel.y > 0) ? 0.9 : 1.1;
+                    if (event.wheel.y == 0) break;
+
+                    if (history_count < MAX_HISTORY_SIZE)
+                        history[history_count++] = view;
+
+                    double re_min, re_max, im_min, im_max;
+                    calculate_boundaries(view.center_re, view.center_im, view.zoom,
+                                         win_w, win_h, &re_min, &re_max, &im_min, &im_max);
+
+                    // Point under mouse in complex coordinates
+                    double mouse_re = re_min + (double)mouse_x * (re_max - re_min) / win_w;
+                    double mouse_im = im_min + (double)mouse_y * (im_max - im_min) / win_h;
+
+                    view.zoom *= zoom_factor;
+
+                    // Adjust center to keep mouse position fixed
+                    view.center_re = mouse_re + (view.center_re - mouse_re) * zoom_factor;
+                    view.center_im = mouse_im + (view.center_im - mouse_im) * zoom_factor;
+
+                    needs_redraw = 1;
+                }
+                break;
+
             case SDL_MOUSEBUTTONDOWN:
                 if (tour_phase != TOUR_IDLE) {
                     tour_phase    = TOUR_IDLE;
