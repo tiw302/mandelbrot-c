@@ -52,7 +52,8 @@ SOURCES = $(SRCDIR)/main.c \
           $(SRCDIR)/mandelbrot.c \
           $(SRCDIR)/renderer.c \
           $(SRCDIR)/julia.c \
-          $(SRCDIR)/screenshot.c
+          $(SRCDIR)/screenshot.c \
+          $(SRCDIR)/tour.c
 OBJECTS = $(patsubst $(SRCDIR)/%.c, $(OBJDIR)/%.o, $(SOURCES))
 
 # Default target
@@ -149,9 +150,10 @@ help:
 
 # Dependencies
 $(OBJDIR)/main.o:       include/config.h include/mandelbrot.h include/julia.h \
-                        include/renderer.h include/screenshot.h
+                        include/renderer.h include/screenshot.h include/tour.h
 $(OBJDIR)/mandelbrot.o: include/mandelbrot.h include/config.h
 $(OBJDIR)/julia.o:      include/julia.h include/mandelbrot.h include/config.h
 $(OBJDIR)/renderer.o:   include/renderer.h include/mandelbrot.h include/julia.h \
                         include/config.h
 $(OBJDIR)/screenshot.o: include/screenshot.h
+$(OBJDIR)/tour.o:       include/tour.h include/config.h include/renderer.h

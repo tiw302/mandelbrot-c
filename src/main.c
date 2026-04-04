@@ -10,12 +10,7 @@
 #include "julia.h"
 #include "renderer.h"
 #include "screenshot.h"
-
-typedef struct {
-    double center_re;
-    double center_im;
-    double zoom;
-} ViewState;
+#include "tour.h"
 
 typedef struct {
     ViewState mandelbrot_view;
@@ -26,62 +21,6 @@ typedef struct {
 #define JULIA_CENTER_IM   0.0
 #define JULIA_ZOOM        4.0
 
-// mandelbrot auto-zoom (T key)
-// PAN -> ZOOM_IN -> ZOOM_OUT loop
-typedef enum {
-    TOUR_IDLE = 0,
-    TOUR_PANNING,
-    TOUR_ZOOMING_IN,
-    TOUR_ZOOMING_OUT
-} TourPhase;
-
-#define TOUR_ZOOM_DEPTH   6000.0
-#define TOUR_PAN_MS       1800.0
-#define TOUR_ZOOM_IN_MS   4000.0
-#define TOUR_ZOOM_OUT_MS  3200.0
-
-static const struct { double re, im; } ZOOM_TARGETS[] = {
-    {-0.743643887074537,  0.131825904145753},
-    {-0.162736800339303,  0.878583137739572},
-    { 0.275275641098809,  0.006942671571179},
-    {-0.458345355141416, -0.633156886463435},
-    {-0.761574,  -0.0848},
-    {-1.250066,   0.02},
-    { 0.001643721, 0.822467633},
-    {-0.170337,  -1.065156},
-    {-1.768778833,-0.001738996},
-    {-0.748,      0.1},
-};
-#define NUM_ZOOM_TARGETS (int)(sizeof(ZOOM_TARGETS)/sizeof(ZOOM_TARGETS[0]))
-
-static const char *PHASE_NAMES[] = { "", "Panning", "Zooming in", "Zooming out" };
-
-// julia c-parameter tour (T key in julia mode)
-#define JULIA_TOUR_MOVE_MS   3000.0
-#define JULIA_TOUR_DWELL_MS  1200.0
-
-static const struct { double re, im; } JULIA_C_TARGETS[] = {
-    {-0.7000,  0.2700},  // classic spiral
-    {-0.4000,  0.6000},  // rabbit
-    { 0.2850,  0.0100},  // coral
-    {-0.7269,  0.1889},  // siel disk
-    {-0.8000,  0.1560},  // dendrite
-    {-0.1200, -0.7700},  // san marco dragon
-    { 0.3000, -0.5000},  // islands
-    {-0.5400,  0.5400},  // star
-    { 0.3700,  0.1000},  // seahorse
-    {-0.1940,  0.6557},  // feather
-    { 0.0,    0.8},      // cauliflower
-    {-0.618,  0.0},      // golden ratio
-};
-#define NUM_JULIA_C_TARGETS (int)(sizeof(JULIA_C_TARGETS)/sizeof(JULIA_C_TARGETS[0]))
-
-typedef enum {
-    JULIA_TOUR_IDLE = 0,
-    JULIA_TOUR_MOVING,
-    JULIA_TOUR_DWELLING
-} JuliaTourPhase;
-
 static void calculate_boundaries(double center_re, double center_im, double zoom,
                                   int width, int height,
                                   double *re_min, double *re_max,
@@ -90,14 +29,6 @@ static void render_text(SDL_Renderer *renderer, TTF_Font *font,
                          const char *text, int x, int y, SDL_Color color);
 static TTF_Font *load_font(void);
 static void print_controls(void);
-
-static inline double smoothstep(double t) { return t * t * (3.0 - 2.0 * t); }
-
-static int pick_idx(int last, int count) {
-    int idx;
-    do { idx = rand() % count; } while (idx == last && count > 1);
-    return idx;
-}
 
 int main(int argc, char *argv[]) {
     (void)argc; (void)argv;
@@ -139,25 +70,9 @@ int main(int argc, char *argv[]) {
     ViewState history[MAX_HISTORY_SIZE];
     int       history_count = 0;
 
-    // mandelbrot tour state
-    TourPhase tour_phase       = TOUR_IDLE;
-    double    tour_home_re     = INITIAL_CENTER_RE;
-    double    tour_home_im     = INITIAL_CENTER_IM;
-    double    tour_home_zoom   = INITIAL_ZOOM;
-    double    tour_target_re   = 0.0;
-    double    tour_target_im   = 0.0;
-    double    tour_deep_zoom   = 0.0;
-    Uint32    tour_phase_start = 0;
-    int       last_zoom_idx    = -1;
-
-    // julia tour state
-    JuliaTourPhase julia_tour       = JULIA_TOUR_IDLE;
-    double         julia_tour_from_re = 0.0;
-    double         julia_tour_from_im = 0.0;
-    double         julia_tour_to_re   = 0.0;
-    double         julia_tour_to_im   = 0.0;
-    Uint32         julia_tour_start   = 0;
-    int            last_julia_idx     = -1;
+    // tours
+    TourState      m_tour = {TOUR_IDLE, 0,0,0, 0,0,0, 0, -1};
+    JuliaTourState j_tour = {JULIA_TOUR_IDLE, 0,0, 0,0, 0, -1};
 
     // julia mode state
     int          julia_mode    = 0;
@@ -206,7 +121,7 @@ int main(int argc, char *argv[]) {
 
                 } else if (event.key.keysym.sym == SDLK_z &&
                            (SDL_GetModState() & KMOD_CTRL)) {
-                    if (tour_phase == TOUR_IDLE && julia_tour == JULIA_TOUR_IDLE
+                    if (m_tour.phase == TOUR_IDLE && j_tour.phase == JULIA_TOUR_IDLE
                         && history_count > 0)
                         view = history[--history_count];
                     needs_redraw = 1;
@@ -214,8 +129,8 @@ int main(int argc, char *argv[]) {
                 } else if (event.key.keysym.sym == SDLK_r) {
                     julia_mode           = 0;
                     julia_session.active = 0;
-                    tour_phase           = TOUR_IDLE;
-                    julia_tour           = JULIA_TOUR_IDLE;
+                    m_tour.phase         = TOUR_IDLE;
+                    j_tour.phase         = JULIA_TOUR_IDLE;
                     max_iterations       = DEFAULT_ITERATIONS;
                     palette_idx          = 0;
                     init_renderer(max_iterations, palette_idx);
@@ -225,8 +140,8 @@ int main(int argc, char *argv[]) {
                     needs_redraw = 1;
 
                 } else if (event.key.keysym.sym == SDLK_j) {
-                    tour_phase = TOUR_IDLE;
-                    julia_tour = JULIA_TOUR_IDLE;
+                    m_tour.phase = TOUR_IDLE;
+                    j_tour.phase = JULIA_TOUR_IDLE;
                     if (!julia_mode) {
                         julia_session.mandelbrot_view = view;
                         julia_session.active = 1;
@@ -275,46 +190,38 @@ int main(int argc, char *argv[]) {
                 } else if (event.key.keysym.sym == SDLK_t) {
 
                     if (julia_mode) {
-                        // start julia c-tour
-                        if (julia_tour == JULIA_TOUR_IDLE) {
-                            julia_tour_from_re = julia_c.re;
-                            julia_tour_from_im = julia_c.im;
-                            last_julia_idx     = pick_idx(-1, NUM_JULIA_C_TARGETS);
-                            julia_tour_to_re   = JULIA_C_TARGETS[last_julia_idx].re;
-                            julia_tour_to_im   = JULIA_C_TARGETS[last_julia_idx].im;
-                            julia_tour         = JULIA_TOUR_MOVING;
-                            julia_tour_start   = SDL_GetTicks();
+                        if (j_tour.phase == JULIA_TOUR_IDLE) {
+                            j_tour.from_re    = julia_c.re;
+                            j_tour.from_im    = julia_c.im;
+                            j_tour.phase      = JULIA_TOUR_DWELLING;
+                            j_tour.phase_start = SDL_GetTicks();
                             SDL_SetWindowTitle(window, "Julia Explorer  [Auto-c]");
                         } else {
-                            julia_tour = JULIA_TOUR_IDLE;
+                            j_tour.phase = JULIA_TOUR_IDLE;
                             SDL_SetWindowTitle(window, "Julia Explorer");
                             needs_redraw = 1;
                         }
 
                     } else {
-                        // start mandelbrot zoom-tour
-                        if (tour_phase == TOUR_IDLE) {
+                        if (m_tour.phase == TOUR_IDLE) {
                             julia_mode           = 0;
                             julia_session.active = 0;
                             history_count        = 0;
 
-                            tour_home_re   = INITIAL_CENTER_RE;
-                            tour_home_im   = INITIAL_CENTER_IM;
-                            tour_home_zoom = INITIAL_ZOOM;
-                            tour_deep_zoom = INITIAL_ZOOM / TOUR_ZOOM_DEPTH;
+                            m_tour.home_re   = INITIAL_CENTER_RE;
+                            m_tour.home_im   = INITIAL_CENTER_IM;
+                            m_tour.home_zoom = INITIAL_ZOOM;
+                            m_tour.deep_zoom = INITIAL_ZOOM / 6000.0; // TOUR_ZOOM_DEPTH
 
-                            view.center_re = tour_home_re;
-                            view.center_im = tour_home_im;
-                            view.zoom      = tour_home_zoom;
+                            view.center_re = m_tour.home_re;
+                            view.center_im = m_tour.home_im;
+                            view.zoom      = m_tour.home_zoom;
 
-                            last_zoom_idx    = pick_idx(-1, NUM_ZOOM_TARGETS);
-                            tour_target_re   = ZOOM_TARGETS[last_zoom_idx].re;
-                            tour_target_im   = ZOOM_TARGETS[last_zoom_idx].im;
-                            tour_phase       = TOUR_PANNING;
-                            tour_phase_start = SDL_GetTicks();
+                            m_tour.phase       = TOUR_ZOOMING_OUT; // will reset to panning
+                            m_tour.phase_start = SDL_GetTicks() - 10000; 
                             SDL_SetWindowTitle(window, "Mandelbrot Explorer  [Auto-Zoom]");
                         } else {
-                            tour_phase    = TOUR_IDLE;
+                            m_tour.phase    = TOUR_IDLE;
                             view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                             history_count = 0;
                             SDL_SetWindowTitle(window, "Mandelbrot Explorer");
@@ -336,30 +243,26 @@ int main(int argc, char *argv[]) {
                     calculate_boundaries(view.center_re, view.center_im, view.zoom,
                                          win_w, win_h, &re_min, &re_max, &im_min, &im_max);
 
-                    // Point under mouse in complex coordinates
                     double mouse_re = re_min + (double)mouse_x * (re_max - re_min) / win_w;
                     double mouse_im = im_min + (double)mouse_y * (im_max - im_min) / win_h;
 
                     view.zoom *= zoom_factor;
-
-                    // Adjust center to keep mouse position fixed
                     view.center_re = mouse_re + (view.center_re - mouse_re) * zoom_factor;
                     view.center_im = mouse_im + (view.center_im - mouse_im) * zoom_factor;
-
                     needs_redraw = 1;
                 }
                 break;
 
             case SDL_MOUSEBUTTONDOWN:
-                if (tour_phase != TOUR_IDLE) {
-                    tour_phase    = TOUR_IDLE;
+                if (m_tour.phase != TOUR_IDLE) {
+                    m_tour.phase    = TOUR_IDLE;
                     view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                     history_count = 0;
                     SDL_SetWindowTitle(window, "Mandelbrot Explorer");
                     needs_redraw  = 1;
                 }
-                if (julia_tour != JULIA_TOUR_IDLE) {
-                    julia_tour = JULIA_TOUR_IDLE;
+                if (j_tour.phase != JULIA_TOUR_IDLE) {
+                    j_tour.phase = JULIA_TOUR_IDLE;
                     SDL_SetWindowTitle(window, "Julia Explorer");
                 }
                 if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -387,8 +290,7 @@ int main(int argc, char *argv[]) {
                 } else if (is_zooming) {
                     zoom_rect.w = event.motion.x - zoom_rect.x;
                     zoom_rect.h = event.motion.y - zoom_rect.y;
-                } else if (julia_mode && julia_tour == JULIA_TOUR_IDLE) {
-                    // update julia c from mouse if tour is off
+                } else if (julia_mode && j_tour.phase == JULIA_TOUR_IDLE) {
                     double re_min, re_max, im_min, im_max;
                     calculate_boundaries(view.center_re, view.center_im, view.zoom,
                                          win_w, win_h, &re_min, &re_max, &im_min, &im_max);
@@ -422,89 +324,16 @@ int main(int argc, char *argv[]) {
             }
         }
 
-        // mandelbrot auto-zoom tour logic
-        if (tour_phase != TOUR_IDLE) {
-            Uint32 now      = SDL_GetTicks();
-            double duration = (tour_phase == TOUR_PANNING)   ? TOUR_PAN_MS :
-                              (tour_phase == TOUR_ZOOMING_IN) ? TOUR_ZOOM_IN_MS :
-                                                                TOUR_ZOOM_OUT_MS;
-            double raw_t = fmin((double)(now - tour_phase_start) / duration, 1.0);
-            double e     = smoothstep(raw_t);
-
-            switch (tour_phase) {
-            case TOUR_PANNING:
-                view.center_re = tour_home_re + (tour_target_re - tour_home_re) * e;
-                view.center_im = tour_home_im + (tour_target_im - tour_home_im) * e;
-                view.zoom      = tour_home_zoom;
-                if (raw_t >= 1.0) {
-                    view.center_re   = tour_target_re;
-                    view.center_im   = tour_target_im;
-                    tour_phase       = TOUR_ZOOMING_IN;
-                    tour_phase_start = now;
-                }
-                break;
-            case TOUR_ZOOMING_IN:
-                view.center_re = tour_target_re;
-                view.center_im = tour_target_im;
-                view.zoom = exp(log(tour_home_zoom) +
-                                (log(tour_deep_zoom) - log(tour_home_zoom)) * e);
-                if (raw_t >= 1.0) {
-                    view.zoom        = tour_deep_zoom;
-                    tour_phase       = TOUR_ZOOMING_OUT;
-                    tour_phase_start = now;
-                }
-                break;
-            case TOUR_ZOOMING_OUT:
-                view.center_re = tour_target_re + (tour_home_re - tour_target_re) * e;
-                view.center_im = tour_target_im + (tour_home_im - tour_target_im) * e;
-                view.zoom = exp(log(tour_deep_zoom) +
-                                (log(tour_home_zoom) - log(tour_deep_zoom)) * e);
-                if (raw_t >= 1.0) {
-                    view.center_re   = tour_home_re;
-                    view.center_im   = tour_home_im;
-                    view.zoom        = tour_home_zoom;
-                    last_zoom_idx    = pick_idx(last_zoom_idx, NUM_ZOOM_TARGETS);
-                    tour_target_re   = ZOOM_TARGETS[last_zoom_idx].re;
-                    tour_target_im   = ZOOM_TARGETS[last_zoom_idx].im;
-                    tour_phase       = TOUR_PANNING;
-                    tour_phase_start = now;
-                }
-                break;
-            default: break;
-            }
+        Uint32 now = SDL_GetTicks();
+        if (m_tour.phase != TOUR_IDLE) {
+            update_tour(&m_tour, &view, now);
+            needs_redraw = 1;
+        }
+        if (j_tour.phase != JULIA_TOUR_IDLE) {
+            update_julia_tour(&j_tour, &julia_c, now);
             needs_redraw = 1;
         }
 
-        // julia parameter tour logic
-        if (julia_tour != JULIA_TOUR_IDLE) {
-            Uint32 now = SDL_GetTicks();
-
-            if (julia_tour == JULIA_TOUR_MOVING) {
-                double raw_t = fmin((double)(now - julia_tour_start) / JULIA_TOUR_MOVE_MS, 1.0);
-                double e     = smoothstep(raw_t);
-                julia_c.re = julia_tour_from_re + (julia_tour_to_re - julia_tour_from_re) * e;
-                julia_c.im = julia_tour_from_im + (julia_tour_to_im - julia_tour_from_im) * e;
-                if (raw_t >= 1.0) {
-                    julia_c.re     = julia_tour_to_re;
-                    julia_c.im     = julia_tour_to_im;
-                    julia_tour     = JULIA_TOUR_DWELLING;
-                    julia_tour_start = now;
-                }
-            } else { // julia_tour_dwelling
-                if ((double)(now - julia_tour_start) >= JULIA_TOUR_DWELL_MS) {
-                    julia_tour_from_re = julia_c.re;
-                    julia_tour_from_im = julia_c.im;
-                    last_julia_idx     = pick_idx(last_julia_idx, NUM_JULIA_C_TARGETS);
-                    julia_tour_to_re   = JULIA_C_TARGETS[last_julia_idx].re;
-                    julia_tour_to_im   = JULIA_C_TARGETS[last_julia_idx].im;
-                    julia_tour         = JULIA_TOUR_MOVING;
-                    julia_tour_start   = now;
-                }
-            }
-            needs_redraw = 1;
-        }
-
-        // rendering logic
         if (needs_redraw) {
             Uint32 start = SDL_GetTicks();
             Uint32 *pixels; int pitch;
@@ -552,15 +381,15 @@ int main(int argc, char *argv[]) {
                 snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", julia_c.re, julia_c.im);
                 render_text(renderer, font, buf, 5, y, white); y += FONT_SIZE + 2;
             }
-            if (tour_phase != TOUR_IDLE) {
+            if (m_tour.phase != TOUR_IDLE) {
                 snprintf(buf, sizeof(buf), "Auto-Zoom [%s]  target #%d",
-                         PHASE_NAMES[tour_phase], last_zoom_idx + 1);
+                         get_tour_phase_name(m_tour.phase), get_tour_target_idx(&m_tour) + 1);
                 render_text(renderer, font, buf, 5, y, white);
             }
-            if (julia_tour != JULIA_TOUR_IDLE) {
+            if (j_tour.phase != JULIA_TOUR_IDLE) {
                 snprintf(buf, sizeof(buf), "Auto-c [%s]  #%d  (%.4f, %.4f)",
-                         julia_tour == JULIA_TOUR_MOVING ? "moving" : "dwelling",
-                         last_julia_idx + 1,
+                         j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
+                         get_julia_tour_target_idx(&j_tour) + 1,
                          julia_c.re, julia_c.im);
                 render_text(renderer, font, buf, 5, y, white);
             }
@@ -615,6 +444,7 @@ static void print_controls(void) {
     puts("Mandelbrot Explorer Controls:");
     puts("  Left Drag       : Zoom into selection");
     puts("  Right Drag      : Pan");
+    puts("  Mouse Wheel     : Zoom at cursor");
     puts("  Up / Down       : Adjust iterations (+/- 10, Shift for +/- 100)");
     puts("  P               : Cycle color palettes");
     puts("  Ctrl+Z          : Undo zoom");
