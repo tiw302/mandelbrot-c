@@ -104,13 +104,21 @@ void *render_thread(void *arg) {
         int x = 0;
 
 #ifdef __AVX2__
+        // pre-calculate constant SIMD vectors
+        __m256d v_re_min = _mm256_set1_pd(data->re_min);
+        __m256d v_re_fac = _mm256_set1_pd(re_factor);
+        __m256d v_im_val = _mm256_set1_pd(data->im_min + (double)y * im_factor);
+        __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
+
         // process 4 pixels at a time with AVX2
         for (; x <= data->window_width - 4; x += 4) {
             double res_re[4], res_im[4], iterations[4];
-            for (int i = 0; i < 4; i++) {
-                res_re[i] = data->re_min + (double)(x + i) * re_factor;
-                res_im[i] = data->im_min + (double)y * im_factor;
-            }
+
+            __m256d v_x = _mm256_add_pd(_mm256_set1_pd((double)x), v_offsets);
+            __m256d v_re = _mm256_add_pd(v_re_min, _mm256_mul_pd(v_x, v_re_fac));
+
+            _mm256_storeu_pd(res_re, v_re);
+            _mm256_storeu_pd(res_im, v_im_val);
 
             if (data->mode == RENDER_JULIA)
                 julia_check_avx2(res_re, res_im, data->julia_c, data->max_iterations, iterations);
