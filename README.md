@@ -177,13 +177,12 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [x] Explore SIMD (AVX/AVX2) vectorization to process multiple pixels per instruction.
 
 ### Features and Exploration
-- [ ] Integrate arbitrary-precision arithmetic libraries (e.g., GNU MPFR) to support deep zooms beyond the limits of double precision.
 - [x] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
 - [x] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
+- [ ] Research and implement high-precision arithmetic for deep zooms (See [RESEARCH.md](RESEARCH.md)).
 
-### Advanced Backends
-- [ ] Develop a GPU-accelerated backend using OpenGL Compute Shaders or Vulkan.
-- [ ] Port the project to WebAssembly using Emscripten for browser-based execution.
+### Advanced Backends (Experimental)
+Future backend developments (GPU, WebAssembly) are currently being tracked and researched in separate branches. For more information on the architectural strategy, please refer to [RESEARCH.md](RESEARCH.md).
 
 ### Engineering Improvements
 - [x] Migrate the build system from Makefile to CMake for better cross-platform support.
