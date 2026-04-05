@@ -19,7 +19,9 @@ jobs:
         sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev
 
     - name: Build
-      run: make
+      run: |
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+        cmake --build build
 
     - name: Test execution (dry run)
-      run: ./mandelbrot --help || true
+      run: ./build/mandelbrot --help || true
