@@ -1,4 +1,6 @@
-# Build artifacts
+# Build artifacts & Cache
+build/
+bin/
 obj/
 *.o
 *.obj
@@ -40,7 +42,8 @@ undo/
 .netrwhist
 *~
 
-# Screenshots
-mandelbrot_*.png
+# Screenshots & Assets
+*.png
+!assets/*.png
 screenshot_*.tga
 *.tga
