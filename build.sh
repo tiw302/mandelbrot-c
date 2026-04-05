@@ -17,8 +17,6 @@ if [[ "$OSTYPE" == "linux-gnu"* ]]; then
     OS="Linux"
     if [[ -f /etc/os-release ]]; then
         source /etc/os-release
-        # Note: $ID_LIKE can handle derivatives like Linux Mint ("ubuntu") or Manjaro ("arch")
-        # We check $ID_LIKE first, fallback to $ID
         DISTRO="${ID_LIKE:-$ID}"
         case "$DISTRO" in
             *ubuntu*|*debian*|*mint*|*pop*)
@@ -62,17 +60,22 @@ elif [[ "$OSTYPE" == "darwin"* ]]; then
     PM_CMD="brew install"
     PKG_CMAKE="cmake pkg-config"
     PKG_SDL="sdl2 sdl2_ttf"
+elif [[ "$OSTYPE" == "msys"* || "$OSTYPE" == "cygwin"* ]]; then
+    OS="Windows (MSYS2/Git Bash)"
+    PM_CMD="pacman -S"
+    PKG_CMAKE="mingw-w64-x86_64-cmake mingw-w64-x86_64-gcc"
+    PKG_SDL="mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_ttf"
 else
-    OS="Unknown"
+    OS="Unknown ($OSTYPE)"
 fi
 
-echo "OS: $OS"
+echo "OS Detection: $OS"
 
 # Check for cmake
 if ! command -v cmake &> /dev/null; then
     echo ""
     echo "ERROR: cmake not found!"
-    if [[ "$OS" == "Linux" || "$OS" == "macOS" ]]; then
+    if [[ -n "$PM_CMD" ]]; then
         echo "Install dependencies with: $PM_CMD $PKG_CMAKE"
     fi
     exit 1
@@ -82,24 +85,40 @@ fi
 if ! command -v pkg-config &> /dev/null; then
     echo ""
     echo "ERROR: pkg-config not found!"
-    if [[ "$OS" == "Linux" || "$OS" == "macOS" ]]; then
+    if [[ -n "$PM_CMD" ]]; then
         echo "Install dependencies with: $PM_CMD $PKG_CMAKE"
     fi
     exit 1
 fi
 
-# Check for SDL2 and SDL2_ttf
-if ! pkg-config --exists sdl2 2>/dev/null || (! pkg-config --exists sdl2_ttf 2>/dev/null && ! pkg-config --exists SDL2_ttf 2>/dev/null); then
+# Check for SDL2 and SDL2_ttf (handling case sensitivity)
+MISSING_SDL=0
+if ! pkg-config --exists sdl2 2>/dev/null; then
+    MISSING_SDL=1
+fi
+
+MISSING_TTF=0
+if ! pkg-config --exists sdl2_ttf 2>/dev/null && ! pkg-config --exists SDL2_ttf 2>/dev/null; then
+    MISSING_TTF=1
+fi
+
+if [[ $MISSING_SDL -eq 1 || $MISSING_TTF -eq 1 ]]; then
     echo ""
-    echo "ERROR: SDL2 or SDL2_ttf not found!"
+    echo "ERROR: Missing dependencies:"
+    [[ $MISSING_SDL -eq 1 ]] && echo "  - SDL2"
+    [[ $MISSING_TTF -eq 1 ]] && echo "  - SDL2_ttf"
     echo ""
-    if [[ "$OS" == "Linux" || "$OS" == "macOS" ]]; then
+    if [[ -n "$PM_CMD" ]]; then
         echo "Install libraries with: $PM_CMD $PKG_SDL"
     fi
     exit 1
 fi
 
-echo "SDL2: $(pkg-config --modversion sdl2) OK"
+# Get version for display
+SDL_VER=$(pkg-config --modversion sdl2)
+TTF_VER=$(pkg-config --modversion sdl2_ttf 2>/dev/null || pkg-config --modversion SDL2_ttf 2>/dev/null)
+
+echo "Dependencies: SDL2 ($SDL_VER), SDL2_ttf ($TTF_VER) OK"
 echo ""
 
 # Build!
