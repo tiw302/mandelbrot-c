@@ -4,46 +4,73 @@
 #include <zlib.h>
 #include "screenshot.h"
 
-#pragma pack(push, 1)
-typedef struct {
-    uint8_t  id_length;
-    uint8_t  color_map_type;
-    uint8_t  image_type;
-    uint16_t color_map_origin;
-    uint16_t color_map_length;
-    uint8_t  color_map_depth;
-    uint16_t x_origin;
-    uint16_t y_origin;
-    uint16_t width;
-    uint16_t height;
-    uint8_t  pixel_depth;
-    uint8_t  image_descriptor;
-} TgaHeader;
-#pragma pack(pop)
+static uint32_t calculate_crc(const uint8_t *data, size_t len) {
+    return (uint32_t)crc32(0, data, (uInt)len);
+}
 
-static void save_tga(const char *filename, uint32_t *pixels, int w, int h) {
+static void write_u32_be(FILE *f, uint32_t v) {
+    uint8_t buf[4] = {(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF};
+    fwrite(buf, 4, 1, f);
+}
+
+static void write_chunk(FILE *f, const char *type, const uint8_t *data, uint32_t len) {
+    write_u32_be(f, len);
+    fwrite(type, 4, 1, f);
+    if (len > 0) fwrite(data, len, 1, f);
+    
+    uint32_t crc = (uint32_t)crc32(0, (const uint8_t *)type, 4);
+    if (len > 0) crc = (uint32_t)crc32(crc, data, (uInt)len);
+    write_u32_be(f, crc);
+}
+
+static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     FILE *f = fopen(filename, "wb");
     if (!f) return;
 
-    TgaHeader header = {0};
-    header.image_type = 2; // raw true color
-    header.width = w;
-    header.height = h;
-    header.pixel_depth = 32;
-    header.image_descriptor = 0x20; // start from top left
+    static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
+    fwrite(sig, 8, 1, f);
 
-    fwrite(&header, sizeof(header), 1, f);
-    // requires BGRA format
-    uint32_t *buf = malloc(w * h * 4);
-    for (int i = 0; i < w * h; i++) {
-        uint8_t a = (pixels[i] >> 24) & 0xFF;
-        uint8_t r = (pixels[i] >> 16) & 0xFF;
-        uint8_t g = (pixels[i] >> 8) & 0xFF;
-        uint8_t b = pixels[i] & 0xFF;
-        buf[i] = (a << 24) | (r << 16) | (g << 8) | b;
+    // IHDR: 13 bytes
+    uint8_t ihdr[13];
+    uint32_t w_be = ((uint32_t)w >> 24) | (((uint32_t)w >> 8) & 0xFF00) | (((uint32_t)w << 8) & 0xFF0000) | ((uint32_t)w << 24);
+    uint32_t h_be = ((uint32_t)h >> 24) | (((uint32_t)h >> 8) & 0xFF00) | (((uint32_t)h << 8) & 0xFF0000) | ((uint32_t)h << 24);
+    
+    // We'll use our helper to write correctly
+    uint8_t ihdr_data[13];
+    ihdr_data[0] = (w >> 24) & 0xFF; ihdr_data[1] = (w >> 16) & 0xFF; ihdr_data[2] = (w >> 8) & 0xFF; ihdr_data[3] = w & 0xFF;
+    ihdr_data[4] = (h >> 24) & 0xFF; ihdr_data[5] = (h >> 16) & 0xFF; ihdr_data[6] = (h >> 8) & 0xFF; ihdr_data[7] = h & 0xFF;
+    ihdr_data[8] = 8; // Bit depth
+    ihdr_data[9] = 6; // Color type: Truecolor with alpha (RGBA)
+    ihdr_data[10] = 0; // Compression: Deflate
+    ihdr_data[11] = 0; // Filter: Adaptive
+    ihdr_data[12] = 0; // Interlace: No
+    write_chunk(f, "IHDR", ihdr_data, 13);
+
+    // Prepare raw data for deflate: filter 0 + row data
+    size_t raw_size = (size_t)h * ((size_t)w * 4 + 1);
+    uint8_t *raw = malloc(raw_size);
+    for (int y = 0; y < h; y++) {
+        raw[y * (w * 4 + 1)] = 0; // Filter type 0
+        for (int x = 0; x < w; x++) {
+            uint32_t p = pixels[y * w + x];
+            uint8_t *dest = &raw[y * (w * 4 + 1) + 1 + x * 4];
+            dest[0] = (p >> 16) & 0xFF; // R
+            dest[1] = (p >> 8) & 0xFF;  // G
+            dest[2] = p & 0xFF;         // B
+            dest[3] = (p >> 24) & 0xFF; // A
+        }
     }
-    fwrite(buf, w * h * 4, 1, f);
-    free(buf);
+
+    uLongf comp_size = compressBound((uLong)raw_size);
+    uint8_t *comp = malloc(comp_size);
+    if (compress(comp, &comp_size, raw, (uLong)raw_size) == Z_OK) {
+        write_chunk(f, "IDAT", comp, (uint32_t)comp_size);
+    }
+
+    write_chunk(f, "IEND", NULL, 0);
+
+    free(raw);
+    free(comp);
     fclose(f);
 }
 
@@ -59,9 +86,9 @@ int save_screenshot(SDL_Renderer *renderer, int width, int height) {
     char filename[64];
     time_t t = time(NULL);
     struct tm *tm = localtime(&t);
-    strftime(filename, sizeof(filename), "screenshot_%Y%m%d_%H%M%S.tga", tm);
+    strftime(filename, sizeof(filename), "screenshot_%Y%m%d_%H%M%S.png", tm);
 
-    save_tga(filename, pixels, width, height);
+    save_png(filename, pixels, width, height);
     printf("Saved screenshot to %s\n", filename);
 
     free(pixels);
