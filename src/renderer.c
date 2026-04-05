@@ -29,7 +29,7 @@ static int get_cpu_cores(void) {
 #elif defined(_SC_NPROCESSORS_ONLN)
     return sysconf(_SC_NPROCESSORS_ONLN);
 #else
-    return 1; // fallback
+    return 1; // default value
 #endif
 }
 
@@ -43,7 +43,7 @@ void init_renderer(int max_iterations, int palette_idx) {
 
     for (int i = 0; i < max_iterations; i++) {
         switch (palette_idx) {
-        case 0: // sine-wave (original)
+        case 0: // sine wave
             color_lut[i][0] = (Uint8)(sin(0.1 * i + 0) * 127 + 128);
             color_lut[i][1] = (Uint8)(sin(0.1 * i + 2) * 127 + 128);
             color_lut[i][2] = (Uint8)(sin(0.1 * i + 4) * 127 + 128);
@@ -76,7 +76,7 @@ void init_renderer(int max_iterations, int palette_idx) {
             break;
         }
     }
-    // points in the set are black
+    // set points are black
     color_lut[max_iterations][0] = 0;
     color_lut[max_iterations][1] = 0;
     color_lut[max_iterations][2] = 0;
@@ -97,7 +97,7 @@ void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 
     int i = (int)iterations;
     double t = iterations - i;
 
-    // lerp between LUT entries for smoothness
+    // interpolate colors for smoothness
     int i2 = i + 1;
     if (i2 > max_iterations) i2 = max_iterations;
 
@@ -112,19 +112,19 @@ void *render_thread(void *arg) {
     double re_factor = (data->re_max - data->re_min) / data->window_width;
     double im_factor = (data->im_max - data->im_min) / data->window_height;
 
-    // dynamic row assignment via atomic queue
+    // assign rows dynamically
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
         int x = 0;
 
 #ifdef __AVX2__
-        // pre-calculate constant SIMD vectors
+        // calculate vectors
         __m256d v_re_min = _mm256_set1_pd(data->re_min);
         __m256d v_re_fac = _mm256_set1_pd(re_factor);
         __m256d v_im_val = _mm256_set1_pd(data->im_min + (double)y * im_factor);
         __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
 
-        // process 4 pixels at a time with AVX2
+        // process 4 pixels with AVX2
         for (; x <= data->window_width - 4; x += 4) {
             double res_re[4], res_im[4], iterations[4];
 
@@ -148,7 +148,7 @@ void *render_thread(void *arg) {
         }
 #endif
 
-        // remaining pixels
+        // process remaining pixels
         for (; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
@@ -163,7 +163,7 @@ void *render_thread(void *arg) {
             Uint8 r, g, b;
             get_color(iterations, data->max_iterations, &r, &g, &b);
 
-            // write to ARGB pixel buffer
+            // write to pixel buffer
             data->pixels[y * (data->pitch / sizeof(Uint32)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
