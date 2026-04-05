@@ -115,7 +115,7 @@ void update_julia_tour(JuliaTourState *state, complex_t *julia_c, Uint32 now) {
             state->phase     = JULIA_TOUR_DWELLING;
             state->phase_start = now;
         }
-    } else { // JULIA_TOUR_DWELLING
+    } else { // handle dwelling state
         if ((double)(now - state->phase_start) >= JULIA_TOUR_DWELL_MS) {
             state->from_re = julia_c->re;
             state->from_im = julia_c->im;
