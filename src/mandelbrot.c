@@ -2,6 +2,20 @@
 #include <math.h>
 
 double mandelbrot_check(complex_t c, int max_iterations) {
+    // check if point is in main cardioid
+    double cr_minus_025 = c.re - 0.25;
+    double im_sq = c.im * c.im;
+    double q = cr_minus_025 * cr_minus_025 + im_sq;
+    if (q * (q + cr_minus_025) <= 0.25 * im_sq) {
+        return (double)max_iterations;
+    }
+
+    // check if point is in period-2 bulb
+    double cr_plus_1 = c.re + 1.0;
+    if (cr_plus_1 * cr_plus_1 + im_sq <= 0.0625) {
+        return (double)max_iterations;
+    }
+
     complex_t z = {0, 0};
     int iterations = 0;
 
