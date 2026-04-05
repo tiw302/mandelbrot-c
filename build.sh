@@ -18,14 +18,14 @@ else
 fi
 echo "OS: $OS"
 
-# Check for gcc
-if ! command -v gcc &> /dev/null; then
+# Check for cmake
+if ! command -v cmake &> /dev/null; then
     echo ""
-    echo "ERROR: gcc not found!"
+    echo "ERROR: cmake not found!"
     if [[ "$OS" == "Linux" ]]; then
-        echo "Install with: sudo apt install build-essential"
+        echo "Install with: sudo apt install cmake build-essential"
     elif [[ "$OS" == "macOS" ]]; then
-        echo "Install with: xcode-select --install"
+        echo "Install with: brew install cmake"
     fi
     exit 1
 fi
@@ -51,19 +51,19 @@ echo ""
 
 # Build!
 echo "Building..."
-make clean && make
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release && cmake --build build
 
 if [ $? -eq 0 ]; then
     echo ""
     echo "========================================"
-    echo "  Build successful! 🎉"
+    echo "  Build successful!"
     echo "========================================"
     echo ""
-    echo "Run with: ./mandelbrot"
+    echo "Run with: ./build/mandelbrot"
     echo ""
 else
     echo ""
-    echo "Build failed :("
+    echo "Build failed."
     echo "Check the errors above."
     exit 1
 fi

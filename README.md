@@ -1,14 +1,14 @@
-# Mandelbrot C (ノ*゜▽゜*)
+# Mandelbrot C
 
 [![Build Status](https://github.com/tiw302/mandelbrot-c/actions/workflows/build.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
 A simple, multi-threaded Mandelbrot and Julia set explorer written in C.
-This is my attempt to learn low-level graphics and thread management. It is not perfect, but I tried to make it clean and fast. (´｡• ᵕ •｡`)
+This is my attempt to learn low-level graphics and thread management. It is not perfect, but I tried to make it clean and fast.
 
 ---
 
-Hi! I am currently diving into C programming and wanted to build something visual to understand pointers and memory better. This project is the result of my experiments with SDL2 and pthreads. I hope you find it interesting! ヽ(>∀<☆)ノ
+Hi! I am currently diving into C programming and wanted to build something visual to understand pointers and memory better. This project is the result of my experiments with SDL2 and pthreads. I hope you find it interesting!
 
 ### Mandelbrot
 
@@ -32,7 +32,7 @@ In simple terms:
 
 ### Julia Sets
 
-A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ and let the starting point $z$ vary across the screen instead. Every single point inside the Mandelbrot set produces a different, connected Julia set. Points near the boundary of the Mandelbrot set produce the most intricate Julia sets -- which is exactly why the interactive mode is so fun to explore. (ﾉ◕ヮ◕)ﾉ*:･ﾟ✧
+A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ and let the starting point $z$ vary across the screen instead. Every single point inside the Mandelbrot set produces a different, connected Julia set. Points near the boundary of the Mandelbrot set produce the most intricate Julia sets -- which is exactly why the interactive mode is so fun to explore.
 
 ## Features
 
@@ -169,9 +169,9 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [ ] Add unit tests for core mathematical functions.
 - [ ] Implement automatic CPU core detection to dynamically set the thread count.
 
-## Contributing (o_ _)o
+## Contributing
 
-I am still learning, so if you spot any bugs or have suggestions for improvements (especially around memory safety!), I would really appreciate your help. Feel free to open an issue or pull request. Thank you! (⌒▽⌒)
+I am still learning, so if you spot any bugs or have suggestions for improvements (especially around memory safety!), I would really appreciate your help. Feel free to open an issue or pull request. Thank you!
 
 ## License
 
