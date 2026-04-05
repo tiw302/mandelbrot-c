@@ -35,7 +35,7 @@ int main(int argc, char *argv[]) {
 
     if (argc > 1) {
         if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
-            printf("mandelbrot-c 2.3.1\n"); return 0;
+            printf("mandelbrot-c 3.0.0-dev\n"); return 0;
         }
         if (strcmp(argv[1], "--help") == 0 || strcmp(argv[1], "-h") == 0) {
             print_controls(); return 0;
