@@ -1,10 +1,29 @@
-# Mandelbrot C
+# Mandelbrot-C
 
 [![Build Status](https://github.com/tiw302/mandelbrot-c/actions/workflows/build.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Language](https://img.shields.io/badge/Language-C-blue.svg)](https://en.wikipedia.org/wiki/C_(programming_language))
+![GitHub repo size](https://img.shields.io/github/repo-size/tiw302/mandelbrot-c)
+![GitHub stars](https://img.shields.io/github/stars/tiw302/mandelbrot-c?style=flat&logo=github)
+![GitHub last commit](https://img.shields.io/github/last-commit/tiw302/mandelbrot-c)
 
 A simple, multi-threaded Mandelbrot and Julia set explorer written in C.
 This is my attempt to learn low-level graphics and thread management. It is not perfect, but I tried to make it clean and fast.
+
+---
+
+## Table of Contents
+
+- [Introduction](#mandelbrot-c)
+- [The Math](#the-math)
+- [Features](#features)
+- [Prerequisites](#prerequisites)
+- [Build & Run](#build--run)
+- [Usage](#usage)
+- [Configuration](#configuration)
+- [Roadmap](#roadmap)
+- [Contributing](#contributing)
+- [License](#license)
 
 ---
 
