@@ -4,10 +4,6 @@
 #include <zlib.h>
 #include "screenshot.h"
 
-static uint32_t calculate_crc(const uint8_t *data, size_t len) {
-    return (uint32_t)crc32(0, data, (uInt)len);
-}
-
 static void write_u32_be(FILE *f, uint32_t v) {
     uint8_t buf[4] = {(v >> 24) & 0xFF, (v >> 16) & 0xFF, (v >> 8) & 0xFF, v & 0xFF};
     fwrite(buf, 4, 1, f);
