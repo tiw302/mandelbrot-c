@@ -89,7 +89,7 @@ if ! command -v pkg-config &> /dev/null; then
 fi
 
 # Check for SDL2 and SDL2_ttf
-if ! pkg-config --exists sdl2 sdl2_ttf 2>/dev/null; then
+if ! pkg-config --exists sdl2 2>/dev/null || (! pkg-config --exists sdl2_ttf 2>/dev/null && ! pkg-config --exists SDL2_ttf 2>/dev/null); then
     echo ""
     echo "ERROR: SDL2 or SDL2_ttf not found!"
     echo ""
