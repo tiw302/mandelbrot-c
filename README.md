@@ -48,8 +48,8 @@ A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ an
 
 ## Prerequisites
 
-- C Compiler (GCC/Clang)
-- Make
+- C Compiler (GCC/Clang/MSVC)
+- CMake (version 3.10+)
 - SDL2 development libraries
 - SDL2_ttf development libraries
 - zlib (almost always pre-installed; required for PNG screenshot export)
@@ -88,19 +88,19 @@ pacman -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_ttf
 
 ## Build & Run
 
-The project uses a standard Makefile for compilation.
+The project uses CMake for cross-platform compilation.
 
 > **Friendly tip:** If you run into build errors, please double-check that you have the [Prerequisites](#prerequisites) installed!
 
 ```bash
+# Configure the build
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+
 # Build the application
-make
+cmake --build build
 
 # Run the executable
-./mandelbrot
-
-# Clean build artifacts
-make clean
+./build/mandelbrot
 ```
 
 ## Usage
@@ -165,7 +165,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [ ] Port the project to WebAssembly using Emscripten for browser-based execution.
 
 ### Engineering Improvements
-- [ ] Migrate the build system from Makefile to CMake for better cross-platform support.
+- [x] Migrate the build system from Makefile to CMake for better cross-platform support.
 - [ ] Add unit tests for core mathematical functions.
 - [ ] Implement automatic CPU core detection to dynamically set the thread count.
 
