@@ -14,11 +14,13 @@ Hi! I am currently diving into C programming and wanted to build something visua
 
 ![Mandelbrot Screenshot](assets/Mandelbrot-Screenshot.png)
 ![Mandelbrot Screenshot](assets/Mandelbrot-Screenshot2.png)
+![Mandelbrot Screenshot](assets/Mandelbrot-Screenshot3.png)
 
 ### julia
 
 ![julia Screenshot](assets/julia-Screenshot.png)
 ![julia Screenshot](assets/julia-Screenshot2.png)
+![julia Screenshot](assets/julia-Screenshot3.png)
 
 ## The Math
 
