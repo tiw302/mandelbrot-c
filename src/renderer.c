@@ -15,7 +15,9 @@
 #endif
 
 static Uint8 color_lut[MAX_ITERATIONS_LIMIT + 1][3];
-static int   actual_thread_count = 1;
+static int   actual_thread_count = 0;
+static pthread_t      *threads_pool = NULL;
+static thread_data_t  *thread_data_pool = NULL;
 
 const char *PALETTE_NAMES[PALETTE_COUNT] = {
     "Sine Wave", "Grayscale", "Fire", "Electric", "Ocean", "Inferno"
@@ -48,8 +50,14 @@ int get_optimal_thread_count(void) {
 }
 
 void init_renderer(int max_iterations, int palette_idx) {
-    if (actual_thread_count == 1) {
-        actual_thread_count = get_optimal_thread_count();
+    if (actual_thread_count == 0) {
+        actual_thread_count = detect_thread_count();
+        threads_pool = malloc(sizeof(pthread_t) * actual_thread_count);
+        thread_data_pool = malloc(sizeof(thread_data_t) * actual_thread_count);
+        if (!threads_pool || !thread_data_pool) {
+            fprintf(stderr, "Fatal: failed to allocate thread pool\n");
+            exit(1);
+        }
     }
 
     for (int i = 0; i < max_iterations; i++) {
@@ -91,6 +99,14 @@ void init_renderer(int max_iterations, int palette_idx) {
     color_lut[max_iterations][0] = 0;
     color_lut[max_iterations][1] = 0;
     color_lut[max_iterations][2] = 0;
+}
+
+void cleanup_renderer(void) {
+    if (threads_pool) free(threads_pool);
+    if (thread_data_pool) free(thread_data_pool);
+    threads_pool = NULL;
+    thread_data_pool = NULL;
+    actual_thread_count = 0;
 }
 
 int get_actual_thread_count(void) {
@@ -189,18 +205,10 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
                               double im_min, double im_max,
                               RenderMode mode, complex_t julia_c,
                               int max_iterations) {
-    pthread_t      *threads     = malloc(sizeof(pthread_t) * actual_thread_count);
-    thread_data_t  *thread_data = malloc(sizeof(thread_data_t) * actual_thread_count);
     atomic_int      next_row    = 0;
 
-    if (!threads || !thread_data) {
-        fprintf(stderr, "Failed to allocate thread resources\n");
-        free(threads); free(thread_data);
-        return;
-    }
-
     for (int i = 0; i < actual_thread_count; i++) {
-        thread_data[i] = (thread_data_t){
+        thread_data_pool[i] = (thread_data_t){
             .id = i,
             .pixels = pixels,
             .pitch = pitch,
@@ -216,18 +224,14 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
             .next_row = &next_row
         };
 
-        if (pthread_create(&threads[i], NULL, render_thread, &thread_data[i]) != 0) {
+        if (pthread_create(&threads_pool[i], NULL, render_thread, &thread_data_pool[i]) != 0) {
             fprintf(stderr, "Failed to spawn thread %d\n", i);
-            for (int j = 0; j < i; j++) pthread_join(threads[j], NULL);
-            free(threads); free(thread_data);
+            for (int j = 0; j < i; j++) pthread_join(threads_pool[j], NULL);
             return;
         }
     }
 
-    for (int i = 0; i < actual_thread_count; i++) pthread_join(threads[i], NULL);
-
-    free(threads);
-    free(thread_data);
+    for (int i = 0; i < actual_thread_count; i++) pthread_join(threads_pool[i], NULL);
 }
 
 void render_mandelbrot_threaded(Uint32 *pixels, int pitch,

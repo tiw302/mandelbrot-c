@@ -409,6 +409,7 @@ int main(int argc, char *argv[]) {
     }
 
     if (font) TTF_CloseFont(font);
+    cleanup_renderer();
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);

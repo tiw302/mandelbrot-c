@@ -27,11 +27,6 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     fwrite(sig, 8, 1, f);
 
     // IHDR: 13 bytes
-    uint8_t ihdr[13];
-    uint32_t w_be = ((uint32_t)w >> 24) | (((uint32_t)w >> 8) & 0xFF00) | (((uint32_t)w << 8) & 0xFF0000) | ((uint32_t)w << 24);
-    uint32_t h_be = ((uint32_t)h >> 24) | (((uint32_t)h >> 8) & 0xFF00) | (((uint32_t)h << 8) & 0xFF0000) | ((uint32_t)h << 24);
-    
-    // We'll use our helper to write correctly
     uint8_t ihdr_data[13];
     ihdr_data[0] = (w >> 24) & 0xFF; ihdr_data[1] = (w >> 16) & 0xFF; ihdr_data[2] = (w >> 8) & 0xFF; ihdr_data[3] = w & 0xFF;
     ihdr_data[4] = (h >> 24) & 0xFF; ihdr_data[5] = (h >> 16) & 0xFF; ihdr_data[6] = (h >> 8) & 0xFF; ihdr_data[7] = h & 0xFF;
@@ -45,6 +40,11 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     // Prepare raw data for deflate: filter 0 + row data
     size_t raw_size = (size_t)h * ((size_t)w * 4 + 1);
     uint8_t *raw = malloc(raw_size);
+    if (!raw) {
+        fclose(f);
+        return;
+    }
+
     for (int y = 0; y < h; y++) {
         raw[y * (w * 4 + 1)] = 0; // Filter type 0
         for (int x = 0; x < w; x++) {
@@ -59,14 +59,16 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
 
     uLongf comp_size = compressBound((uLong)raw_size);
     uint8_t *comp = malloc(comp_size);
-    if (compress(comp, &comp_size, raw, (uLong)raw_size) == Z_OK) {
-        write_chunk(f, "IDAT", comp, (uint32_t)comp_size);
+    if (comp) {
+        if (compress(comp, &comp_size, raw, (uLong)raw_size) == Z_OK) {
+            write_chunk(f, "IDAT", comp, (uint32_t)comp_size);
+        }
+        free(comp);
     }
 
     write_chunk(f, "IEND", NULL, 0);
 
     free(raw);
-    free(comp);
     fclose(f);
 }
 

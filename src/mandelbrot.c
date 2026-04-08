@@ -1,5 +1,7 @@
 #include "mandelbrot.h"
 #include <math.h>
+#include <stdint.h>
+#include <immintrin.h>
 
 double mandelbrot_check(complex_t c, int max_iterations) {
     // check if point is in main cardioid
@@ -44,41 +46,54 @@ double mandelbrot_check(complex_t c, int max_iterations) {
 void mandelbrot_check_avx2(const double *re, const double *im, int max_iterations, double *results) {
     __m256d cre = _mm256_loadu_pd(re);
     __m256d cim = _mm256_loadu_pd(im);
+
+    // Quick cardioid/bulb check
+    __m256d cre_m_025 = _mm256_sub_pd(cre, _mm256_set1_pd(0.25));
+    __m256d cim2 = _mm256_mul_pd(cim, cim);
+    __m256d q = _mm256_add_pd(_mm256_mul_pd(cre_m_025, cre_m_025), cim2);
+    __m256d cardioid_mask = _mm256_cmp_pd(_mm256_mul_pd(q, _mm256_add_pd(q, cre_m_025)), 
+                                         _mm256_mul_pd(_mm256_set1_pd(0.25), cim2), _CMP_LE_OQ);
+    __m256d cre_p_1 = _mm256_add_pd(cre, _mm256_set1_pd(1.0));
+    __m256d bulb_mask = _mm256_cmp_pd(_mm256_add_pd(_mm256_mul_pd(cre_p_1, cre_p_1), cim2), 
+                                      _mm256_set1_pd(0.0625), _CMP_LE_OQ);
+    __m256d in_set_mask = _mm256_or_pd(cardioid_mask, bulb_mask);
+
     __m256d zre = _mm256_setzero_pd();
     __m256d zim = _mm256_setzero_pd();
-
     __m256d iters = _mm256_setzero_pd();
     __m256d esc_radius_sq = _mm256_set1_pd(ESCAPE_RADIUS * ESCAPE_RADIUS);
-    __m256d escaped_mask = _mm256_setzero_pd();
+    __m256d escaped_mask = in_set_mask; 
     __m256d final_mag_sq = _mm256_setzero_pd();
 
     for (int i = 0; i < max_iterations; i++) {
-        __m256d zre2 = _mm256_mul_pd(zre, zre);
-        __m256d zim2 = _mm256_mul_pd(zim, zim);
-        __m256d mag_sq = _mm256_add_pd(zre2, zim2);
-
-        __m256d mask = _mm256_cmp_pd(mag_sq, esc_radius_sq, _CMP_GT_OQ);
-        __m256d just_escaped = _mm256_andnot_pd(escaped_mask, mask);
-
-        final_mag_sq = _mm256_or_pd(final_mag_sq, _mm256_and_pd(just_escaped, mag_sq));
-        escaped_mask = _mm256_or_pd(escaped_mask, mask);
-
         if (_mm256_movemask_pd(escaped_mask) == 0xF) break;
 
+        __m256d zre2 = _mm256_mul_pd(zre, zre);
+        __m256d zim2 = _mm256_mul_pd(zim, zim);
+        
         __m256d next_re = _mm256_add_pd(_mm256_sub_pd(zre2, zim2), cre);
         __m256d next_im = _mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(2.0), _mm256_mul_pd(zre, zim)), cim);
         zre = next_re;
         zim = next_im;
 
+        __m256d mag_sq = _mm256_add_pd(_mm256_mul_pd(zre, zre), _mm256_mul_pd(zim, zim));
+        __m256d mask = _mm256_cmp_pd(mag_sq, esc_radius_sq, _CMP_GT_OQ);
+        __m256d just_escaped = _mm256_andnot_pd(escaped_mask, mask);
+
+        final_mag_sq = _mm256_or_pd(final_mag_sq, _mm256_and_pd(just_escaped, mag_sq));
+        escaped_mask = _mm256_or_pd(escaped_mask, mask);
+        
         iters = _mm256_add_pd(iters, _mm256_andnot_pd(escaped_mask, _mm256_set1_pd(1.0)));
     }
 
     double res_iters[4], res_mag_sq[4];
+    uint64_t res_in_set[4];
     _mm256_storeu_pd(res_iters, iters);
     _mm256_storeu_pd(res_mag_sq, final_mag_sq);
+    _mm256_storeu_pd((double*)res_in_set, in_set_mask);
 
     for (int i = 0; i < 4; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_in_set[i] || res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));

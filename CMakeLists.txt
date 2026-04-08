@@ -35,3 +35,8 @@ else()
     pkg_check_modules(SDL2 REQUIRED IMPORTED_TARGET sdl2 SDL2_ttf)
     target_link_libraries(${PROJECT_NAME} PRIVATE PkgConfig::SDL2)
 endif()
+
+# enable ctest and add tests folder
+enable_testing()
+add_subdirectory(tests)
+

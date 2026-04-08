@@ -35,6 +35,9 @@ extern const char *PALETTE_NAMES[PALETTE_COUNT];
 // precompute LUT or other startup work
 void init_renderer(int max_iterations, int palette_idx);
 
+// free allocated resources
+void cleanup_renderer(void);
+
 // get the number of threads actually being used
 int get_actual_thread_count(void);
 
