@@ -15,38 +15,41 @@
 #endif
 
 static Uint8 color_lut[MAX_ITERATIONS_LIMIT + 1][3];
-static int   actual_thread_count       = 1;
-static int   thread_count_initialized  = 0;
+static int   actual_thread_count = 1;
 
 const char *PALETTE_NAMES[PALETTE_COUNT] = {
     "Sine Wave", "Grayscale", "Fire", "Electric", "Ocean", "Inferno"
 };
 
 static int get_cpu_cores(void) {
-    int cores = 1;
 #if defined(_WIN32) || defined(_WIN64)
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
-    cores = (int)sysinfo.dwNumberOfProcessors;
+    return sysinfo.dwNumberOfProcessors;
 #elif defined(_SC_NPROCESSORS_ONLN)
-    long result = sysconf(_SC_NPROCESSORS_ONLN);
-    if (result > 0)
-        cores = (int)result;
+    return sysconf(_SC_NPROCESSORS_ONLN);
+#else
+    return 1; // default value
 #endif
-    return cores;
+}
+
+/* detect optimal thread count based on config and cpu cores */
+static int detect_thread_count(void) {
+    int cores = get_cpu_cores();
+    int count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
+    if (count < 1) count = 1;
+    if (count > 64) count = 64; // reasonable cap
+    return count;
+}
+
+/* public api to get the thread count we should use */
+int get_optimal_thread_count(void) {
+    return detect_thread_count();
 }
 
 void init_renderer(int max_iterations, int palette_idx) {
-    // Only detect once at startup. Using a flag instead of checking the count
-    // value avoids misidentifying a legitimate single-core result as uninitialised.
-    if (!thread_count_initialized) {
-        int cores = get_cpu_cores();
-        actual_thread_count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
-        if (actual_thread_count < 1)  actual_thread_count = 1;
-        if (actual_thread_count > 64) actual_thread_count = 64;
-        thread_count_initialized = 1;
-        printf("[renderer] detected %d CPU core(s), using %d thread(s)\n",
-               cores, actual_thread_count);
+    if (actual_thread_count == 1) {
+        actual_thread_count = get_optimal_thread_count();
     }
 
     for (int i = 0; i < max_iterations; i++) {

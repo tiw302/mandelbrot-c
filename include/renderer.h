@@ -6,6 +6,9 @@
 #include "config.h"
 #include "mandelbrot.h"
 
+// Returns the optimal thread count based on system detection and DEFAULT_THREAD_COUNT
+int get_optimal_thread_count(void);
+
 typedef enum {
     RENDER_MANDELBROT = 0,
     RENDER_JULIA      = 1
