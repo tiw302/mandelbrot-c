@@ -187,7 +187,7 @@ Future backend developments (GPU, WebAssembly) are currently being tracked and r
 ### Engineering Improvements
 - [x] Migrate the build system from Makefile to CMake for better cross-platform support.
 - [ ] Add unit tests for core mathematical functions.
-- [ ] Implement automatic CPU core detection to dynamically set the thread count.
+- [x] Implement automatic CPU core detection to dynamically set the thread count.
 
 ## Contributing
 
