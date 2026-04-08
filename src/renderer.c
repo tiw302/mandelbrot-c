@@ -61,7 +61,6 @@ void init_renderer(int max_iterations, int palette_idx) {
             exit(1);
         }
     }
-...
     for (int i = 0; i < max_iterations; i++) {
         switch (palette_idx) {
         case 0: // sine wave
@@ -122,6 +121,7 @@ void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 
     }
 
     if (iterations < 0) iterations = 0;
+    if (iterations > max_iterations) iterations = (double)max_iterations;
 
     int i = (int)iterations;
     double t = iterations - i;
@@ -138,8 +138,10 @@ void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 
 void *render_thread(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
 
-    double re_factor = (data->re_max - data->re_min) / data->window_width;
-    double im_factor = (data->im_max - data->im_min) / data->window_height;
+    double re_factor = (data->window_width > 0) ? 
+                       (data->re_max - data->re_min) / data->window_width : 0;
+    double im_factor = (data->window_height > 0) ? 
+                       (data->im_max - data->im_min) / data->window_height : 0;
 
     // assign rows dynamically
     int y;

@@ -55,15 +55,34 @@ int main(int argc, char *argv[]) {
         "Mandelbrot Explorer",
         SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
         win_w, win_h, SDL_WINDOW_RESIZABLE | SDL_WINDOW_SHOWN);
-    if (!window) return 1;
+    if (!window) {
+        fprintf(stderr, "Fatal: SDL_CreateWindow failed: %s\n", SDL_GetError());
+        if (font) TTF_CloseFont(font);
+        TTF_Quit(); SDL_Quit();
+        return 1;
+    }
 
     SDL_Renderer *renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
-    if (!renderer) return 1;
+    if (!renderer) {
+        fprintf(stderr, "Fatal: SDL_CreateRenderer failed: %s\n", SDL_GetError());
+        SDL_DestroyWindow(window);
+        if (font) TTF_CloseFont(font);
+        TTF_Quit(); SDL_Quit();
+        return 1;
+    }
 
     SDL_Texture *texture = SDL_CreateTexture(
         renderer, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, win_w, win_h);
+    if (!texture) {
+        fprintf(stderr, "Fatal: SDL_CreateTexture failed: %s\n", SDL_GetError());
+        SDL_DestroyRenderer(renderer);
+        SDL_DestroyWindow(window);
+        if (font) TTF_CloseFont(font);
+        TTF_Quit(); SDL_Quit();
+        return 1;
+    }
 
     // store view state
     ViewState view          = {INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
@@ -105,9 +124,17 @@ int main(int argc, char *argv[]) {
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
                     win_w = event.window.data1;
                     win_h = event.window.data2;
+
+                    // safety check for window dimensions
+                    if (win_w < 1) win_w = 1;
+                    if (win_h < 1) win_h = 1;
+
                     SDL_DestroyTexture(texture);
                     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                                 SDL_TEXTUREACCESS_STREAMING, win_w, win_h);
+                    if (!texture) {
+                        fprintf(stderr, "Warning: failed to re-create texture during resize\n");
+                    }
                     needs_redraw = 1;
                 }
                 break;
@@ -422,6 +449,7 @@ static void calculate_boundaries(double center_re, double center_im, double zoom
                                    int width, int height,
                                    double *re_min, double *re_max,
                                    double *im_min, double *im_max) {
+    if (height <= 0) height = 1;
     double aspect = (double)width / (double)height;
     *im_min = center_im - zoom / 2.0;
     *im_max = center_im + zoom / 2.0;

@@ -75,10 +75,21 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
 }
 
 int save_screenshot(SDL_Renderer *renderer, int width, int height) {
-    uint32_t *pixels = malloc(width * height * 4);
-    if (!pixels) return -1;
+    // use size_t and check for overflow to prevent memory corruption
+    if (width <= 0 || height <= 0 || width > 16384 || height > 16384) {
+        fprintf(stderr, "Error: Invalid window dimensions for screenshot\n");
+        return -1;
+    }
+
+    size_t pixel_bytes = (size_t)width * (size_t)height * 4;
+    uint32_t *pixels = malloc(pixel_bytes);
+    if (!pixels) {
+        fprintf(stderr, "Error: Failed to allocate pixel buffer for screenshot\n");
+        return -1;
+    }
 
     if (SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, pixels, width * 4) != 0) {
+        fprintf(stderr, "Error: SDL_RenderReadPixels failed: %s\n", SDL_GetError());
         free(pixels);
         return -1;
     }
