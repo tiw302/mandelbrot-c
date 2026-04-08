@@ -56,10 +56,12 @@ void init_renderer(int max_iterations, int palette_idx) {
         thread_data_pool = malloc(sizeof(thread_data_t) * actual_thread_count);
         if (!threads_pool || !thread_data_pool) {
             fprintf(stderr, "Fatal: failed to allocate thread pool\n");
+            if (threads_pool) free(threads_pool);
+            if (thread_data_pool) free(thread_data_pool);
             exit(1);
         }
     }
-
+...
     for (int i = 0; i < max_iterations; i++) {
         switch (palette_idx) {
         case 0: // sine wave

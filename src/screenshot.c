@@ -38,7 +38,8 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     write_chunk(f, "IHDR", ihdr_data, 13);
 
     // Prepare raw data for deflate: filter 0 + row data
-    size_t raw_size = (size_t)h * ((size_t)w * 4 + 1);
+    size_t row_size = (size_t)w * 4 + 1;
+    size_t raw_size = (size_t)h * row_size;
     uint8_t *raw = malloc(raw_size);
     if (!raw) {
         fclose(f);
@@ -46,13 +47,14 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     }
 
     for (int y = 0; y < h; y++) {
-        raw[y * (w * 4 + 1)] = 0; // Filter type 0
+        raw[y * row_size] = 0; // Filter type 0
         for (int x = 0; x < w; x++) {
             uint32_t p = pixels[y * w + x];
-            uint8_t *dest = &raw[y * (w * 4 + 1) + 1 + x * 4];
+            uint8_t *dest = &raw[y * row_size + 1 + x * 4];
+            // SDL_PIXELFORMAT_ARGB8888 -> R G B A
             dest[0] = (p >> 16) & 0xFF; // R
-            dest[1] = (p >> 8) & 0xFF;  // G
-            dest[2] = p & 0xFF;         // B
+            dest[1] = (p >> 8)  & 0xFF; // G
+            dest[2] = p         & 0xFF; // B
             dest[3] = (p >> 24) & 0xFF; // A
         }
     }
