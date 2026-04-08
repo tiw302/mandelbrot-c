@@ -1,10 +1,9 @@
 # Mandelbrot-C
 
 [![Build Status](https://github.com/tiw302/mandelbrot-c/actions/workflows/build.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
-[![Language](https://img.shields.io/badge/Language-C-blue.svg)](https://en.wikipedia.org/wiki/C_(programming_language))
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Language](https://img.shields.io/badge/Language-C11-00599C.svg)](https://en.wikipedia.org/wiki/C11_(C_standard_revision))
 ![GitHub repo size](https://img.shields.io/github/repo-size/tiw302/mandelbrot-c)
-![GitHub stars](https://img.shields.io/github/stars/tiw302/mandelbrot-c?style=flat&logo=github)
 ![GitHub last commit](https://img.shields.io/github/last-commit/tiw302/mandelbrot-c)
 
 A simple, multi-threaded Mandelbrot and Julia set explorer written in C.
@@ -17,9 +16,12 @@ This is my attempt to learn low-level graphics and thread management. It is not 
 - [Introduction](#mandelbrot-c)
 - [The Math](#the-math)
 - [Features](#features)
+- [Technical Architecture](#technical-architecture)
+- [Quality Assurance](#quality-assurance)
 - [Prerequisites](#prerequisites)
-- [Build & Run](#build--run)
+- [Build and Run](#build--run)
 - [Usage](#usage)
+- [Project Structure](#project-structure)
 - [Configuration](#configuration)
 - [Roadmap](#roadmap)
 - [Contributing](#contributing)
@@ -58,69 +60,62 @@ A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ an
 ## Features
 
 - **Real-time Rendering:** Optimized arithmetic for smooth navigation.
-- **Multi-threading:** Dynamic workload distribution across available CPU cores.
-- **Julia Set Mode:** Press `J` to instantly switch to the Julia set defined by the point under your cursor. Move the mouse to morph the fractal live.
-- **Tour Mode:** Press `T` to start an automated "camera tour". In Mandelbrot mode, it zooms into interesting coordinates; in Julia mode, it animates the parameters for you.
-- **Screenshot Export:** Press `S` to save the current view as a timestamped PNG -- no extra libraries needed.
-- **CPU Powered:** Pure software rendering without GPU acceleration (for educational purposes). [Read more](docs/GPU_INFO.md).
-- **Interactive Controls:** Mouse-based panning and zooming.
-- **State Management:** Undo history stack for view navigation.
-- **Cross-Platform:** Compatible with Linux, macOS, and Windows (via MSYS2).
+- **Hardware Acceleration:** AVX2 SIMD vectorization for processing 4 pixels in parallel per instruction.
+- **Dynamic Multi-threading:** Intelligent row-based workload distribution using pthreads.
+- **Julia Set Mode:** Press `J` to instantly switch to the Julia set defined by the point under your cursor.
+- **Tour Mode:** Automated exploration paths for both Mandelbrot and Julia modes.
+- **Screenshot Export:** PNG export functionality with no external library dependencies (uses integrated zlib).
+- **Interactive Controls:** Advanced mouse-based panning and selection-based zooming.
+- **Robustness:** Audited for memory safety and edge-case stability (stable during rapid window resizing).
+
+## Technical Architecture
+
+### Vectorized Optimization (SIMD)
+The fractal engine utilizes 256-bit AVX2 registers. This allows the system to perform complex squaring, addition, and escape radius testing on 4 independent double-precision points simultaneously. On supported hardware, this represents a significant performance increase over scalar computation.
+
+### Load Balancing
+Parallelization is managed through a dynamic scheduling model. Unlike static partitioning, which can lead to inefficient CPU usage in regions of high iteration density, the engine uses atomic counters to allow threads to claim the next available row. This ensures uniform CPU utilization across all logical cores.
+
+### Smooth Coloring and Performance
+The implementation uses a fractional iteration counting algorithm to generate seamless color transitions. To ensure high frame rates, per-pixel trigonometric calls are replaced with a pre-calculated Look-Up Table (LUT) that is interpolated at runtime.
+
+## Quality Assurance
+
+### Security and Stability Audit
+The codebase has been audited to address common low-level risks:
+- **Resizing Resilience:** Implemented division-by-zero guards to prevent crashes during window minimization or extreme resizing.
+- **Memory Hardening:** Clamped coloring indices to prevent out-of-bounds access and added overflow checks to pixel buffer allocations.
+- **Error Handling:** Enhanced resource initialization paths to ensure clean-up on failure and improved diagnostic reporting.
+
+### Automated Testing (CI/CD)
+Core logic is validated through a suite of automated unit tests.
+- **Verification:** Run `cd build && ctest` to verify core math and AVX2 consistency.
+- **Continuous Integration:** Every modification is automatically built and tested via GitHub Actions on Ubuntu environments.
 
 ## Prerequisites
 
-- C Compiler (GCC/Clang/MSVC)
+- C Compiler (GCC/Clang/MSVC with C11 support)
 - CMake (version 3.10+)
-- SDL2 development libraries
-- SDL2_ttf development libraries
-- zlib (almost always pre-installed; required for PNG screenshot export)
+- SDL2 & SDL2_ttf development libraries
+- zlib (required for PNG screenshot export)
 
-### Installation
-
-**Debian / Ubuntu**
+### Installation (Debian / Ubuntu)
 ```bash
-sudo apt install libsdl2-dev libsdl2-ttf-dev
-```
-
-**Arch Linux**
-```bash
-sudo pacman -S sdl2 sdl2_ttf
-```
-
-**Fedora**
-```bash
-sudo dnf install SDL2-devel SDL2_ttf-devel
-```
-
-**Void Linux**
-```bash
-sudo xbps-install -S SDL2-devel SDL2_ttf-devel
-```
-
-**macOS**
-```bash
-brew install sdl2 sdl2_ttf
-```
-
-**Windows (MSYS2)**
-```bash
-pacman -S mingw-w64-x86_64-SDL2 mingw-w64-x86_64-SDL2_ttf
+sudo apt install libsdl2-dev libsdl2-ttf-dev zlib1g-dev
 ```
 
 ## Build & Run
 
-The project uses CMake for cross-platform compilation.
-
-> **Friendly tip:** If you run into build errors, please double-check that you have the [Prerequisites](#prerequisites) installed!
-
+A convenience build script is available:
 ```bash
-# Configure the build
+chmod +x build.sh
+./build.sh
+```
+
+Alternatively, use standard CMake commands:
+```bash
 cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-
-# Build the application
 cmake --build build
-
-# Run the executable
 ./build/mandelbrot
 ```
 
@@ -128,10 +123,11 @@ cmake --build build
 
 | Action | Control |
 |--------|---------|
-| **Zoom In** | Left Mouse Drag |
+| **Zoom In** | Left Mouse Drag (Selection box) |
 | **Pan** | Right Mouse Drag |
+| **Zoom at Cursor** | Mouse Wheel |
 | **Undo Zoom** | `Ctrl` + `Z` |
-| **Iterations** | `Up` / `Down` (Shift for x10) |
+| **Iterations** | `Up` / `Down` (Shift for x100, default x10) |
 | **Palettes** | `P` |
 | **Reset View** | `R` |
 | **Toggle Julia Mode** | `J` |
@@ -139,25 +135,18 @@ cmake --build build
 | **Tour Mode** | `T` |
 | **Quit** | `Esc` or `Q` |
 
-### Julia Mode
+## Project Structure
 
-Press `J` while hovering over any point on the Mandelbrot set to jump into Julia mode.
-The complex coordinate under your cursor becomes the parameter $c$ that defines the Julia set.
-Move your mouse around to morph the fractal in real time -- every position gives you a completely different shape.
-Press `J` again to return to the exact Mandelbrot view you left.
-
-### Tour Mode
-
-Press `T` to toggle the automated exploration mode:
-
-- **In Mandelbrot Mode:** The camera will automatically pan and zoom into a series of hand-picked, visually complex regions (the "Seahorse Valley," "Elephant Valley," etc.).
-- **In Julia Mode:** The $c$ parameter will smoothly glide between interesting sets, showcasing spirals, dendrites, and Siegel disks without any mouse input.
-
-### Screenshots
-
-Press `S` at any time to export the current frame as a PNG.
-Files are saved in the working directory with a timestamp in the filename, e.g. `mandelbrot_20250315_142031.png`.
-The encoder is built on zlib with no extra dependencies.
+```text
+.
+├── include/           # Header files and configuration
+├── src/               # Core fractal engines and renderer
+│   ├── mandelbrot.c   # AVX2 and Scalar Mandelbrot logic
+│   ├── julia.c        # AVX2 and Scalar Julia logic
+│   └── main.c         # Event loop and state management
+├── tests/             # Automated verification (ctest)
+└── docs/              # Technical deep-dives and GPU research
+```
 
 ## Configuration
 
