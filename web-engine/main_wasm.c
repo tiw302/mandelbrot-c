@@ -373,6 +373,15 @@ void wasm_zoom_at(int px, int py, double factor) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+void wasm_undo_zoom() {
+    if (!g_ctx) return;
+    if (g_ctx->history_count > 0) {
+        g_ctx->view = g_ctx->history[--g_ctx->history_count];
+        g_ctx->needs_redraw = 1;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
 void wasm_pan(int dx, int dy) {
     if (!g_ctx) return;
     double re_min, re_max, im_min, im_max;
