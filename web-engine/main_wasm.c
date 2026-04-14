@@ -11,6 +11,7 @@
 #include "../core/julia.h"
 #include "../core/color.h"
 #include "renderer_wasm.h"
+#include "../cpu-engine/renderer.h"
 
 typedef struct {
     ViewState mandelbrot_view;
@@ -218,11 +219,11 @@ void main_loop_iteration(void *arg) {
         calculate_boundaries(ctx->view.center_re, ctx->view.center_im, ctx->view.zoom,
                               ctx->win_w, ctx->win_h, &re_min, &re_max, &im_min, &im_max);
         if (ctx->julia_mode) {
-            render_julia_wasm(pixels, pitch, ctx->win_w, ctx->win_h,
-                              re_min, re_max, im_min, im_max, ctx->julia_c, ctx->max_iterations);
+            render_julia_threaded(pixels, pitch, ctx->win_w, ctx->win_h,
+                                  re_min, re_max, im_min, im_max, ctx->julia_c, ctx->max_iterations);
         } else {
-            render_mandelbrot_wasm(pixels, pitch, ctx->win_w, ctx->win_h,
-                                   re_min, re_max, im_min, im_max, ctx->max_iterations);
+            render_mandelbrot_threaded(pixels, pitch, ctx->win_w, ctx->win_h,
+                                       re_min, re_max, im_min, im_max, ctx->max_iterations);
         }
         SDL_UnlockTexture(ctx->texture);
         ctx->needs_redraw = 0;
@@ -244,6 +245,8 @@ int main() {
     srand((unsigned)time(NULL));
 
     if (SDL_Init(SDL_INIT_VIDEO) != 0) return 1;
+
+    init_renderer(DEFAULT_ITERATIONS, 0);
 
     GlobalCtx *ctx = calloc(1, sizeof(GlobalCtx));
     if (!ctx) { SDL_Quit(); return 1; }

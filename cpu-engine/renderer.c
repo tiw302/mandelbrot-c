@@ -8,6 +8,11 @@
 #include <math.h>
 #include <stdatomic.h>
 
+#if defined(__EMSCRIPTEN__)
+#include <emscripten.h>
+#include <emscripten/threading.h>
+#endif
+
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 #elif defined(__APPLE__) || defined(__MACH__) || defined(__linux__) || defined(__FreeBSD__)
@@ -115,6 +120,26 @@ void *render_thread(void *arg) {
                 Uint8 r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
                 data->pixels[y * (data->pitch / sizeof(Uint32)) + (x + i)] =
+                    (0xFF << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
+#elif defined(__wasm_simd128__)
+        /* process 2 pixels with WASM SIMD128 */
+        for (; x <= data->window_width - 2; x += 2) {
+            double res_re[2], res_im[2], iterations[2];
+            res_re[0] = data->re_min + (double)x * re_factor;
+            res_re[1] = data->re_min + (double)(x + 1) * re_factor;
+            res_im[0] = res_im[1] = data->im_min + (double)y * im_factor;
+
+            if (data->mode == RENDER_JULIA)
+                julia_check_wasm_simd128(res_re, res_im, data->julia_c, data->max_iterations, iterations);
+            else
+                mandelbrot_check_wasm_simd128(res_re, res_im, data->max_iterations, iterations);
+
+            for (int i = 0; i < 2; i++) {
+                uint8_t r, g, b;
+                get_color(iterations[i], data->max_iterations, &r, &g, &b);
+                data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
             }
         }
