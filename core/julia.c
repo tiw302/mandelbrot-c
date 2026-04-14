@@ -27,7 +27,7 @@ void julia_check_wasm_simd128(const double *re, const double *im, complex_t c, i
         v128_t mag_sq = wasm_f64x2_add(wasm_f64x2_mul(zre, zre), wasm_f64x2_mul(zim, zim));
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
-        
+
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
         escaped_mask = wasm_v128_or(escaped_mask, mask);
         iters = wasm_f64x2_add(iters, wasm_v128_andnot(wasm_f64x2_splat(1.0), escaped_mask));
@@ -52,7 +52,7 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        /* next z */
+        // next z
         double next_re = z.re * z.re - z.im * z.im + c.re;
         double next_im = 2 * z.re * z.im + c.im;
         z.re = next_re;
@@ -60,7 +60,7 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
 
         double mag_sq = z.re * z.re + z.im * z.im;
         if (mag_sq > escape_radius_sq) {
-            /* smooth color */
+            // smooth color
             return (double)iterations + 2.0 - log2(log(mag_sq));
         }
 
@@ -87,7 +87,7 @@ void julia_check_avx2(const double *re, const double *im, complex_t c, int max_i
 
         __m256d zre2 = _mm256_mul_pd(zre, zre);
         __m256d zim2 = _mm256_mul_pd(zim, zim);
-        
+
         __m256d next_re = _mm256_add_pd(_mm256_sub_pd(zre2, zim2), cre);
         __m256d next_im = _mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(2.0), _mm256_mul_pd(zre, zim)), cim);
         zre = next_re;

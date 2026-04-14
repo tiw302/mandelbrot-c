@@ -16,17 +16,17 @@ typedef struct {
     double im;
 } complex_t;
 
-/* get iteration count for mandelbrot point */
-/* returns max_iterations if it's in the set */
+// get iteration count for mandelbrot point
+// returns max_iterations if it's in the set
 double mandelbrot_check(complex_t c, int max_iterations);
 
 #ifdef __AVX2__
-/* simd version: process 4 pixels at once */
+// simd version: process 4 pixels at once
 void mandelbrot_check_avx2(const double *re, const double *im, int max_iterations, double *results);
 #endif
 
 #ifdef __wasm_simd128__
-/* wasm simd path */
+// wasm simd path
 void mandelbrot_check_wasm_simd128(const double *re, const double *im, int max_iterations, double *results);
 #endif
 

@@ -285,7 +285,7 @@ int main() {
 
     init_color_palette(ctx->max_iterations, ctx->palette_idx);
 
-    /* WebAssembly specific render loop */
+    // WebAssembly specific render loop
     emscripten_set_main_loop_arg(main_loop_iteration, ctx, -1, 1);
 
     SDL_DestroyTexture(ctx->texture);

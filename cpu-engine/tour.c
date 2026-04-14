@@ -26,18 +26,18 @@ static const struct { double re, im; } ZOOM_TARGETS[] = {
 #define JULIA_TOUR_DWELL_MS  1200.0
 
 static const struct { double re, im; } JULIA_C_TARGETS[] = {
-    {-0.7000,  0.2700},  /* classic spiral */
-    {-0.4000,  0.6000},  /* rabbit */
-    { 0.2850,  0.0100},  /* coral */
-    {-0.7269,  0.1889},  /* siel disk */
-    {-0.8000,  0.1560},  /* dendrite */
-    {-0.1200, -0.7700},  /* san marco dragon */
-    { 0.3000, -0.5000},  /* islands */
-    {-0.5400,  0.5400},  /* star */
-    { 0.3700,  0.1000},  /* seahorse */
-    {-0.1940,  0.6557},  /* feather */
-    { 0.0,    0.8},      /* cauliflower */
-    {-0.618,  0.0},      /* golden ratio */
+    {-0.7000,  0.2700},  // classic spiral
+    {-0.4000,  0.6000},  // rabbit
+    { 0.2850,  0.0100},  // coral
+    {-0.7269,  0.1889},  // siel disk
+    {-0.8000,  0.1560},  // dendrite
+    {-0.1200, -0.7700},  // san marco dragon
+    { 0.3000, -0.5000},  // islands
+    {-0.5400,  0.5400},  // star
+    { 0.3700,  0.1000},  // seahorse
+    {-0.1940,  0.6557},  // feather
+    { 0.0,    0.8},      // cauliflower
+    {-0.618,  0.0},      // golden ratio
 };
 #define NUM_JULIA_C_TARGETS (int)(sizeof(JULIA_C_TARGETS)/sizeof(JULIA_C_TARGETS[0]))
 
@@ -115,7 +115,7 @@ void update_julia_tour(JuliaTourState *state, complex_t *julia_c, Uint32 now) {
             state->phase     = JULIA_TOUR_DWELLING;
             state->phase_start = now;
         }
-    } else { /* handle dwelling state */
+    } else { // handle dwelling state
         if ((double)(now - state->phase_start) >= JULIA_TOUR_DWELL_MS) {
             state->from_re = julia_c->re;
             state->from_im = julia_c->im;

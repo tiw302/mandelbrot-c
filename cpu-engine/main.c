@@ -18,7 +18,7 @@ typedef struct {
     int       active;
 } JuliaSession;
 
-/* app context */
+// app context
 typedef struct {
     SDL_Window   *window;
     SDL_Renderer *renderer;
@@ -400,7 +400,7 @@ void main_loop_iteration(void *arg) {
         if (ctx->j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
 
         SDL_Rect bg = {2, 2, 450, num_lines * line_h + 6};
-        /* set transparency */
+        // set transparency
         SDL_SetRenderDrawColor(ctx->renderer, 0, 0, 0, 160);
         SDL_RenderFillRect(ctx->renderer, &bg);
 

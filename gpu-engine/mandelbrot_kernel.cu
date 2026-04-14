@@ -7,7 +7,7 @@
  * CUDA Kernel for Mandelbrot set generation.
  * This is scaffolding for the High-Performance GPU Engine.
  */
-__global__ void mandelbrot_kernel(double re_min, double re_max, double im_min, double im_max, 
+__global__ void mandelbrot_kernel(double re_min, double re_max, double im_min, double im_max,
                                   int width, int height, int max_iterations, double *results) {
     int x = blockIdx.x * blockDim.x + threadIdx.x;
     int y = blockIdx.y * blockDim.y + threadIdx.y;

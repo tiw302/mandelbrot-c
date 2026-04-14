@@ -33,11 +33,11 @@ static int get_cpu_cores(void) {
 #elif defined(_SC_NPROCESSORS_ONLN)
     return sysconf(_SC_NPROCESSORS_ONLN);
 #else
-    return 1; /* default value */
+    return 1; // default value
 #endif
 }
 
-/* detect optimal thread count based on config and cpu cores */
+// detect optimal thread count based on config and cpu cores
 static int detect_thread_count(void) {
     int cores = get_cpu_cores();
     int count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
@@ -46,7 +46,7 @@ static int detect_thread_count(void) {
     return count;
 }
 
-/* public api to get the thread count we should use */
+// public api to get the thread count we should use
 int get_optimal_thread_count(void) {
     return detect_thread_count();
 }
@@ -83,25 +83,25 @@ int get_actual_thread_count(void) {
 void *render_thread(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
 
-    double re_factor = (data->window_width > 0) ? 
+    double re_factor = (data->window_width > 0) ?
                        (data->re_max - data->re_min) / data->window_width : 0;
-    double im_factor = (data->window_height > 0) ? 
+    double im_factor = (data->window_height > 0) ?
                        (data->im_max - data->im_min) / data->window_height : 0;
 
-    /* assign rows dynamically */
+    // assign rows dynamically
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
         int x = 0;
 
-        /* avx2 path */
+        // avx2 path
 #ifdef __AVX2__
-        /* calculate vectors */
+        // calculate vectors
         __m256d v_re_min = _mm256_set1_pd(data->re_min);
         __m256d v_re_fac = _mm256_set1_pd(re_factor);
         __m256d v_im_val = _mm256_set1_pd(data->im_min + (double)y * im_factor);
         __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
 
-        /* process 4 pixels with avx2 */
+        // process 4 pixels with avx2
         for (; x <= data->window_width - 4; x += 4) {
             double res_re[4], res_im[4], iterations[4];
 
@@ -124,7 +124,7 @@ void *render_thread(void *arg) {
             }
         }
 #elif defined(__wasm_simd128__)
-        /* process 2 pixels with WASM SIMD128 */
+        // process 2 pixels with WASM SIMD128
         for (; x <= data->window_width - 2; x += 2) {
             double res_re[2], res_im[2], iterations[2];
             res_re[0] = data->re_min + (double)x * re_factor;
@@ -145,7 +145,7 @@ void *render_thread(void *arg) {
         }
 #endif
 
-        /* handle remainder */
+        // handle remainder
         for (; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
@@ -160,7 +160,7 @@ void *render_thread(void *arg) {
             Uint8 r, g, b;
             get_color(iterations, data->max_iterations, &r, &g, &b);
 
-            /* write to pixel buffer */
+            // write to pixel buffer
             data->pixels[y * (data->pitch / sizeof(Uint32)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
