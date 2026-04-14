@@ -114,22 +114,33 @@ sudo apt install libsdl2-dev libsdl2-ttf-dev zlib1g-dev libpng-dev
 
 ## Build & Run
 
-A convenience build script wraps the Master Makefile logic:
+You can compile the project using standard `make` commands or the provided `build.sh` wrapper script which includes dependency checking.
+
+### Using Standard Make
+
+```bash
+# Build Native Desktop Engine (Default)
+make cpu
+./mandelbrot-desktop
+
+# Build WebAssembly Target
+make web
+# Run an HTML server in your root directory to access mandelbrot.js
+
+# Build GPU Target
+make gpu
+./mandelbrot-gpu
+```
+
+### Using Build Wrapper (with Dependency Checks)
 
 ```bash
 chmod +x build.sh
 
-# Build Native Desktop Engine (Default)
-./build.sh cpu
-./mandelbrot-desktop
-
-# Build WebAssembly Target
-./build.sh web
-# Run an HTML server in your root directory to access mandelbrot.js
-
-# Build GPU Target
-./build.sh gpu
-./mandelbrot-gpu
+./build.sh cpu    # Builds desktop
+./build.sh web    # Builds WebAssembly
+./build.sh gpu    # Builds CUDA
+./build.sh clean  # Cleans build artifacts
 ```
 
 ## Usage
