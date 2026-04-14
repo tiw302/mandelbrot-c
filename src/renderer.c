@@ -24,14 +24,16 @@ const char *PALETTE_NAMES[PALETTE_COUNT] = {
 };
 
 static int get_cpu_cores(void) {
-#if defined(_WIN32) || defined(_WIN64)
+#if defined(__EMSCRIPTEN__)
+    return emscripten_num_logical_cores();
+#elif defined(_WIN32) || defined(_WIN64)
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
     return sysinfo.dwNumberOfProcessors;
 #elif defined(_SC_NPROCESSORS_ONLN)
     return sysconf(_SC_NPROCESSORS_ONLN);
 #else
-    return 1; // default value
+    return 1; /* default value */
 #endif
 }
 
@@ -96,7 +98,7 @@ void init_renderer(int max_iterations, int palette_idx) {
             break;
         }
     }
-    // set points are black
+    /* set points are black */
     color_lut[max_iterations][0] = 0;
     color_lut[max_iterations][1] = 0;
     color_lut[max_iterations][2] = 0;
@@ -126,7 +128,7 @@ void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 
     int i = (int)iterations;
     double t = iterations - i;
 
-    // interpolate colors for smoothness
+    /* interpolate colors for smoothness */
     int i2 = i + 1;
     if (i2 > max_iterations) i2 = max_iterations;
 
@@ -143,19 +145,20 @@ void *render_thread(void *arg) {
     double im_factor = (data->window_height > 0) ? 
                        (data->im_max - data->im_min) / data->window_height : 0;
 
-    // assign rows dynamically
+    /* assign rows dynamically */
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
         int x = 0;
 
+        /* avx2 path */
 #ifdef __AVX2__
-        // calculate vectors
+        /* calculate vectors */
         __m256d v_re_min = _mm256_set1_pd(data->re_min);
         __m256d v_re_fac = _mm256_set1_pd(re_factor);
         __m256d v_im_val = _mm256_set1_pd(data->im_min + (double)y * im_factor);
         __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
 
-        // process 4 pixels with AVX2
+        /* process 4 pixels with avx2 */
         for (; x <= data->window_width - 4; x += 4) {
             double res_re[4], res_im[4], iterations[4];
 
@@ -177,9 +180,29 @@ void *render_thread(void *arg) {
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
             }
         }
+#elif defined(__wasm_simd128__)
+        /* process 2 pixels with wasm simd */
+        for (; x <= data->window_width - 2; x += 2) {
+            double res_re[2], res_im[2], iterations[2];
+            res_re[0] = data->re_min + (double)x * re_factor;
+            res_re[1] = data->re_min + (double)(x + 1) * re_factor;
+            res_im[0] = res_im[1] = data->im_min + (double)y * im_factor;
+
+            if (data->mode == RENDER_JULIA)
+                julia_check_wasm_simd128(res_re, res_im, data->julia_c, data->max_iterations, iterations);
+            else
+                mandelbrot_check_wasm_simd128(res_re, res_im, data->max_iterations, iterations);
+
+            for (int i = 0; i < 2; i++) {
+                Uint8 r, g, b;
+                get_color(iterations[i], data->max_iterations, &r, &g, &b);
+                data->pixels[y * (data->pitch / sizeof(Uint32)) + (x + i)] =
+                    (0xFF << 24) | (r << 16) | (g << 8) | b;
+            }
+        }
 #endif
 
-        // process remaining pixels
+        /* handle remainder */
         for (; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
@@ -194,7 +217,7 @@ void *render_thread(void *arg) {
             Uint8 r, g, b;
             get_color(iterations, data->max_iterations, &r, &g, &b);
 
-            // write to pixel buffer
+            /* write to pixel buffer */
             data->pixels[y * (data->pitch / sizeof(Uint32)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
