@@ -15,6 +15,7 @@ obj/
 # Executables
 mandelbrot
 mandelbrot.exe
+mandelbrot-desktop
 *.out
 *.app
 
