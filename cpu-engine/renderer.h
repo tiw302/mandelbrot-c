@@ -5,6 +5,7 @@
 #include <stdatomic.h>
 #include "config.h"
 #include "mandelbrot.h"
+#include "../core/color.h"
 
 // Returns the optimal thread count based on system detection and DEFAULT_THREAD_COUNT
 int get_optimal_thread_count(void);
@@ -28,9 +29,6 @@ typedef struct {
     atomic_int      *next_row;
 } thread_data_t;
 
-#define PALETTE_COUNT 6
-
-extern const char *PALETTE_NAMES[PALETTE_COUNT];
 
 // precompute LUT or other startup work
 void init_renderer(int max_iterations, int palette_idx);
@@ -41,8 +39,6 @@ void cleanup_renderer(void);
 // get the number of threads actually being used
 int get_actual_thread_count(void);
 
-// map iteration to RGB color
-void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 *b);
 
 // main worker thread function
 void *render_thread(void *arg);

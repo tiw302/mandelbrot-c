@@ -14,14 +14,9 @@
 #include <unistd.h>
 #endif
 
-static Uint8 color_lut[MAX_ITERATIONS_LIMIT + 1][3];
 static int   actual_thread_count = 0;
 static pthread_t      *threads_pool = NULL;
 static thread_data_t  *thread_data_pool = NULL;
-
-const char *PALETTE_NAMES[PALETTE_COUNT] = {
-    "Sine Wave", "Grayscale", "Fire", "Electric", "Ocean", "Inferno"
-};
 
 static int get_cpu_cores(void) {
 #if defined(__EMSCRIPTEN__)
@@ -63,45 +58,7 @@ void init_renderer(int max_iterations, int palette_idx) {
             exit(1);
         }
     }
-    for (int i = 0; i < max_iterations; i++) {
-        switch (palette_idx) {
-        case 0: // sine wave
-            color_lut[i][0] = (Uint8)(sin(0.1 * i + 0) * 127 + 128);
-            color_lut[i][1] = (Uint8)(sin(0.1 * i + 2) * 127 + 128);
-            color_lut[i][2] = (Uint8)(sin(0.1 * i + 4) * 127 + 128);
-            break;
-        case 1: // grayscale
-            color_lut[i][0] = color_lut[i][1] = color_lut[i][2] = (Uint8)(i % 256);
-            break;
-        case 2: // fire
-            color_lut[i][0] = (Uint8)fmin(255, i * 4);
-            color_lut[i][1] = (Uint8)fmin(255, i * 2);
-            color_lut[i][2] = (Uint8)fmin(255, i * 1);
-            break;
-        case 3: // electric
-            color_lut[i][0] = (Uint8)fmin(255, i * 1);
-            color_lut[i][1] = (Uint8)fmin(255, i * 4);
-            color_lut[i][2] = (Uint8)fmin(255, i * 8);
-            break;
-        case 4: // ocean
-            color_lut[i][0] = (Uint8)fmin(255, i * 0.5);
-            color_lut[i][1] = (Uint8)fmin(255, i * 2);
-            color_lut[i][2] = (Uint8)fmin(255, i * 5);
-            break;
-        case 5: // inferno
-            color_lut[i][0] = (Uint8)fmin(255, i * 8);
-            color_lut[i][1] = (Uint8)fmin(255, i * 2);
-            color_lut[i][2] = (Uint8)fmin(255, i * 0.5);
-            break;
-        default:
-            color_lut[i][0] = color_lut[i][1] = color_lut[i][2] = 127;
-            break;
-        }
-    }
-    /* set points are black */
-    color_lut[max_iterations][0] = 0;
-    color_lut[max_iterations][1] = 0;
-    color_lut[max_iterations][2] = 0;
+    init_color_palette(max_iterations, palette_idx);
 }
 
 void cleanup_renderer(void) {
@@ -116,26 +73,7 @@ int get_actual_thread_count(void) {
     return actual_thread_count;
 }
 
-void get_color(double iterations, int max_iterations, Uint8 *r, Uint8 *g, Uint8 *b) {
-    if (iterations >= max_iterations) {
-        *r = *g = *b = 0;
-        return;
-    }
 
-    if (iterations < 0) iterations = 0;
-    if (iterations > max_iterations) iterations = (double)max_iterations;
-
-    int i = (int)iterations;
-    double t = iterations - i;
-
-    /* interpolate colors for smoothness */
-    int i2 = i + 1;
-    if (i2 > max_iterations) i2 = max_iterations;
-
-    *r = (Uint8)(color_lut[i][0] * (1.0 - t) + color_lut[i2][0] * t);
-    *g = (Uint8)(color_lut[i][1] * (1.0 - t) + color_lut[i2][1] * t);
-    *b = (Uint8)(color_lut[i][2] * (1.0 - t) + color_lut[i2][2] * t);
-}
 
 void *render_thread(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
@@ -174,26 +112,6 @@ void *render_thread(void *arg) {
                 mandelbrot_check_avx2(res_re, res_im, data->max_iterations, iterations);
 
             for (int i = 0; i < 4; i++) {
-                Uint8 r, g, b;
-                get_color(iterations[i], data->max_iterations, &r, &g, &b);
-                data->pixels[y * (data->pitch / sizeof(Uint32)) + (x + i)] =
-                    (0xFF << 24) | (r << 16) | (g << 8) | b;
-            }
-        }
-#elif defined(__wasm_simd128__)
-        /* process 2 pixels with wasm simd */
-        for (; x <= data->window_width - 2; x += 2) {
-            double res_re[2], res_im[2], iterations[2];
-            res_re[0] = data->re_min + (double)x * re_factor;
-            res_re[1] = data->re_min + (double)(x + 1) * re_factor;
-            res_im[0] = res_im[1] = data->im_min + (double)y * im_factor;
-
-            if (data->mode == RENDER_JULIA)
-                julia_check_wasm_simd128(res_re, res_im, data->julia_c, data->max_iterations, iterations);
-            else
-                mandelbrot_check_wasm_simd128(res_re, res_im, data->max_iterations, iterations);
-
-            for (int i = 0; i < 2; i++) {
                 Uint8 r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
                 data->pixels[y * (data->pitch / sizeof(Uint32)) + (x + i)] =
