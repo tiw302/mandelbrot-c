@@ -2,151 +2,138 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Mandelbrot Explorer | WebAssembly Edition</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Mandelbrot Explorer</title>
     <style>
-        :root {
-            --bg-color: #0d1117;
-            --accent-color: #58a6ff;
-            --text-color: #c9d1d9;
-            --panel-bg: rgba(22, 27, 34, 0.85);
-        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
 
         body {
-            margin: 0;
-            padding: 0;
-            background-color: var(--bg-color);
-            color: var(--text-color);
-            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+            background: #000;
+            color: #ccc;
+            font-family: monospace;
             overflow: hidden;
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
+            width: 100vw;
             height: 100vh;
-        }
-
-        #canvas-container {
-            position: relative;
-            box-shadow: 0 0 50px rgba(0, 0, 0, 0.5);
-            border-radius: 8px;
-            overflow: hidden;
-            border: 1px solid #30363d;
+            touch-action: none;
         }
 
         canvas {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
             display: block;
-            width: 800px;
-            height: 600px;
-            background: black;
         }
 
-        #overlay {
-            position: absolute;
-            top: 20px;
-            left: 20px;
-            background: var(--panel-bg);
-            padding: 15px;
-            border-radius: 6px;
-            font-size: 14px;
-            border: 1px solid #30363d;
-            backdrop-filter: blur(5px);
-            pointer-events: none;
+        #toolbar {
+            position: fixed;
+            top: 0; left: 0; right: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 6px;
+            background: rgba(0,0,0,0.5);
+            z-index: 10;
         }
 
-        .controls-hint {
-            margin-top: 10px;
-            color: #8b949e;
-            font-size: 12px;
-        }
-
-        #status {
-            position: absolute;
-            bottom: 20px;
+        #toolbar button {
+            background: #222;
+            color: #ccc;
+            border: 1px solid #444;
+            padding: 6px 12px;
             font-family: monospace;
-            color: var(--accent-color);
+            font-size: 12px;
+            cursor: pointer;
         }
 
-        .spinner {
-            border: 3px solid rgba(255, 255, 255, 0.1);
-            border-top: 3px solid var(--accent-color);
-            border-radius: 50%;
-            width: 24px;
-            height: 24px;
-            animation: spin 1s linear infinite;
-            display: inline-block;
-            vertical-align: middle;
-            margin-right: 10px;
+        #toolbar button:active { background: #555; }
+
+        #info {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            padding: 4px 8px;
+            background: rgba(0,0,0,0.5);
+            font-size: 10px;
+            color: #888;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
         }
 
-        @keyframes spin {
-            0% { transform: rotate(0deg); }
-            100% { transform: rotate(360deg); }
-        }
+        #info a { color: #888; text-decoration: none; }
+        #info a:hover { color: #ccc; }
 
         #loading-screen {
             position: fixed;
             inset: 0;
-            background: var(--bg-color);
+            background: #000;
             z-index: 100;
             display: flex;
-            flex-direction: column;
             align-items: center;
             justify-content: center;
-            transition: opacity 0.5s ease;
+            font-size: 14px;
+            transition: opacity 0.5s;
+        }
+
+        @media (max-width: 600px) {
+            #toolbar button { padding: 10px 14px; font-size: 14px; }
         }
     </style>
 </head>
 <body>
-
     <div id="loading-screen">
-        <div class="spinner"></div>
-        <p>Compiling Fractal Engine...</p>
+        <div>Loading...</div>
     </div>
 
-    <div id="canvas-container">
-        <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+    <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+
+    <div id="toolbar">
+        <button onclick="Module._wasm_reset_view()">Reset</button>
+        <button onclick="Module._wasm_next_palette()">Palette</button>
+        <button onclick="Module._wasm_toggle_julia()">Julia</button>
+        <button onclick="Module._wasm_adjust_iterations(100)">Iter+</button>
+        <button onclick="Module._wasm_adjust_iterations(-100)">Iter-</button>
     </div>
 
-    <div id="status">Ready</div>
+    <div id="info">
+        <span>Scroll=Zoom | Left-drag=Select | Right-drag=Pan | R=Reset P=Palette J=Julia</span>
+        <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
+    </div>
 
-    <script type='text/javascript'>
-        var statusElement = document.getElementById('status');
+    <script>
         var loadingScreen = document.getElementById('loading-screen');
+
+        function syncSize() {
+            var w = window.innerWidth;
+            var h = window.innerHeight;
+            if (Module._wasm_set_resolution) {
+                Module._wasm_set_resolution(w, h);
+            }
+        }
 
         var Module = {
             preRun: [],
-            postRun: [],
-            print: (function() {
-                return function(text) {
-                    if (arguments.length > 1) text = Array.prototype.slice.call(arguments).join(' ');
-                    console.log(text);
-                };
-            })(),
-            canvas: (function() {
-                var canvas = document.getElementById('canvas');
-                return canvas;
-            })(),
+            postRun: [function() {
+                syncSize();
+                window.addEventListener('resize', function() {
+                    clearTimeout(window._rt);
+                    window._rt = setTimeout(syncSize, 150);
+                });
+            }],
+            print: function(text) { console.log(text); },
+            canvas: (function() { return document.getElementById('canvas'); })(),
             setStatus: function(text) {
-                if (!Module.setStatus.last) Module.setStatus.last = { time: Date.now(), text: '' };
-                if (text === Module.setStatus.last.text) return;
-                statusElement.innerHTML = text;
                 if (!text) {
                     loadingScreen.style.opacity = '0';
-                    setTimeout(() => loadingScreen.style.display = 'none', 500);
+                    setTimeout(function() { loadingScreen.style.display = 'none'; }, 500);
                 }
             },
-            totalDependencies: 0,
-            monitorRunDependencies: function(left) {
-                this.totalDependencies = Math.max(this.totalDependencies, left);
-                Module.setStatus(left ? 'Preparing... (' + (this.totalDependencies-left) + '/' + this.totalDependencies + ')' : 'All dependencies loaded.');
-            }
+            monitorRunDependencies: function() {}
         };
 
-        Module.setStatus('Downloading...');
-        window.onerror = function(event) {
-            Module.setStatus('Exception thrown, see JavaScript console');
-            Module.printErr('Exception thrown: ' + event);
+        window.onerror = function() {
+            document.querySelector('#loading-screen div').textContent = "Error loading engine.";
         };
     </script>
     <script async src="mandelbrot.js"></script>
