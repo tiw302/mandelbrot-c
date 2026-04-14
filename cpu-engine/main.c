@@ -102,6 +102,7 @@ int main(int argc, char *argv[]) {
         if (ctx->font) TTF_CloseFont(ctx->font);
         free(ctx); TTF_Quit(); SDL_Quit(); return 1;
     }
+    SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
 
     ctx->texture = SDL_CreateTexture(
         ctx->renderer, SDL_PIXELFORMAT_ARGB8888,
