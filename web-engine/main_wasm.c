@@ -41,6 +41,9 @@ typedef struct {
     Uint32   render_time;
 } GlobalCtx;
 
+static GlobalCtx *g_ctx = NULL;
+
+
 #define JULIA_CENTER_RE   0.0
 #define JULIA_CENTER_IM   0.0
 #define JULIA_ZOOM        4.0
@@ -244,6 +247,8 @@ int main() {
 
     GlobalCtx *ctx = calloc(1, sizeof(GlobalCtx));
     if (!ctx) { SDL_Quit(); return 1; }
+    g_ctx = ctx;
+
 
     ctx->win_w = WINDOW_WIDTH;
     ctx->win_h = WINDOW_HEIGHT;
@@ -288,3 +293,63 @@ int main() {
     SDL_Quit();
     return 0;
 }
+EMSCRIPTEN_KEEPALIVE
+void wasm_reset_view() {
+    if (!g_ctx) return;
+    g_ctx->julia_mode = 0;
+    g_ctx->julia_session.active = 0;
+    g_ctx->max_iterations = DEFAULT_ITERATIONS;
+    g_ctx->palette_idx = 0;
+    init_color_palette(g_ctx->max_iterations, g_ctx->palette_idx);
+    g_ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    g_ctx->history_count = 0;
+    g_ctx->needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_next_palette() {
+    if (!g_ctx) return;
+    g_ctx->palette_idx = (g_ctx->palette_idx + 1) % PALETTE_COUNT;
+    init_color_palette(g_ctx->max_iterations, g_ctx->palette_idx);
+    g_ctx->needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_julia() {
+    if (!g_ctx) return;
+    if (!g_ctx->julia_mode) {
+        g_ctx->julia_session.mandelbrot_view = g_ctx->view;
+        g_ctx->julia_session.active = 1;
+        g_ctx->view = (ViewState){JULIA_CENTER_RE, JULIA_CENTER_IM, JULIA_ZOOM};
+        g_ctx->julia_mode = 1;
+        g_ctx->history_count = 0;
+    } else {
+        if (g_ctx->julia_session.active) g_ctx->view = g_ctx->julia_session.mandelbrot_view;
+        g_ctx->julia_mode = 0;
+        g_ctx->history_count = 0;
+    }
+    g_ctx->needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_adjust_iterations(int delta) {
+    if (!g_ctx) return;
+    if (g_ctx->max_iterations + delta >= 10 && g_ctx->max_iterations + delta <= MAX_ITERATIONS_LIMIT) {
+        g_ctx->max_iterations += delta;
+        init_color_palette(g_ctx->max_iterations, g_ctx->palette_idx);
+        g_ctx->needs_redraw = 1;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_resolution(int w, int h) {
+    if (!g_ctx || w < 1 || h < 1) return;
+    g_ctx->win_w = w;
+    g_ctx->win_h = h;
+    SDL_SetWindowSize(g_ctx->window, w, h);
+    if (g_ctx->texture) SDL_DestroyTexture(g_ctx->texture);
+    g_ctx->texture = SDL_CreateTexture(g_ctx->renderer, SDL_PIXELFORMAT_ARGB8888,
+                                       SDL_TEXTUREACCESS_STREAMING, w, h);
+    g_ctx->needs_redraw = 1;
+}
+
