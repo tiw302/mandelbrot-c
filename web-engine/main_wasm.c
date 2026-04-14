@@ -353,3 +353,29 @@ void wasm_set_resolution(int w, int h) {
     g_ctx->needs_redraw = 1;
 }
 
+EMSCRIPTEN_KEEPALIVE
+void wasm_zoom_at(int px, int py, double factor) {
+    if (!g_ctx) return;
+    if (g_ctx->history_count < MAX_HISTORY_SIZE)
+        g_ctx->history[g_ctx->history_count++] = g_ctx->view;
+    double re_min, re_max, im_min, im_max;
+    calculate_boundaries(g_ctx->view.center_re, g_ctx->view.center_im, g_ctx->view.zoom,
+                         g_ctx->win_w, g_ctx->win_h, &re_min, &re_max, &im_min, &im_max);
+    double mouse_re = re_min + (double)px * (re_max - re_min) / g_ctx->win_w;
+    double mouse_im = im_min + (double)py * (im_max - im_min) / g_ctx->win_h;
+    g_ctx->view.zoom *= factor;
+    g_ctx->view.center_re = mouse_re + (g_ctx->view.center_re - mouse_re) * factor;
+    g_ctx->view.center_im = mouse_im + (g_ctx->view.center_im - mouse_im) * factor;
+    g_ctx->needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_pan(int dx, int dy) {
+    if (!g_ctx) return;
+    double re_min, re_max, im_min, im_max;
+    calculate_boundaries(g_ctx->view.center_re, g_ctx->view.center_im, g_ctx->view.zoom,
+                         g_ctx->win_w, g_ctx->win_h, &re_min, &re_max, &im_min, &im_max);
+    g_ctx->view.center_re -= (double)dx * (re_max - re_min) / g_ctx->win_w;
+    g_ctx->view.center_im -= (double)dy * (im_max - im_min) / g_ctx->win_h;
+    g_ctx->needs_redraw = 1;
+}
