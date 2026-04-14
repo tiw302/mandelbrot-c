@@ -9,7 +9,8 @@
 A high-performance, multi-threaded Mandelbrot and Julia set explorer written in C.
 This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (CUDA).
 
-**[Live Web Demo](https://tiw302.github.io/mandelbrot-c/)**
+Live Web Demo - 
+**[(https://tiw302.github.io/mandelbrot-c/)](https://tiw302.github.io/mandelbrot-c/)**
 
 ---
 
@@ -195,21 +196,23 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 ## Roadmap
 
 ### Performance Optimization
-- [x] Implement dynamic load balancing using a work queue or tiled rendering.
-- [x] Replace real-time trigonometric color calculations with a pre-calculated Look-Up Table (LUT).
-- [x] Implement smooth coloring algorithms using fractional iteration counts.
-- [x] Explore SIMD (AVX2/WASM SIMD128) vectorization to process multiple pixels per instruction.
-- [ ] Activate CUDA `gpu-engine` parallel thread blocks logic.
+- [x] Implement dynamic load balancing using atomic row-counters to maximize CPU utilization across all logical cores.
+- [x] Integrate a pre-calculated Look-Up Table (LUT) for color mapping to bypass expensive real-time trigonometric calculations.
+- [x] Implement smooth coloring algorithms using fractional iteration counts for high-fidelity gradients.
+- [x] Deploy hardware-specific vectorization (AVX2 for Desktop, SIMD128 for WebAssembly) to process multiple pixels per cycle.
+- [ ] Activate CUDA `gpu-engine` parallel thread blocks logic for extreme-scale rendering (See [RESEARCH.md](RESEARCH.md)).
 
 ### Features and Exploration
-- [x] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
-- [x] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
-- [x] Connect HTML5 Frontend APIs strictly to the `web-engine`.
+- [x] Add interactive runtime controls for iteration depth adjustment and dynamic color palette switching.
+- [x] Implement automated "camera path" and "tour" modes for cinematic fractal exploration.
+- [x] Connect HTML5 Frontend APIs strictly to the `web-engine` for a responsive, cross-platform user experience.
+- [ ] Research and implement arbitrary-precision arithmetic to overcome the double-precision zoom limit (See [RESEARCH.md](RESEARCH.md)).
 
-### Engineering
-- [x] Establish a strict Engine-Centric Monorepo isolating platform rendering from core mathematics.
-- [x] Deprecate CMake in favor of a Multi-Target Master Makefile.
-- [x] Add unit testing coverage for mathematical engines.
+### Engineering and Quality
+- [x] Establish a strict Engine-Centric Monorepo architecture, isolating platform rendering from core mathematical logic.
+- [x] Implement a high-performance Multi-Target Master Makefile to streamline native and cross-compilation workflows.
+- [x] Expand unit testing coverage to ensure mathematical consistency across all hardware backends.
+- [x] Implement automatic CPU core detection to dynamically optimize thread pool allocation.
 
 ## Contributing
 
