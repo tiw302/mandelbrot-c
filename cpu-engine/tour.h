@@ -17,11 +17,6 @@ typedef enum {
     JULIA_TOUR_DWELLING
 } JuliaTourPhase;
 
-typedef struct {
-    double center_re;
-    double center_im;
-    double zoom;
-} ViewState;
 
 typedef struct {
     TourPhase phase;

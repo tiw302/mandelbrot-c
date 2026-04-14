@@ -7,9 +7,9 @@ WASM_FLAGS = -O3 -Wall -Wextra -Iinclude -Icore -Iweb-engine -msimd128 -D__wasm_
 
 NVCC_FLAGS = -O3 -Iinclude -Icore -Igpu-engine
 
-CORE_SRC = core/mandelbrot.c core/julia.c
+CORE_SRC = core/mandelbrot.c core/julia.c core/color.c
 CPU_SRC = cpu-engine/main.c cpu-engine/renderer.c cpu-engine/screenshot.c cpu-engine/tour.c
-WASM_SRC = web-engine/main_wasm.c
+WASM_SRC = web-engine/main_wasm.c web-engine/renderer_wasm.c
 GPU_SRC = gpu-engine/mandelbrot_kernel.cu
 
 all: cpu
