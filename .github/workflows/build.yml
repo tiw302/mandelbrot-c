@@ -20,13 +20,11 @@ jobs:
 
     - name: Build
       run: |
-        cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-        cmake --build build
+        make cpu
 
     - name: Run Tests
       run: |
-        cd build
-        ctest --output-on-failure
+        cd tests && make
 
     - name: Help Command Verification (Dry Run)
-      run: ./build/mandelbrot --help
+      run: ./mandelbrot-desktop --help
