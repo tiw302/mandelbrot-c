@@ -35,14 +35,11 @@ typedef struct {
     int      palette_idx;
     int      needs_redraw;
     int      is_panning, is_zooming;
-    int      is_interacting;
     int      last_mouse_x, last_mouse_y;
     int      mouse_x, mouse_y;
     SDL_Rect zoom_rect;
     Uint32   render_time;
 } GlobalCtx;
-
-#define DRAFT_ITERATIONS 80
 
 static GlobalCtx *g_ctx = NULL;
 
@@ -157,7 +154,6 @@ void main_loop_iteration(void *arg) {
         case SDL_MOUSEBUTTONDOWN:
             if (event.button.button == SDL_BUTTON_RIGHT) {
                 ctx->is_panning = 1;
-                ctx->is_interacting = 1;
                 ctx->last_mouse_x = event.button.x;
                 ctx->last_mouse_y = event.button.y;
             } else if (event.button.button == SDL_BUTTON_LEFT) {
@@ -194,8 +190,6 @@ void main_loop_iteration(void *arg) {
         case SDL_MOUSEBUTTONUP:
             if (event.button.button == SDL_BUTTON_RIGHT) {
                 ctx->is_panning = 0;
-                ctx->is_interacting = 0;
-                ctx->needs_redraw = 1;
             } else if (event.button.button == SDL_BUTTON_LEFT) {
                 if (ctx->is_zooming && ctx->zoom_rect.w != 0 && ctx->zoom_rect.h != 0) {
                     if (ctx->history_count < MAX_HISTORY_SIZE)
@@ -218,10 +212,6 @@ void main_loop_iteration(void *arg) {
     }
 
     if (ctx->needs_redraw) {
-        int iters = ctx->is_interacting ? 
-            (ctx->max_iterations < DRAFT_ITERATIONS ? ctx->max_iterations : DRAFT_ITERATIONS)
-            : ctx->max_iterations;
-
         Uint32 *pixels; int pitch;
         SDL_LockTexture(ctx->texture, NULL, (void **)&pixels, &pitch);
         double re_min, re_max, im_min, im_max;
@@ -229,10 +219,10 @@ void main_loop_iteration(void *arg) {
                               ctx->win_w, ctx->win_h, &re_min, &re_max, &im_min, &im_max);
         if (ctx->julia_mode) {
             render_julia_wasm(pixels, pitch, ctx->win_w, ctx->win_h,
-                              re_min, re_max, im_min, im_max, ctx->julia_c, iters);
+                              re_min, re_max, im_min, im_max, ctx->julia_c, ctx->max_iterations);
         } else {
             render_mandelbrot_wasm(pixels, pitch, ctx->win_w, ctx->win_h,
-                                   re_min, re_max, im_min, im_max, iters);
+                                   re_min, re_max, im_min, im_max, ctx->max_iterations);
         }
         SDL_UnlockTexture(ctx->texture);
         ctx->needs_redraw = 0;
