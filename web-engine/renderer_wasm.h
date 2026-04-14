@@ -3,8 +3,8 @@
 
 #include <stdint.h>
 #include "../include/config.h"
-#include "../core/mandelbrot.h"
-#include "../core/julia.h"
+#include "../include/mandelbrot.h"
+#include "../include/julia.h"
 
 void render_mandelbrot_wasm(uint32_t *pixels, int pitch,
                             int window_width, int window_height,

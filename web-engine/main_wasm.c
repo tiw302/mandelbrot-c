@@ -7,8 +7,8 @@
 #include <SDL2/SDL_ttf.h>
 #include <emscripten.h>
 #include "../include/config.h"
-#include "../core/mandelbrot.h"
-#include "../core/julia.h"
+#include "../include/mandelbrot.h"
+#include "../include/julia.h"
 #include "../core/color.h"
 #include "renderer_wasm.h"
 #include "../cpu-engine/renderer.h"
