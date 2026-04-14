@@ -5,9 +5,7 @@
 #include <time.h>
 #include <SDL2/SDL.h>
 #include <SDL2/SDL_ttf.h>
-#ifdef __EMSCRIPTEN__
-#include <emscripten.h>
-#endif
+
 #include "config.h"
 #include "mandelbrot.h"
 #include "julia.h"
@@ -127,14 +125,9 @@ int main(int argc, char *argv[]) {
     init_renderer(ctx->max_iterations, ctx->palette_idx);
     print_controls();
 
-#ifdef __EMSCRIPTEN__
-    /* 0 fps means use browser's requestAnimationFrame */
-    emscripten_set_main_loop_arg(main_loop_iteration, ctx, 0, 1);
-#else
     while (ctx->running) {
         main_loop_iteration(ctx);
     }
-#endif
 
     if (ctx->font) TTF_CloseFont(ctx->font);
     cleanup_renderer();
@@ -436,11 +429,7 @@ void main_loop_iteration(void *arg) {
     }
     SDL_RenderPresent(ctx->renderer);
 
-#ifdef __EMSCRIPTEN__
-    if (!ctx->running) {
-        emscripten_cancel_main_loop();
-    }
-#endif
+
 }
 
 static void calculate_boundaries(double center_re, double center_im, double zoom,
