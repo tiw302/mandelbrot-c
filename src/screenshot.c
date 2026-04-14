@@ -26,18 +26,18 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     static const uint8_t sig[8] = {0x89, 'P', 'N', 'G', '\r', '\n', 0x1a, '\n'};
     fwrite(sig, 8, 1, f);
 
-    // IHDR: 13 bytes
+    /* ihdr: 13 bytes */
     uint8_t ihdr_data[13];
     ihdr_data[0] = (w >> 24) & 0xFF; ihdr_data[1] = (w >> 16) & 0xFF; ihdr_data[2] = (w >> 8) & 0xFF; ihdr_data[3] = w & 0xFF;
     ihdr_data[4] = (h >> 24) & 0xFF; ihdr_data[5] = (h >> 16) & 0xFF; ihdr_data[6] = (h >> 8) & 0xFF; ihdr_data[7] = h & 0xFF;
-    ihdr_data[8] = 8; // Bit depth
-    ihdr_data[9] = 6; // Color type: Truecolor with alpha (RGBA)
-    ihdr_data[10] = 0; // Compression: Deflate
-    ihdr_data[11] = 0; // Filter: Adaptive
-    ihdr_data[12] = 0; // Interlace: No
+    ihdr_data[8] = 8; /* bit depth */
+    ihdr_data[9] = 6; /* color type: truecolor with alpha (rgba) */
+    ihdr_data[10] = 0; /* compression: deflate */
+    ihdr_data[11] = 0; /* filter: adaptive */
+    ihdr_data[12] = 0; /* interlace: no */
     write_chunk(f, "IHDR", ihdr_data, 13);
 
-    // Prepare raw data for deflate: filter 0 + row data
+    /* prepare raw data for deflate: filter 0 + row data */
     size_t row_size = (size_t)w * 4 + 1;
     size_t raw_size = (size_t)h * row_size;
     uint8_t *raw = malloc(raw_size);
@@ -47,15 +47,15 @@ static void save_png(const char *filename, uint32_t *pixels, int w, int h) {
     }
 
     for (int y = 0; y < h; y++) {
-        raw[y * row_size] = 0; // Filter type 0
+        raw[y * row_size] = 0; /* filter type 0 */
         for (int x = 0; x < w; x++) {
             uint32_t p = pixels[y * w + x];
             uint8_t *dest = &raw[y * row_size + 1 + x * 4];
-            // SDL_PIXELFORMAT_ARGB8888 -> R G B A
-            dest[0] = (p >> 16) & 0xFF; // R
-            dest[1] = (p >> 8)  & 0xFF; // G
-            dest[2] = p         & 0xFF; // B
-            dest[3] = (p >> 24) & 0xFF; // A
+            /* sdl_pixelformat_argb8888 -> r g b a */
+            dest[0] = (p >> 16) & 0xFF; /* r */
+            dest[1] = (p >> 8)  & 0xFF; /* g */
+            dest[2] = p         & 0xFF; /* b */
+            dest[3] = (p >> 24) & 0xFF; /* a */
         }
     }
 
