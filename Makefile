@@ -18,7 +18,7 @@ cpu:
 	gcc $(CFLAGS) $(CORE_SRC) $(CPU_SRC) -o mandelbrot-desktop $(LDFLAGS)
 
 web:
-	emcc $(WASM_FLAGS) $(CORE_SRC) cpu-engine/renderer.c $(WASM_SRC) \
+	emcc $(WASM_FLAGS) $(CORE_SRC) $(WASM_SRC) \
 		-s WASM=1 -s ALLOW_MEMORY_GROWTH=1 -s MAX_WEBGL_VERSION=2 \
 		-s EXPORTED_RUNTIME_METHODS='["ccall","cwrap"]' \
 		-pthread -s PTHREAD_POOL_SIZE=navigator.hardwareConcurrency \
