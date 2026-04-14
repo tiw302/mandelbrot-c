@@ -24,9 +24,11 @@ The Mandelbrot set calculation is embarrassingly parallel and highly suited for 
 - Bridging the current CPU architecture with a GPU pipeline requires a complete redesign of the memory dispatch system.
 
 ### WebAssembly (Emscripten)
-Porting the explorer to the browser requires a WebAssembly backend.
+The explorer has been successfully ported to WebAssembly, bringing high-performance fractal rendering to any modern browser.
 
-**Status:** Planned for a dedicated `feature/wasm` branch.
-**Decision Rationale:** 
-- The Emscripten toolchain requires a different execution model for the SDL2 main loop (`emscripten_set_main_loop`) compared to the standard competitive threading model used in native C.
-- Separate maintenance ensures that the native build system remains unencumbered by web-specific boilerplate.
+**Status:** [IMPLEMENTED] Integrated into `master` branch.
+**Decision Rationale & Technical Implementation:** 
+- **Threading Model:** Emscripten's `pthreads` implementation is used to spawn a thread pool matching the user's hardware concurrency (`navigator.hardwareConcurrency`).
+- **SIMD Acceleration:** The engine utilizes **WASM SIMD128** intrinsics, providing a 2x-3x speedup over scalar WASM while maintaining portability.
+- **Security Headers (COOP/COEP):** Modern browsers require `Cross-Origin-Opener-Policy: same-origin` and `Cross-Origin-Embedder-Policy: require-corp` to enable `SharedArrayBuffer` (necessary for pthreads).
+- **Static Hosting Workaround:** Since GitHub Pages does not serve these headers, we implemented **`coi-serviceworker.js`**, a Service Worker shim that intercepts network requests to inject the required security headers at run-time.

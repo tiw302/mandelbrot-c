@@ -9,6 +9,8 @@
 A high-performance, multi-threaded Mandelbrot and Julia set explorer written in C.
 This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (CUDA).
 
+**[Live Web Demo](https://tiw302.github.io/mandelbrot-c/)**
+
 ---
 
 ## Table of Contents
@@ -32,6 +34,8 @@ This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/A
 ## Introduction
 
 Hi! I am currently diving into C programming and wanted to build something visual to understand pointers, memory, and hardware acceleration better. This project is the result of my experiments with SDL2, pthreads, SIMD intrinsics, and WebAssembly targeting.
+
+For an in-depth technical analysis of the project's architecture, SIMD optimizations, and future development paths, please refer to the [Technical Research Document](RESEARCH.md).
 
 ### Mandelbrot
 
@@ -80,6 +84,13 @@ The codebase strictly adheres to an Engine-Centric architecture to ensure Separa
 - **Web Engine:** Contains Emscripten logic (`main_wasm.c`) bridging the core mathematics to HTML5 distributions.
 - **GPU Engine:** Houses CUDA kernels (`.cu`) structured for future extreme high-performance parallel GPU execution.
 
+### WebAssembly Subsystem
+The WebAssembly implementation enables high-performance desktop-class rendering within the browser environment.
+- **Multithreading:** Utilizes Emscripten's `pthreads` implementation by leveraging Web Workers and `SharedArrayBuffer` to parallelize the workload across all available logical CPU cores.
+- **Instruction Optimization:** Implements WASM SIMD128 intrinsics, allowing for simultaneous processing of two double-precision complex numbers per instruction.
+- **Security Compliance:** For deployment on static hosting platforms (e.g., GitHub Pages), the engine utilizes a specialized Service Worker (`coi-serviceworker.js`) to enforce Cross-Origin Opener Policy (COOP) and Cross-Origin Embedder Policy (COEP) headers, which are required for multithreading.
+- **Input Handling:** Touch events (pinch-to-zoom, panning) are natively mapped to C logic and throttled via `requestAnimationFrame` to ensure frame-rate stability.
+
 ### Vectorized Optimization (SIMD)
 The fractal engine utilizes 256-bit AVX2 registers on desktop and 128-bit SIMD on WebAssembly. This allows the system to perform complex squaring, addition, and escape radius testing on 4 (or 2) independent double-precision points simultaneously natively.
 
@@ -94,7 +105,6 @@ The codebase has been audited to address common low-level risks:
 - **Memory Hardening:** Clamped coloring indices to prevent out-of-bounds access and added overflow checks to pixel buffer allocations.
 - **Error Handling:** Enhanced resource initialization paths to ensure clean-up on failure and improved diagnostic reporting.
 
-### Automated Testing (CI/CD)
 Core logic is validated through a suite of automated unit tests.
 - **Verification:** Run `cd tests && make` to verify core math and AVX2 consistency.
 - **Continuous Integration:** Every modification is automatically built and tested via GitHub Actions on Ubuntu environments.
@@ -194,7 +204,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 ### Features and Exploration
 - [x] Add interactive controls to adjust maximum iterations and switch color palettes during runtime.
 - [x] Implement an automated "camera path" or "tour" mode for smooth zooming animations.
-- [ ] Connect HTML5 Frontend APIs strictly to the `web-engine`.
+- [x] Connect HTML5 Frontend APIs strictly to the `web-engine`.
 
 ### Engineering
 - [x] Establish a strict Engine-Centric Monorepo isolating platform rendering from core mathematics.
