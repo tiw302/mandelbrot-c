@@ -93,6 +93,8 @@ void main_loop_iteration(void *arg) {
             } else if (event.key.keysym.sym == SDLK_r) {
                 ctx->julia_mode = 0;
                 ctx->julia_session.active = 0;
+                ctx->m_tour.phase = TOUR_IDLE;
+                ctx->j_tour.phase = JULIA_TOUR_IDLE;
                 ctx->max_iterations = DEFAULT_ITERATIONS;
                 ctx->palette_idx = 0;
                 init_color_palette(ctx->max_iterations, ctx->palette_idx);
@@ -343,6 +345,8 @@ void wasm_reset_view() {
     if (!g_ctx) return;
     g_ctx->julia_mode = 0;
     g_ctx->julia_session.active = 0;
+    g_ctx->m_tour.phase = TOUR_IDLE;
+    g_ctx->j_tour.phase = JULIA_TOUR_IDLE;
     g_ctx->max_iterations = DEFAULT_ITERATIONS;
     g_ctx->palette_idx = 0;
     init_color_palette(g_ctx->max_iterations, g_ctx->palette_idx);
