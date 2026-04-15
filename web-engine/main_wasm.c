@@ -391,3 +391,9 @@ void wasm_pan(int dx, int dy) {
     g_ctx->view.center_im -= (double)dy * (im_max - im_min) / g_ctx->win_h;
     g_ctx->needs_redraw = 1;
 }
+EMSCRIPTEN_KEEPALIVE
+void wasm_cancel_zoom() {
+    if (!g_ctx) return;
+    g_ctx->is_zooming = 0;
+    g_ctx->is_panning = 0;
+}
