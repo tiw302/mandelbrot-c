@@ -12,6 +12,7 @@
 #include "../core/color.h"
 #include "renderer_wasm.h"
 #include "../cpu-engine/renderer.h"
+#include "../cpu-engine/tour.h"
 
 typedef struct {
     ViewState mandelbrot_view;
@@ -31,6 +32,9 @@ typedef struct {
     int          julia_mode;
     complex_t    julia_c;
     JuliaSession julia_session;
+
+    TourState      m_tour;
+    JuliaTourState j_tour;
 
     int      max_iterations;
     int      palette_idx;
@@ -131,6 +135,29 @@ void main_loop_iteration(void *arg) {
                 ctx->palette_idx = (ctx->palette_idx + 1) % PALETTE_COUNT;
                 init_color_palette(ctx->max_iterations, ctx->palette_idx);
                 ctx->needs_redraw = 1;
+            } else if (event.key.keysym.sym == SDLK_t) {
+                if (ctx->julia_mode) {
+                    if (ctx->j_tour.phase == JULIA_TOUR_IDLE) {
+                        ctx->j_tour.from_re = ctx->julia_c.re;
+                        ctx->j_tour.from_im = ctx->julia_c.im;
+                        ctx->j_tour.phase = JULIA_TOUR_DWELLING;
+                        ctx->j_tour.phase_start = SDL_GetTicks();
+                    } else {
+                        ctx->j_tour.phase = JULIA_TOUR_IDLE;
+                    }
+                } else {
+                    if (ctx->m_tour.phase == TOUR_IDLE) {
+                        ctx->m_tour.home_re = INITIAL_CENTER_RE;
+                        ctx->m_tour.home_im = INITIAL_CENTER_IM;
+                        ctx->m_tour.home_zoom = INITIAL_ZOOM;
+                        ctx->m_tour.deep_zoom = INITIAL_ZOOM / 6000.0;
+                        ctx->m_tour.phase = TOUR_ZOOMING_OUT;
+                        ctx->m_tour.phase_start = SDL_GetTicks() - 10000;
+                    } else {
+                        ctx->m_tour.phase = TOUR_IDLE;
+                    }
+                }
+                ctx->needs_redraw = 1;
             }
             break;
 
@@ -153,6 +180,9 @@ void main_loop_iteration(void *arg) {
             break;
 
         case SDL_MOUSEBUTTONDOWN:
+            if (ctx->m_tour.phase != TOUR_IDLE) ctx->m_tour.phase = TOUR_IDLE;
+            if (ctx->j_tour.phase != JULIA_TOUR_IDLE) ctx->j_tour.phase = JULIA_TOUR_IDLE;
+
             if (event.button.button == SDL_BUTTON_RIGHT) {
                 ctx->is_panning = 1;
                 ctx->last_mouse_x = event.button.x;
@@ -210,6 +240,16 @@ void main_loop_iteration(void *arg) {
             }
             break;
         }
+    }
+
+    Uint32 now = SDL_GetTicks();
+    if (ctx->m_tour.phase != TOUR_IDLE) {
+        update_tour(&ctx->m_tour, &ctx->view, now);
+        ctx->needs_redraw = 1;
+    }
+    if (ctx->j_tour.phase != JULIA_TOUR_IDLE) {
+        update_julia_tour(&ctx->j_tour, &ctx->julia_c, now);
+        ctx->needs_redraw = 1;
     }
 
     if (ctx->needs_redraw) {
@@ -279,6 +319,8 @@ int main() {
     }
 
     ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    ctx->m_tour = (TourState){TOUR_IDLE, 0,0,0, 0,0,0, 0, -1};
+    ctx->j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0,0, 0,0, 0, -1};
     ctx->julia_c = (complex_t){-0.7, 0.27};
     ctx->max_iterations = DEFAULT_ITERATIONS;
     ctx->needs_redraw = 1;
@@ -396,4 +438,31 @@ void wasm_cancel_zoom() {
     if (!g_ctx) return;
     g_ctx->is_zooming = 0;
     g_ctx->is_panning = 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_tour() {
+    if (!g_ctx) return;
+    if (g_ctx->julia_mode) {
+        if (g_ctx->j_tour.phase == JULIA_TOUR_IDLE) {
+            g_ctx->j_tour.from_re = g_ctx->julia_c.re;
+            g_ctx->j_tour.from_im = g_ctx->julia_c.im;
+            g_ctx->j_tour.phase = JULIA_TOUR_DWELLING;
+            g_ctx->j_tour.phase_start = SDL_GetTicks();
+        } else {
+            g_ctx->j_tour.phase = JULIA_TOUR_IDLE;
+        }
+    } else {
+        if (g_ctx->m_tour.phase == TOUR_IDLE) {
+            g_ctx->m_tour.home_re = INITIAL_CENTER_RE;
+            g_ctx->m_tour.home_im = INITIAL_CENTER_IM;
+            g_ctx->m_tour.home_zoom = INITIAL_ZOOM;
+            g_ctx->m_tour.deep_zoom = INITIAL_ZOOM / 6000.0;
+            g_ctx->m_tour.phase = TOUR_ZOOMING_OUT;
+            g_ctx->m_tour.phase_start = SDL_GetTicks() - 10000;
+        } else {
+            g_ctx->m_tour.phase = TOUR_IDLE;
+        }
+    }
+    g_ctx->needs_redraw = 1;
 }

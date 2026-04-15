@@ -92,6 +92,7 @@
     <div id="toolbar">
         <button onclick="Module._wasm_reset_view()">Reset</button>
         <button onclick="Module._wasm_undo_zoom()">Undo</button>
+        <button onclick="Module._wasm_toggle_tour()" id="tourBtn" title="Auto Tour (T)">Tour</button>
         <button onclick="Module._wasm_next_palette()">Palette</button>
         <button onclick="Module._wasm_toggle_julia()">Julia</button>
         <button onclick="Module._wasm_adjust_iterations(100)">Iter+</button>
@@ -188,6 +189,7 @@
                 window.addEventListener('keydown', function(e) {
                     if (e.key === 'r') Module._wasm_reset_view();
                     if (e.key === 'p') Module._wasm_next_palette();
+                    if (e.key === 't') Module._wasm_toggle_tour();
                     if (e.key === 'j') Module._wasm_toggle_julia();
                     if (e.key === 'z' && e.ctrlKey) {
                         e.preventDefault();
