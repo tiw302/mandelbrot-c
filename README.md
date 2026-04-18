@@ -7,7 +7,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/tiw302/mandelbrot-c)
 
 A high-performance, multi-threaded Mandelbrot and Julia set explorer written in C.
-This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (CUDA).
+This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (Sokol GFX / Shaders).
 
 Live Web Demo - 
 **[(https://tiw302.github.io/mandelbrot-c/)](https://tiw302.github.io/mandelbrot-c/)**
@@ -83,7 +83,7 @@ The codebase strictly adheres to an Engine-Centric architecture to ensure Separa
 - **Core [SSOT]:** Pure mathematical definitions (`mandelbrot.c`, `julia.c`) reside here as the Single Source of Truth. They are entirely agnostic to rendering APIs, utilizing compiler intrinsics natively.
 - **CPU Engine:** Responsible for Native Desktop rendering using SDL2, handling input polling, and distributing workloads across logical core thread pools.
 - **Web Engine:** Contains Emscripten logic (`main_wasm.c`) bridging the core mathematics to HTML5 distributions.
-- **GPU Engine:** Houses CUDA kernels (`.cu`) structured for future extreme high-performance parallel GPU execution.
+- **GPU Engine:** Houses cross-platform shader implementations using `sokol_gfx.h` for extreme high-performance parallel GPU execution across GL, Metal, and D3D.
 
 ### WebAssembly Subsystem
 The WebAssembly implementation enables high-performance desktop-class rendering within the browser environment.
@@ -113,8 +113,8 @@ Core logic is validated through a suite of automated unit tests.
 ## Prerequisites
 
 - C Compiler (GCC/Clang/MSVC with C11 support)
+- CMake (3.10+, required for build system)
 - Emscripten (emcc, required for Web target)
-- CUDA Toolkit (nvcc, required for GPU target)
 - SDL2 & SDL2_ttf development libraries (for CPU target)
 - zlib & libpng (required for PNG screenshot export)
 
@@ -125,33 +125,33 @@ sudo apt install libsdl2-dev libsdl2-ttf-dev zlib1g-dev libpng-dev
 
 ## Build & Run
 
-You can compile the project using standard `make` commands or the provided `build.sh` wrapper script which includes dependency checking.
+You can compile the project using the provided `build.sh` wrapper script or standard CMake commands.
 
-### Using Standard Make
-
-```bash
-# Build Native Desktop Engine (Default)
-make cpu
-./mandelbrot-desktop
-
-# Build WebAssembly Target
-make web
-# Run an HTML server in your root directory to access mandelbrot.js
-
-# Build GPU Target
-make gpu
-./mandelbrot-gpu
-```
-
-### Using Build Wrapper (with Dependency Checks)
+### Using Build Wrapper (Recommended)
 
 ```bash
 chmod +x build.sh
 
-./build.sh cpu    # Builds desktop
-./build.sh web    # Builds WebAssembly
-./build.sh gpu    # Builds CUDA
+./build.sh cpu    # Builds desktop version
+./build.sh web    # Builds WebAssembly version
+./build.sh gpu    # Builds Sokol GPU version
 ./build.sh clean  # Cleans build artifacts
+```
+
+### Using Standard CMake
+
+```bash
+# Build Native Desktop Engine (Default)
+cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build
+
+# Build WebAssembly Target
+emcmake cmake -S . -B build-web -DBUILD_WEB=ON
+cmake --build build-web
+
+# Build GPU Target
+cmake -S . -B build-gpu -DBUILD_GPU=ON
+cmake --build build-gpu
 ```
 
 ## Usage
@@ -200,7 +200,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [x] Integrate a pre-calculated Look-Up Table (LUT) for color mapping to bypass expensive real-time trigonometric calculations.
 - [x] Implement smooth coloring algorithms using fractional iteration counts for high-fidelity gradients.
 - [x] Deploy hardware-specific vectorization (AVX2 for Desktop, SIMD128 for WebAssembly) to process multiple pixels per cycle.
-- [ ] Activate CUDA `gpu-engine` parallel thread blocks logic for extreme-scale rendering (See [RESEARCH.md](RESEARCH.md)).
+- [ ] Integrate `sokol_gfx` cross-platform GPU acceleration for extreme-scale rendering (Write-once, run-anywhere GPU logic).
 
 ### Features and Exploration
 - [x] Add interactive runtime controls for iteration depth adjustment and dynamic color palette switching.
