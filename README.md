@@ -7,7 +7,7 @@
 ![GitHub last commit](https://img.shields.io/github/last-commit/tiw302/mandelbrot-c)
 
 A high-performance, multi-threaded Mandelbrot and Julia set explorer written in C.
-This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (Sokol GFX / Shaders).
+This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (Sokol GFX).
 
 Live Web Demo - 
 **[(https://tiw302.github.io/mandelbrot-c/)](https://tiw302.github.io/mandelbrot-c/)**
@@ -58,18 +58,18 @@ In simple terms:
 1. Start with $z = 0$.
 2. Calculate the next value: $z_{new} = z_{old}^2 + c$.
 3. Repeat. If the magnitude $|z|$ stays small forever, the point $c$ is inside the set (colored black).
-4. If $|z|$ explodes (escapes to infinity), the point is outside. The color represents **how fast** it escaped.
+4. If $|z|$ explodes (escapes to infinity), the point is outside. The color represents how fast it escaped.
 
 ### Julia Sets
 
-A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ and let the starting point $z$ vary across the screen instead. Every single point inside the Mandelbrot set produces a different, connected Julia set. Points near the boundary of the Mandelbrot set produce the most intricate Julia sets -- which is exactly why the interactive mode is so fun to explore.
+A Julia set $J_c$ is the closely related fractal you get when you fix $c$ and let the starting point $z$ vary across the screen instead. Every single point inside the Mandelbrot set produces a different, connected Julia set. Points near the boundary of the Mandelbrot set produce the most intricate Julia sets -- which is exactly why the interactive mode is so fun to explore.
 
 ## Features
 
 - **Real-time Rendering:** Optimized arithmetic for smooth navigation.
 - **Hardware Acceleration:** AVX2 and WASM SIMD128 vectorization for processing multiple pixels in parallel.
 - **Dynamic Multi-threading:** Intelligent row-based workload distribution using pthreads.
-- **Cross-Platform Engines:** Engine-Centric monorepo structure mapping logic to CPU, Web, and GPU targets.
+- **Cross-Platform Engines:** Engine-Centric monorepo structure mapping logic to CPU and Web (Sokol GFX) targets.
 - **Julia Set Mode:** Press `J` to instantly switch to the Julia set defined by the point under your cursor.
 - **Tour Mode:** Automated exploration paths for both Mandelbrot and Julia modes.
 - **Screenshot Export:** PNG export functionality with no external library dependencies (uses integrated zlib and libpng).
@@ -82,15 +82,13 @@ A Julia set $J_c$ is the closely related fractal you get when you **fix** $c$ an
 The codebase strictly adheres to an Engine-Centric architecture to ensure Separation of Concerns (SoC).
 - **Core [SSOT]:** Pure mathematical definitions (`mandelbrot.c`, `julia.c`) reside here as the Single Source of Truth. They are entirely agnostic to rendering APIs, utilizing compiler intrinsics natively.
 - **CPU Engine:** Responsible for Native Desktop rendering using SDL2, handling input polling, and distributing workloads across logical core thread pools.
-- **Web Engine:** Contains Emscripten logic (`main_wasm.c`) bridging the core mathematics to HTML5 distributions.
-- **GPU Engine:** Houses cross-platform shader implementations using `sokol_gfx.h` for extreme high-performance parallel GPU execution across GL, Metal, and D3D.
+- **Web Engine:** Modern Web runtime using Sokol GFX, bridging the core mathematics to high-performance WebGL 2.0 distributions.
 
 ### WebAssembly Subsystem
 The WebAssembly implementation enables high-performance desktop-class rendering within the browser environment.
 - **Multithreading:** Utilizes Emscripten's `pthreads` implementation by leveraging Web Workers and `SharedArrayBuffer` to parallelize the workload across all available logical CPU cores.
 - **Instruction Optimization:** Implements WASM SIMD128 intrinsics, allowing for simultaneous processing of two double-precision complex numbers per instruction.
-- **Security Compliance:** For deployment on static hosting platforms (e.g., GitHub Pages), the engine utilizes a specialized Service Worker (`coi-serviceworker.js`) to enforce Cross-Origin Opener Policy (COOP) and Cross-Origin Embedder Policy (COEP) headers, which are required for multithreading.
-- **Input Handling:** Touch events (pinch-to-zoom, panning) are natively mapped to C logic and throttled via `requestAnimationFrame` to ensure frame-rate stability.
+- **Security Compliance:** For deployment on static hosting platforms (e.g., GitHub Pages), the engine utilizes a specialized Service Worker (`coi-serviceworker.js`) to enforce Cross-Origin Opener Policy (COOP) and Cross-Origin Embedder Policy (COEP) headers.
 
 ### Vectorized Optimization (SIMD)
 The fractal engine utilizes 256-bit AVX2 registers on desktop and 128-bit SIMD on WebAssembly. This allows the system to perform complex squaring, addition, and escape radius testing on 4 (or 2) independent double-precision points simultaneously natively.
@@ -120,38 +118,35 @@ Core logic is validated through a suite of automated unit tests.
 
 ### Installation (Debian / Ubuntu)
 ```bash
-sudo apt install libsdl2-dev libsdl2-ttf-dev zlib1g-dev libpng-dev
+sudo apt install cmake libsdl2-dev libsdl2-ttf-dev zlib1g-dev libpng-dev
 ```
 
 ## Build & Run
 
-You can compile the project using the provided `build.sh` wrapper script or standard CMake commands.
+The project uses CMake for cross-platform build management.
 
-### Using Build Wrapper (Recommended)
+### Desktop Build (SDL2)
+
+```bash
+cmake -S . -B build -DBUILD_DESKTOP=ON
+cmake --build build
+./build/mandelbrot-desktop
+```
+
+### Web Build (Sokol GFX)
+
+```bash
+emcmake cmake -S . -B build-web -DBUILD_WEB=ON
+cmake --build build-web
+```
+
+### Using Build Wrapper
 
 ```bash
 chmod +x build.sh
-
-./build.sh cpu    # Builds desktop version
-./build.sh web    # Builds WebAssembly version
-./build.sh gpu    # Builds Sokol GPU version
+./build.sh cpu    # Builds desktop
+./build.sh web    # Builds web
 ./build.sh clean  # Cleans build artifacts
-```
-
-### Using Standard CMake
-
-```bash
-# Build Native Desktop Engine (Default)
-cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
-cmake --build build
-
-# Build WebAssembly Target
-emcmake cmake -S . -B build-web -DBUILD_WEB=ON
-cmake --build build-web
-
-# Build GPU Target
-cmake -S . -B build-gpu -DBUILD_GPU=ON
-cmake --build build-gpu
 ```
 
 ## Usage
@@ -176,12 +171,13 @@ cmake --build build-gpu
 .
 ├── core/                # Pure Mathematical Engine (Single Source of Truth)
 ├── cpu-engine/          # Desktop Renderer, SDL UI, and Thread Pools
-├── gpu-engine/          # CUDA Kernel Implementations (.cu)
-├── web-engine/          # Emscripten WebAssembly Runtime
+├── web-engine/          # Sokol GFX WebAssembly Runtime
 ├── include/             # Global configuration headers
+├── shaders/             # GLSL Shaders for Sokol engine
 ├── tests/               # Automated regression frameworks
-├── Makefile             # Multi-target Unified Build System
-└── build.sh             # Cross-platform build abstraction
+├── third_party/         # External libraries (Sokol, stb, etc.)
+├── CMakeLists.txt       # Cross-platform Build System
+└── build.sh             # Build abstraction script
 ```
 
 ## Configuration
@@ -190,7 +186,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 
 - `DEFAULT_ITERATIONS`: Controls the initial detail level.
 - `MAX_ITERATIONS_LIMIT`: Upper bound for runtime adjustments.
-- `THREAD_COUNT`: Number of parallel threads (set to match CPU cores).
+- `DEFAULT_THREAD_COUNT`: Number of parallel threads (0 = auto-detect).
 - `ESCAPE_RADIUS`: Mathematical threshold for the set calculation.
 
 ## Roadmap
@@ -200,7 +196,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [x] Integrate a pre-calculated Look-Up Table (LUT) for color mapping to bypass expensive real-time trigonometric calculations.
 - [x] Implement smooth coloring algorithms using fractional iteration counts for high-fidelity gradients.
 - [x] Deploy hardware-specific vectorization (AVX2 for Desktop, SIMD128 for WebAssembly) to process multiple pixels per cycle.
-- [ ] Integrate `sokol_gfx` cross-platform GPU acceleration for extreme-scale rendering (Write-once, run-anywhere GPU logic).
+- [ ] Research and implement pure-shader fractal calculation for extreme-scale GPU rendering.
 
 ### Features and Exploration
 - [x] Add interactive runtime controls for iteration depth adjustment and dynamic color palette switching.
@@ -210,7 +206,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 
 ### Engineering and Quality
 - [x] Establish a strict Engine-Centric Monorepo architecture, isolating platform rendering from core mathematical logic.
-- [x] Implement a high-performance Multi-Target Master Makefile to streamline native and cross-compilation workflows.
+- [x] Implement a high-performance CMake build system to streamline native and cross-compilation workflows.
 - [x] Expand unit testing coverage to ensure mathematical consistency across all hardware backends.
 - [x] Implement automatic CPU core detection to dynamically optimize thread pool allocation.
 
