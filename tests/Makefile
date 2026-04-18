@@ -1,8 +1,8 @@
 CC = gcc
-CFLAGS = -O3 -Wall -Wextra -I../core -I../include
+CFLAGS = -O3 -Wall -Wextra -I../src/core -I../include
 LDFLAGS = -lm
 
-SRC = test_math.c ../core/mandelbrot.c ../core/julia.c
+SRC = test_math.c ../src/core/mandelbrot.c ../src/core/julia.c
 OBJ = $(SRC:.c=.o)
 TARGET = test_math
 

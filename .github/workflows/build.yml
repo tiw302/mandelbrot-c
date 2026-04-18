@@ -16,15 +16,17 @@ jobs:
     - name: Install dependencies
       run: |
         sudo apt-get update
-        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev zlib1g-dev
+        sudo apt-get install -y libsdl2-dev libsdl2-ttf-dev zlib1g-dev libpng-dev
+
+    - name: Configure CMake
+      run: cmake -S . -B build -DBUILD_DESKTOP=ON
 
     - name: Build
-      run: |
-        make cpu
+      run: cmake --build build
 
     - name: Run Tests
       run: |
         cd tests && make
 
     - name: Help Command Verification (Dry Run)
-      run: ./mandelbrot-desktop --help
+      run: ./build/mandelbrot-desktop --help
