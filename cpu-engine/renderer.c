@@ -102,6 +102,7 @@ void *render_thread(void *arg) {
         __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
 
         // process 4 pixels with avx2
+        __m256d v_x_base = _mm256_set1_pd((double)x);
         for (; x <= data->window_width - 4; x += 4) {
             double res_re[4], res_im[4], iterations[4];
 
