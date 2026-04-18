@@ -1,4 +1,9 @@
-#define SOKOL_GLES3
+#if defined(__EMSCRIPTEN__)
+    #define SOKOL_GLES3
+#else
+    #define SOKOL_GLCORE33
+#endif
+
 #define SOKOL_IMPL
 #define SOKOL_APP_IMPL
 #define SOKOL_GFX_IMPL
