@@ -2,16 +2,20 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#000000">
     <title>Mandelbrot Explorer</title>
     <script src="coi-serviceworker.js"></script>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; }
+        /* minimalist css reset */
+        * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
 
         body {
             background: #000;
             color: #ccc;
-            font-family: monospace;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji";
             overflow: hidden;
             width: 100vw;
             height: 100vh;
@@ -25,45 +29,51 @@
             width: 100vw;
             height: 100vh;
             display: block;
+            outline: none;
         }
 
         #toolbar {
             position: fixed;
-            top: 0; left: 0; right: 0;
+            top: env(safe-area-inset-top, 0); 
+            left: 0; right: 0;
             display: flex;
             flex-wrap: wrap;
             gap: 4px;
-            padding: 6px;
-            background: rgba(0,0,0,0.5);
+            padding: 8px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
             z-index: 10;
         }
 
         #toolbar button {
-            background: #222;
-            color: #ccc;
+            background: rgba(34, 34, 34, 0.8);
+            color: #eee;
             border: 1px solid #444;
             padding: 6px 12px;
             font-family: monospace;
             font-size: 12px;
             cursor: pointer;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border-radius: 2px;
         }
 
         #toolbar button:active { background: #555; }
 
         #info {
             position: fixed;
-            bottom: 0; left: 0; right: 0;
-            padding: 4px 8px;
-            background: rgba(0,0,0,0.5);
-            font-size: 10px;
-            color: #fff;
+            bottom: env(safe-area-inset-bottom, 0);
+            left: 0; right: 0;
+            padding: 6px 10px;
+            background: rgba(0,0,0,0.6);
+            font-size: 11px;
+            color: #aaa;
             z-index: 10;
             display: flex;
             justify-content: space-between;
+            pointer-events: none;
         }
 
-        #info a { color: #fff; text-decoration: none; }
-        #info a:hover { color: #ccc; }
+        #info a { color: #fff; text-decoration: none; pointer-events: auto; }
 
         #loading-screen {
             position: fixed;
@@ -71,53 +81,68 @@
             background: #000;
             z-index: 100;
             display: flex;
+            flex-direction: column;
             align-items: center;
             justify-content: center;
             font-size: 14px;
-            transition: opacity 0.5s;
+            transition: opacity 0.6s cubic-bezier(0.4, 0, 0.2, 1);
         }
 
+        .spinner {
+            width: 24px;
+            height: 24px;
+            border: 2px solid #333;
+            border-top-color: #fff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+            margin-bottom: 12px;
+        }
+
+        @keyframes spin { to { transform: rotate(360deg); } }
+
         @media (max-width: 600px) {
-            #toolbar button { padding: 10px 14px; font-size: 14px; }
+            #toolbar button { padding: 12px 16px; font-size: 13px; }
+            #info { display: none; } /* hide shortcuts on mobile */
         }
     </style>
 </head>
 <body>
     <div id="loading-screen">
-        <div>Loading...</div>
+        <div class="spinner"></div>
+        <div id="status">initializing engine...</div>
     </div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
     <div id="toolbar">
-        <button onclick="Module._wasm_reset_view()">Reset</button>
-        <button onclick="Module._wasm_undo_zoom()">Undo</button>
-        <button onclick="Module._wasm_toggle_tour()" id="tourBtn" title="Auto Tour (T)">Tour</button>
-        <button onclick="Module._wasm_next_palette()">Palette</button>
-        <button onclick="Module._wasm_toggle_julia()">Julia</button>
-        <button onclick="Module._wasm_adjust_iterations(100)">Iter+</button>
-        <button onclick="Module._wasm_adjust_iterations(-100)">Iter-</button>
+        <button onclick="Module._wasm_reset_view()">reset</button>
+        <button onclick="Module._wasm_undo_zoom()">undo</button>
+        <button onclick="Module._wasm_toggle_tour()" id="tourBtn">tour</button>
+        <button onclick="Module._wasm_next_palette()">palette</button>
+        <button onclick="Module._wasm_toggle_julia()">julia</button>
+        <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
+        <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
     </div>
 
     <div id="info">
-        <span>Scroll=Zoom | Left-drag=Select | Right-drag=Pan | R=Reset P=Palette J=Julia</span>
-        <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
+        <span>left-drag: select | right-drag: pan | wheel: zoom</span>
+        <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">source code</a>
     </div>
 
     <script>
-        var loadingScreen = document.getElementById('loading-screen');
-        var canvas = document.getElementById('canvas');
+        const loadingScreen = document.getElementById('loading-screen');
+        const statusText = document.getElementById('status');
+        const canvas = document.getElementById('canvas');
 
-        // Interaction State
-        var state = {
-            pendingZoom: null, // { cx, cy, factor }
-            pendingPan: null,  // { dx, dy }
+        // interaction state
+        const state = {
+            pendingZoom: null,
             ticking: false
         };
 
         function syncSize() {
-            var w = window.innerWidth;
-            var h = window.innerHeight;
+            const w = window.innerWidth;
+            const h = window.innerHeight;
             if (Module._wasm_set_resolution) {
                 Module._wasm_set_resolution(w, h);
             }
@@ -132,48 +157,43 @@
 
         function update() {
             state.ticking = false;
-
             if (state.pendingZoom) {
                 Module._wasm_zoom_at(state.pendingZoom.cx, state.pendingZoom.cy, state.pendingZoom.factor);
                 state.pendingZoom = null;
             }
-            
-            if (state.pendingPan) {
-                Module._wasm_pan(state.pendingPan.dx, state.pendingPan.dy);
-                state.pendingPan = null;
-            }
         }
 
+        // emscripten module configuration
         var Module = {
             preRun: [],
             postRun: [function() {
                 syncSize();
-                window.addEventListener('resize', function() {
+                window.addEventListener('resize', () => {
                     clearTimeout(window._rt);
-                    window._rt = setTimeout(syncSize, 150);
+                    window._rt = setTimeout(syncSize, 100);
                 });
 
-                var initialDistance = 0;
-
-                canvas.addEventListener('touchstart', function(e) {
-                    if (e.touches.length >= 2) {
+                // pinch-to-zoom logic
+                let initialDistance = 0;
+                canvas.addEventListener('touchstart', (e) => {
+                    if (e.touches.length === 2) {
                         if (Module._wasm_cancel_zoom) Module._wasm_cancel_zoom();
-                        var dx = e.touches[0].clientX - e.touches[1].clientX;
-                        var dy = e.touches[0].clientY - e.touches[1].clientY;
+                        const dx = e.touches[0].clientX - e.touches[1].clientX;
+                        const dy = e.touches[0].clientY - e.touches[1].clientY;
                         initialDistance = Math.sqrt(dx*dx + dy*dy);
                     }
                 }, {passive: false});
 
-                canvas.addEventListener('touchmove', function(e) {
-                    if (e.touches.length >= 2) {
+                canvas.addEventListener('touchmove', (e) => {
+                    if (e.touches.length === 2) {
                         e.preventDefault();
                         if (Module._wasm_cancel_zoom) Module._wasm_cancel_zoom();
-                        var dx = e.touches[0].clientX - e.touches[1].clientX;
-                        var dy = e.touches[0].clientY - e.touches[1].clientY;
-                        var distance = Math.sqrt(dx*dx + dy*dy);
+                        const dx = e.touches[0].clientX - e.touches[1].clientX;
+                        const dy = e.touches[0].clientY - e.touches[1].clientY;
+                        const distance = Math.sqrt(dx*dx + dy*dy);
                         if (initialDistance > 0) {
-                            var factor = initialDistance / distance;
-                            if (Math.abs(1.0 - factor) > 0.02) {
+                            const factor = initialDistance / distance;
+                            if (Math.abs(1.0 - factor) > 0.01) {
                                 state.pendingZoom = {
                                     cx: (e.touches[0].clientX + e.touches[1].clientX) / 2,
                                     cy: (e.touches[0].clientY + e.touches[1].clientY) / 2,
@@ -186,32 +206,49 @@
                     }
                 }, {passive: false});
 
-                window.addEventListener('keydown', function(e) {
-                    if (e.key === 'r') Module._wasm_reset_view();
-                    if (e.key === 'p') Module._wasm_next_palette();
-                    if (e.key === 't') Module._wasm_toggle_tour();
-                    if (e.key === 'j') Module._wasm_toggle_julia();
-                    if (e.key === 'z' && e.ctrlKey) {
+                // keyboard shortcuts
+                window.addEventListener('keydown', (e) => {
+                    if (e.repeat) return;
+                    const key = e.key.toLowerCase();
+                    if (key === 'r') Module._wasm_reset_view();
+                    if (key === 'p') Module._wasm_next_palette();
+                    if (key === 't') Module._wasm_toggle_tour();
+                    if (key === 'j') Module._wasm_toggle_julia();
+                    if (key === 'z' && (e.ctrlKey || e.metaKey)) {
                         e.preventDefault();
                         Module._wasm_undo_zoom();
                     }
                 });
             }],
-            print: function(text) { console.log(text); },
+            print: (text) => console.log(text),
             canvas: canvas,
-            setStatus: function(text) {
+            setStatus: (text) => {
                 if (!text) {
                     loadingScreen.style.opacity = '0';
-                    setTimeout(function() { loadingScreen.style.display = 'none'; }, 500);
+                    setTimeout(() => loadingScreen.style.display = 'none', 600);
+                } else {
+                    statusText.textContent = text;
                 }
             },
-            monitorRunDependencies: function() {}
+            totalDependencies: 0,
+            monitorRunDependencies: (left) => {
+                this.totalDependencies = Math.max(this.totalDependencies, left);
+                Module.setStatus(left ? `loading dependencies (${this.totalDependencies - left}/${this.totalDependencies})...` : '');
+            }
         };
 
-        window.onerror = function() {
-            document.querySelector('#loading-screen div').textContent = "Error loading engine.";
+        window.onerror = (event) => {
+            statusText.textContent = "error: could not load engine.";
+            statusText.style.color = "#ff5555";
         };
+
+        // check for webgl2 support
+        const gl = canvas.getContext('webgl2');
+        if (!gl) {
+            statusText.textContent = "error: webgl 2.0 not supported.";
+            statusText.style.color = "#ff5555";
+        }
     </script>
-    <script async src="mandelbrot.js"></script>
+    <script async src="index.js"></script>
 </body>
 </html>
