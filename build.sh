@@ -131,10 +131,11 @@ if [ $? -eq 0 ]; then
     echo "  Build successful!"
     echo "========================================"
     echo ""
-    echo "Run with: ./build/mandelbrot"
+    echo "Run with: ./build/mandelbrot-desktop"
     echo ""
 else
     echo ""
     echo "Build failed."
     echo "Check the errors above."
-    exit 1 fi
+    exit 1
+fi
