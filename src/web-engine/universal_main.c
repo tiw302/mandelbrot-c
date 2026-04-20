@@ -120,9 +120,9 @@ static void init(void) {
         .vertex_func.source = vs_src, .fragment_func.source = fs_cpu_src,
         .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0, .glsl_name = "tex" }
     });
-    printf("[sokol] DEBUG: cpu shader id = %u\n", shd_cpu.id);
+    if (shd_cpu.id == SG_INVALID_ID) printf("[sokol] ERROR: cpu shader id is invalid\n");
     ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_cpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
-    printf("[sokol] DEBUG: cpu pipeline id = %u\n", ctx.pip_cpu.id);
+    if (ctx.pip_cpu.id == SG_INVALID_ID) printf("[sokol] ERROR: cpu pipeline id is invalid\n");
 
     sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
         .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
@@ -137,9 +137,9 @@ static void init(void) {
             }
         }
     });
-    printf("[sokol] DEBUG: gpu shader id = %u\n", shd_gpu.id);
+    if (shd_gpu.id == SG_INVALID_ID) printf("[sokol] ERROR: gpu shader id is invalid\n");
     ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_gpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
-    printf("[sokol] DEBUG: gpu pipeline id = %u\n", ctx.pip_gpu.id);
+    if (ctx.pip_gpu.id == SG_INVALID_ID) printf("[sokol] ERROR: gpu pipeline id is invalid\n");
 
     ctx.pass_action = (sg_pass_action){ .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = {0,0,0,1} } };
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
