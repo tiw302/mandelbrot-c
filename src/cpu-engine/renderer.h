@@ -1,13 +1,13 @@
 #ifndef RENDER_H
 #define RENDER_H
 
-#include <SDL2/SDL.h>
 #include <stdatomic.h>
+#include <stdint.h>
 #include "config.h"
 #include "mandelbrot.h"
 #include "color.h"
 
-// Returns the optimal thread count based on system detection and DEFAULT_THREAD_COUNT
+// optimal thread count detection
 int get_optimal_thread_count(void);
 
 typedef enum {
@@ -17,7 +17,7 @@ typedef enum {
 
 typedef struct {
     int              id;
-    Uint32          *pixels;
+    uint32_t        *pixels;
     int              pitch;
     int              window_width;
     int              window_height;
@@ -29,29 +29,24 @@ typedef struct {
     atomic_int      *next_row;
 } thread_data_t;
 
-
-// precompute LUT or other startup work
+// renderer lifecycle
 void init_renderer(int max_iterations, int palette_idx);
-
-// free allocated resources
 void cleanup_renderer(void);
 
-// get the number of threads actually being used
+// state access
 int get_actual_thread_count(void);
 
-
-// main worker thread function
+// core worker
 void *render_thread(void *arg);
 
-// multi-threaded mandelbrot renderer
-void render_mandelbrot_threaded(Uint32 *pixels, int pitch,
+// high-level rendering api
+void render_mandelbrot_threaded(uint32_t *pixels, int pitch,
                                 int window_width, int window_height,
                                 double re_min, double re_max,
                                 double im_min, double im_max,
                                 int max_iterations);
 
-// multi-threaded julia renderer
-void render_julia_threaded(Uint32 *pixels, int pitch,
+void render_julia_threaded(uint32_t *pixels, int pitch,
                            int window_width, int window_height,
                            double re_min, double re_max,
                            double im_min, double im_max,

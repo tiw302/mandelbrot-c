@@ -7,6 +7,7 @@
 #include <stdlib.h>
 #include <math.h>
 #include <stdatomic.h>
+#include <stdint.h>
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -23,6 +24,7 @@ static int   actual_thread_count = 0;
 static pthread_t      *threads_pool = NULL;
 static thread_data_t  *thread_data_pool = NULL;
 
+// detect cpu cores
 static int get_cpu_cores(void) {
 #if defined(__EMSCRIPTEN__)
     return emscripten_num_logical_cores();
@@ -33,31 +35,32 @@ static int get_cpu_cores(void) {
 #elif defined(_SC_NPROCESSORS_ONLN)
     return sysconf(_SC_NPROCESSORS_ONLN);
 #else
-    return 1; // default value
+    return 1;
 #endif
 }
 
-// detect optimal thread count based on config and cpu cores
+// detect thread count
 static int detect_thread_count(void) {
     int cores = get_cpu_cores();
     int count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
     if (count < 1) count = 1;
-    if (count > 64) count = 64; // reasonable cap
+    if (count > 64) count = 64;
     return count;
 }
 
-// public api to get the thread count we should use
+// optimal thread count api
 int get_optimal_thread_count(void) {
     return detect_thread_count();
 }
 
+// renderer initialization
 void init_renderer(int max_iterations, int palette_idx) {
     if (actual_thread_count == 0) {
         actual_thread_count = detect_thread_count();
         threads_pool = malloc(sizeof(pthread_t) * actual_thread_count);
         thread_data_pool = malloc(sizeof(thread_data_t) * actual_thread_count);
         if (!threads_pool || !thread_data_pool) {
-            fprintf(stderr, "Fatal: failed to allocate thread pool\n");
+            fprintf(stderr, "fatal: failed to allocate thread pool\n");
             if (threads_pool) free(threads_pool);
             if (thread_data_pool) free(thread_data_pool);
             exit(1);
@@ -66,6 +69,7 @@ void init_renderer(int max_iterations, int palette_idx) {
     init_color_palette(max_iterations, palette_idx);
 }
 
+// renderer cleanup
 void cleanup_renderer(void) {
     if (threads_pool) free(threads_pool);
     if (thread_data_pool) free(thread_data_pool);
@@ -74,12 +78,12 @@ void cleanup_renderer(void) {
     actual_thread_count = 0;
 }
 
+// active thread count
 int get_actual_thread_count(void) {
     return actual_thread_count;
 }
 
-
-
+// worker thread logic
 void *render_thread(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
 
@@ -88,21 +92,17 @@ void *render_thread(void *arg) {
     double im_factor = (data->window_height > 0) ?
                        (data->im_max - data->im_min) / data->window_height : 0;
 
-    // assign rows dynamically
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
         int x = 0;
 
-        // avx2 path
 #ifdef __AVX2__
-        // calculate vectors
+        // avx2 processing
         __m256d v_re_min = _mm256_set1_pd(data->re_min);
         __m256d v_re_fac = _mm256_set1_pd(re_factor);
         __m256d v_im_val = _mm256_set1_pd(data->im_min + (double)y * im_factor);
         __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
 
-        // process 4 pixels with avx2
-        __m256d v_x_base = _mm256_set1_pd((double)x);
         for (; x <= data->window_width - 4; x += 4) {
             double res_re[4], res_im[4], iterations[4];
 
@@ -118,14 +118,14 @@ void *render_thread(void *arg) {
                 mandelbrot_check_avx2(res_re, res_im, data->max_iterations, iterations);
 
             for (int i = 0; i < 4; i++) {
-                Uint8 r, g, b;
+                uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
-                data->pixels[y * (data->pitch / sizeof(Uint32)) + (x + i)] =
+                data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
             }
         }
 #elif defined(__wasm_simd128__)
-        // process 2 pixels with WASM SIMD128
+        // wasm simd128 processing
         for (; x <= data->window_width - 2; x += 2) {
             double res_re[2], res_im[2], iterations[2];
             res_re[0] = data->re_min + (double)x * re_factor;
@@ -146,7 +146,7 @@ void *render_thread(void *arg) {
         }
 #endif
 
-        // handle remainder
+        // fallback scalar processing
         for (; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
@@ -158,11 +158,9 @@ void *render_thread(void *arg) {
             else
                 iterations = mandelbrot_check(point, data->max_iterations);
 
-            Uint8 r, g, b;
+            uint8_t r, g, b;
             get_color(iterations, data->max_iterations, &r, &g, &b);
-
-            // write to pixel buffer
-            data->pixels[y * (data->pitch / sizeof(Uint32)) + x] =
+            data->pixels[y * (data->pitch / sizeof(uint32_t)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
         }
     }
@@ -170,7 +168,8 @@ void *render_thread(void *arg) {
     return NULL;
 }
 
-static void dispatch_threads(Uint32 *pixels, int pitch,
+// thread dispatcher
+static void dispatch_threads(uint32_t *pixels, int pitch,
                               int window_width, int window_height,
                               double re_min, double re_max,
                               double im_min, double im_max,
@@ -196,7 +195,7 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
         };
 
         if (pthread_create(&threads_pool[i], NULL, render_thread, &thread_data_pool[i]) != 0) {
-            fprintf(stderr, "Failed to spawn thread %d\n", i);
+            fprintf(stderr, "failed to spawn thread %d\n", i);
             for (int j = 0; j < i; j++) pthread_join(threads_pool[j], NULL);
             return;
         }
@@ -205,7 +204,8 @@ static void dispatch_threads(Uint32 *pixels, int pitch,
     for (int i = 0; i < actual_thread_count; i++) pthread_join(threads_pool[i], NULL);
 }
 
-void render_mandelbrot_threaded(Uint32 *pixels, int pitch,
+// mandelbrot api
+void render_mandelbrot_threaded(uint32_t *pixels, int pitch,
                                 int window_width, int window_height,
                                 double re_min, double re_max,
                                 double im_min, double im_max,
@@ -216,7 +216,8 @@ void render_mandelbrot_threaded(Uint32 *pixels, int pitch,
                      RENDER_MANDELBROT, dummy, max_iterations);
 }
 
-void render_julia_threaded(Uint32 *pixels, int pitch,
+// julia api
+void render_julia_threaded(uint32_t *pixels, int pitch,
                            int window_width, int window_height,
                            double re_min, double re_max,
                            double im_min, double im_max,
