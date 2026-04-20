@@ -73,7 +73,7 @@ static GlobalCtx ctx;
 
 // shaders
 static const char* vs_src = 
-    "attribute vec2 pos; attribute vec2 uv_in; varying vec2 uv; "
+    "precision highp float; attribute vec2 pos; attribute vec2 uv_in; varying vec2 uv; "
     "void main() { gl_Position = vec4(pos, 0.0, 1.0); uv = uv_in; }";
 
 static const char* fs_cpu_src =
@@ -93,7 +93,7 @@ static const char* fs_gpu_src =
     "    if (x2+y2 > 4.0) break;\n"
     "    z = vec2(x2-y2+c.x, 2.0*z.x*z.y+c.y); i = float(j);\n"
     "  }\n"
-    "  if (i >= iters - 1.0) gl_FragColor = vec4(0,0,0,1);\n"
+    "  if (i >= iters - 1.0) gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n"
     "  else { float s = i + 1.0 - log2(log(length(z)+0.0001)); gl_FragColor = vec4(hsv2rgb(vec3(fract(s*0.05), 0.8, 1.0)), 1.0); }\n"
     "}";
 
