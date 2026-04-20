@@ -1,5 +1,8 @@
 # Build artifacts & Cache
 build/
+build-cpu/
+build-gpu/
+build-web/
 bin/
 obj/
 *.o
@@ -18,6 +21,9 @@ mandelbrot.exe
 mandelbrot-desktop
 *.out
 *.app
+*.wasm
+*.js
+!coi-serviceworker.js
 
 # Debugging
 *.dSYM/
@@ -49,3 +55,6 @@ undo/
 screenshot_*.tga
 *.tga
 gemini/
+
+# Temporary Scripts
+fix_*.py
