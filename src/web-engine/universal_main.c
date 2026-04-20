@@ -118,7 +118,7 @@ static void init(void) {
     sg_shader shd_cpu = sg_make_shader(&(sg_shader_desc){
         .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
         .vertex_func.source = vs_src, .fragment_func.source = fs_cpu_src,
-        .image_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .image_slot = 0, .sampler_slot = 0, .glsl_name = "tex" }
+        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0, .glsl_name = "tex" }
     });
     ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_cpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
 
@@ -127,7 +127,7 @@ static void init(void) {
         .vertex_func.source = vs_src, .fragment_func.source = fs_gpu_src,
         .uniform_blocks[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT, .size = sizeof(params_t),
-            .uniforms = { 
+            .glsl_uniforms = { 
                 [0] = { .glsl_name = "center", .type = SG_UNIFORMTYPE_FLOAT2 }, 
                 [1] = { .glsl_name = "zoom", .type = SG_UNIFORMTYPE_FLOAT }, 
                 [2] = { .glsl_name = "iters", .type = SG_UNIFORMTYPE_FLOAT }, 
