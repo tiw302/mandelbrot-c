@@ -5,7 +5,7 @@
 #include <stdatomic.h>
 #include "config.h"
 #include "mandelbrot.h"
-#include "../core/color.h"
+#include "color.h"
 
 // Returns the optimal thread count based on system detection and DEFAULT_THREAD_COUNT
 int get_optimal_thread_count(void);

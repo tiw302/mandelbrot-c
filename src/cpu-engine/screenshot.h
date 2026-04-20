@@ -1,10 +1,9 @@
 #ifndef SCREENSHOT_H
 #define SCREENSHOT_H
 
-#include <SDL2/SDL.h>
+#include <stdint.h>
 
-// save frame as PNG with timestamp
-// returns 0 on success
-int save_screenshot(SDL_Renderer *renderer, int width, int height);
+// save current pixel buffer to png using stb_image_write
+void save_screenshot(uint32_t *pixels, int width, int height);
 
 #endif

@@ -48,3 +48,4 @@ undo/
 !assets/*.png
 screenshot_*.tga
 *.tga
+gemini/
