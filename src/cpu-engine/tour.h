@@ -1,7 +1,7 @@
 #ifndef TOUR_H
 #define TOUR_H
 
-#include <SDL2/SDL.h>
+#include <stdint.h>
 #include "renderer.h"
 
 typedef enum {
@@ -17,12 +17,11 @@ typedef enum {
     JULIA_TOUR_DWELLING
 } JuliaTourPhase;
 
-
 typedef struct {
     TourPhase phase;
     double    home_re, home_im, home_zoom;
     double    target_re, target_im, deep_zoom;
-    Uint32    phase_start;
+    uint32_t  phase_start;
     int       last_zoom_idx;
 } TourState;
 
@@ -30,12 +29,12 @@ typedef struct {
     JuliaTourPhase phase;
     double         from_re, from_im;
     double         to_re, to_im;
-    Uint32         phase_start;
+    uint32_t       phase_start;
     int            last_julia_idx;
 } JuliaTourState;
 
-void update_tour(TourState *state, ViewState *view, Uint32 now);
-void update_julia_tour(JuliaTourState *state, complex_t *julia_c, Uint32 now);
+void update_tour(TourState *state, ViewState *view, uint32_t now);
+void update_julia_tour(JuliaTourState *state, complex_t *julia_c, uint32_t now);
 
 const char *get_tour_phase_name(TourPhase phase);
 int get_tour_target_idx(const TourState *state);

@@ -2,6 +2,7 @@
 #include "config.h"
 #include <math.h>
 #include <stdlib.h>
+#include <stdint.h>
 
 #define TOUR_ZOOM_DEPTH   6000.0
 #define TOUR_PAN_MS       1800.0
@@ -49,7 +50,7 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
-void update_tour(TourState *state, ViewState *view, Uint32 now) {
+void update_tour(TourState *state, ViewState *view, uint32_t now) {
     if (state->phase == TOUR_IDLE) return;
 
     double duration = (state->phase == TOUR_PANNING)   ? TOUR_PAN_MS :
@@ -101,7 +102,7 @@ void update_tour(TourState *state, ViewState *view, Uint32 now) {
     }
 }
 
-void update_julia_tour(JuliaTourState *state, complex_t *julia_c, Uint32 now) {
+void update_julia_tour(JuliaTourState *state, complex_t *julia_c, uint32_t now) {
     if (state->phase == JULIA_TOUR_IDLE) return;
 
     if (state->phase == JULIA_TOUR_MOVING) {
