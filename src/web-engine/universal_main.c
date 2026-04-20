@@ -32,8 +32,8 @@
 #endif
 
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message_or_null, uint32_t line_nr, const char* filename_or_null, void* user_data) {
-    (void)tag; (void)log_level; (void)log_item_id; (void)line_nr; (void)filename_or_null; (void)user_data;
-    if (message_or_null) printf("[sokol][%d] %s\n", log_level, message_or_null);
+    (void)tag; (void)log_level; (void)log_item_id;
+    if (message_or_null) printf("[sokol][%d] %s (line: %u, file: %s)\n", log_level, message_or_null, line_nr, filename_or_null ? filename_or_null : "unknown");
 }
 
 typedef struct {
