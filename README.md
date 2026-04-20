@@ -9,10 +9,15 @@
 A high-performance, multi-threaded Mandelbrot and Julia set explorer written in C.
 This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (Sokol GFX).
 
+---
+### ⚠️ Project Status: Experimental/Unstable
+This project is currently in an active state of development. 
+- **Web Engine:** Currently unstable and undergoing debugging for WebGL2/Sokol initialization issues. You may encounter a black screen or runtime errors when running the web version. 
+- **Desktop Engines (CPU/GPU):** Stable and functional.
+---
+
 Live Web Demo - 
 **[(https://tiw302.github.io/mandelbrot-c/)](https://tiw302.github.io/mandelbrot-c/)**
-
----
 
 ## Table of Contents
 
@@ -128,9 +133,9 @@ The project uses CMake for cross-platform build management.
 ### Desktop Build (SDL2)
 
 ```bash
-cmake -S . -B build -DBUILD_DESKTOP=ON
+cmake -S . -B build -DBUILD_CPU=ON
 cmake --build build
-./build/mandelbrot-desktop
+./build/mandelbrot-cpu
 ```
 
 ### Web Build (Sokol GFX)
@@ -169,9 +174,9 @@ chmod +x build.sh
 
 ```text
 .
-├── core/                # Pure Mathematical Engine (Single Source of Truth)
-├── cpu-engine/          # Desktop Renderer, SDL UI, and Thread Pools
-├── web-engine/          # Sokol GFX WebAssembly Runtime
+├── src/core/            # Pure Mathematical Engine
+├── src/cpu-engine/      # Desktop Renderer, SDL UI, and Thread Pools
+├── src/web-engine/      # Sokol GFX WebAssembly Runtime
 ├── include/             # Global configuration headers
 ├── shaders/             # GLSL Shaders for Sokol engine
 ├── tests/               # Automated regression frameworks
@@ -202,7 +207,7 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [x] Add interactive runtime controls for iteration depth adjustment and dynamic color palette switching.
 - [x] Implement automated "camera path" and "tour" modes for cinematic fractal exploration.
 - [x] Connect HTML5 Frontend APIs strictly to the `web-engine` for a responsive, cross-platform user experience.
-- [ ] Research and implement arbitrary-precision arithmetic to overcome the double-precision zoom limit (See [RESEARCH.md](RESEARCH.md)).
+- [ ] Research and implement arbitrary-precision arithmetic to overcome the double-precision zoom limit.
 
 ### Engineering and Quality
 - [x] Establish a strict Engine-Centric Monorepo architecture, isolating platform rendering from core mathematical logic.
