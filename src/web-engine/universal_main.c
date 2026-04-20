@@ -120,7 +120,9 @@ static void init(void) {
         .vertex_func.source = vs_src, .fragment_func.source = fs_cpu_src,
         .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0, .glsl_name = "tex" }
     });
+    if (sg_query_shader_state(shd_cpu) != SG_RESOURCESTATE_VALID) printf("[sokol] ERROR: cpu shader failed\n");
     ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_cpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
+    if (sg_query_pipeline_state(ctx.pip_cpu) != SG_RESOURCESTATE_VALID) printf("[sokol] ERROR: cpu pipeline failed\n");
 
     sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
         .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
@@ -135,7 +137,9 @@ static void init(void) {
             }
         }
     });
+    if (sg_query_shader_state(shd_gpu) != SG_RESOURCESTATE_VALID) printf("[sokol] ERROR: gpu shader failed\n");
     ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_gpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
+    if (sg_query_pipeline_state(ctx.pip_gpu) != SG_RESOURCESTATE_VALID) printf("[sokol] ERROR: gpu pipeline failed\n");
 
     ctx.pass_action = (sg_pass_action){ .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = {0,0,0,1} } };
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
