@@ -7,27 +7,43 @@ on:
     branches: [ "master", "main" ]
 
 jobs:
-  build:
+  build-desktop:
     runs-on: ubuntu-latest
-
     steps:
     - uses: actions/checkout@v4
 
     - name: Install dependencies
       run: |
         sudo apt-get update
-        # Only minimal X11/GL libs needed for Sokol on Linux, no SDL/PNG/ZLIB!
-        sudo apt-get install -y libx11-dev libxi-dev libxcursor-dev libgl1-mesa-dev
+        sudo apt-get install -y libx11-dev libxi-dev libxcursor-dev libgl1-mesa-dev libsdl2-dev libsdl2-ttf-dev
 
-    - name: Configure CMake
-      run: cmake -S . -B build -DBUILD_DESKTOP=ON
-
-    - name: Build
-      run: cmake --build build
-
-    - name: Run Tests
+    - name: Build CPU Engine
       run: |
-        cd tests && make
+        cmake -S . -B build-cpu -DBUILD_CPU=ON
+        cmake --build build-cpu
 
-    - name: Help Command Verification (Dry Run)
-      run: ./build/mandelbrot-desktop --help
+    - name: Build GPU Engine
+      run: |
+        cmake -S . -B build-gpu -DBUILD_GPU=ON
+        cmake --build build-gpu
+
+    - name: Run Math Tests
+      run: |
+        cd tests && make && ./test_math
+
+  build-web:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+
+    - name: Build Web Engine
+      run: |
+        emcmake cmake -S . -B build-web -DBUILD_WEB=ON
+        cmake --build build-web
+
+    - name: Verify Web Artifacts
+      run: |
+        ls -l build-web/index.js build-web/index.wasm
