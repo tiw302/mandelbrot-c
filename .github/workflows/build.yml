@@ -1,10 +1,13 @@
-name: Build
+name: Build & Deploy
 
 on:
   push:
     branches: [ "master", "main" ]
   pull_request:
     branches: [ "master", "main" ]
+
+permissions:
+  contents: write
 
 jobs:
   build-desktop:
@@ -31,7 +34,7 @@ jobs:
       run: |
         cd tests && make && ./test_math
 
-  build-web:
+  build-and-deploy-web:
     runs-on: ubuntu-latest
     steps:
     - uses: actions/checkout@v4
@@ -44,6 +47,19 @@ jobs:
         emcmake cmake -S . -B build-web -DBUILD_WEB=ON
         cmake --build build-web
 
-    - name: Verify Web Artifacts
+    - name: Prepare deployment
       run: |
-        ls -l build-web/index.js build-web/index.wasm
+        mkdir -p deploy
+        cp web/index.html deploy/
+        cp build-web/index.js deploy/
+        cp build-web/index.wasm deploy/
+        cp web/coi-serviceworker.js deploy/
+        # Copy assets if needed
+        if [ -d "assets" ]; then cp -r assets deploy/; fi
+
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        folder: deploy
+        branch: gh-pages
