@@ -4,64 +4,53 @@ project(MandelbrotC C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Options
-option(BUILD_WEB "Build for Web" OFF)
+# Options to enable/disable engines
+option(BUILD_CPU "Build CPU-Engine (Desktop)" OFF)
+option(BUILD_GPU "Build GPU-Engine (Desktop)" OFF)
+option(BUILD_WEB "Build Web-Engine (WASM)" OFF)
 
-# Global Include Directories
-include_directories(
-    include
-    src/core
-    src/platform/desktop
-    third_party
-    third_party/sokol
-    third_party/stb
-    third_party/fons
-)
+# Include paths
+# This should make headers like fontstash.h accessible from third_party/fons/
+include_directories(include src/cpu-engine third_party third_party/sokol third_party/stb third_party/fons)
 
-# Common Source Files
-set(CORE_SRC 
-    src/core/mandelbrot.c 
-    src/core/julia.c 
-    src/core/color.c
-)
+# Common core math
+set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/color.c)
 
-set(COMMON_PLATFORM_SRC
-    src/platform/desktop/renderer.c
-    src/platform/desktop/tour.c
-    src/platform/desktop/screenshot.c
-    src/platform/universal_main.c
-)
-
-# --- Native Desktop (Sokol GFX) ---
-if(NOT BUILD_WEB)
+# Helper for system libs
+macro(find_system_libs target)
     if(UNIX AND NOT APPLE)
-        set(SYS_LIBS X11 Xi Xcursor GL dl pthread m)
+        target_link_libraries(${target} PRIVATE X11 Xi Xcursor GL dl pthread m)
     elseif(APPLE)
-        set(SYS_LIBS "-framework Cocoa -framework QuartzCore -framework Metal -framework MetalKit")
+        target_link_libraries(${target} PRIVATE "-framework Cocoa -framework QuartzCore -framework Metal -framework MetalKit")
     elseif(WIN32)
-        set(SYS_LIBS user32 gdi32 shell32)
+        target_link_libraries(${target} PRIVATE user32 gdi32 shell32)
     endif()
+endmacro()
 
-    add_executable(mandelbrot-desktop ${CORE_SRC} ${COMMON_PLATFORM_SRC})
-    target_compile_options(mandelbrot-desktop PRIVATE -mavx2 -mfma -pthread)
-    target_link_libraries(mandelbrot-desktop PRIVATE ${SYS_LIBS})
+# --- 1. CPU Engine ---
+if(BUILD_CPU)
+    # Ensure universal_main.c is NOT included here. Added main.c for CPU.
+    add_executable(mandelbrot-cpu ${CORE_SRC} src/cpu-engine/renderer.c src/cpu-engine/tour.c src/cpu-engine/screenshot.c src/cpu-engine/main.c)
+    target_compile_definitions(mandelbrot-cpu PRIVATE SOKOL_GLCORE)
+    target_compile_options(mandelbrot-cpu PRIVATE -mavx2 -mfma -pthread)
+    find_system_libs(mandelbrot-cpu)
+    target_link_libraries(mandelbrot-cpu PRIVATE SDL2 SDL2_ttf m)
 endif()
 
-# --- Web Target (Sokol GFX) ---
-if(BUILD_WEB)
-    if(NOT EMSCRIPTEN)
-        message(FATAL_ERROR "Use emcmake for web build")
-    endif()
+# --- 2. GPU Engine ---
+if(BUILD_GPU)
+    add_executable(mandelbrot-gpu ${CORE_SRC} src/cpu-engine/renderer.c src/cpu-engine/tour.c src/cpu-engine/screenshot.c src/gpu-engine/gpu_main.c)
+    target_compile_definitions(mandelbrot-gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
+    target_compile_options(mandelbrot-gpu PRIVATE -mavx2 -mfma -pthread)
+    find_system_libs(mandelbrot-gpu)
+endif()
 
-    add_executable(mandelbrot-web ${CORE_SRC} ${COMMON_PLATFORM_SRC})
-    target_compile_options(mandelbrot-web PRIVATE -msimd128 -D__wasm_simd128__)
-    target_link_options(mandelbrot-web PRIVATE 
-        "-s WASM=1"
-        "-s ALLOW_MEMORY_GROWTH=1"
-        "-s MAX_WEBGL_VERSION=2"
-        "-pthread"
-        "-s PTHREAD_POOL_SIZE=navigator.hardwareConcurrency"
-        "--shell-file ${CMAKE_CURRENT_SOURCE_DIR}/web/index.html"
-    )
+# --- 3. Web Engine ---
+if(BUILD_WEB)
+    # Ensure only web-specific sources are included here. Headers are handled by include_directories and #include directives.
+    add_executable(mandelbrot-web ${CORE_SRC} src/cpu-engine/renderer.c src/cpu-engine/tour.c src/web-engine/universal_main.c)
+    target_compile_definitions(mandelbrot-web PRIVATE SOKOL_GLES3)
+    target_compile_options(mandelbrot-web PRIVATE -msimd128 -D__wasm_simd128__ -pthread)
+    target_link_options(mandelbrot-web PRIVATE "-sWASM=1" "-sALLOW_MEMORY_GROWTH=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-pthread" "-sPTHREAD_POOL_SIZE=navigator.hardwareConcurrency" "--shell-file=${CMAKE_CURRENT_SOURCE_DIR}/web/index.html")
     set_target_properties(mandelbrot-web PROPERTIES OUTPUT_NAME "index")
 endif()
