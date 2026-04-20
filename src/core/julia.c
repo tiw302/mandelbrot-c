@@ -52,7 +52,6 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        // next z
         double next_re = z.re * z.re - z.im * z.im + c.re;
         double next_im = 2 * z.re * z.im + c.im;
         z.re = next_re;

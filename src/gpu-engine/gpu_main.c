@@ -189,7 +189,7 @@ static void frame(void) {
         sdtx_origin(2.0f, 2.0f);
         sdtx_color3b(255, 255, 255);
 
-        // Draw info box similar to 3.0.0
+        // info box
         sdtx_printf("%s | %s | Threads: %d\n", 
             ctx.gpu_mode ? "GPU" : "CPU",
             ctx.julia_mode ? "JULIA" : "MANDELBROT",

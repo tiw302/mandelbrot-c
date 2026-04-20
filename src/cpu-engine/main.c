@@ -85,16 +85,16 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // store view state
+    // view state
     ViewState view          = {INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
     ViewState history[MAX_HISTORY_SIZE];
     int       history_count = 0;
 
-    // store touring state
+    // tour state
     TourState      m_tour = {TOUR_IDLE, 0,0,0, 0,0,0, 0, -1};
     JuliaTourState j_tour = {JULIA_TOUR_IDLE, 0,0, 0,0, 0, -1};
 
-    // store julia mode state
+    // julia state
     int          julia_mode    = 0;
     complex_t    julia_c       = {-0.7, 0.27};
     JuliaSession julia_session = {{0}, 0};
@@ -126,7 +126,7 @@ int main(int argc, char *argv[]) {
                     win_w = event.window.data1;
                     win_h = event.window.data2;
 
-                    // safety check for window dimensions
+                    // safety check
                     if (win_w < 1) win_w = 1;
                     if (win_h < 1) win_h = 1;
 
@@ -248,7 +248,7 @@ int main(int argc, char *argv[]) {
                             view.center_im = m_tour.home_im;
                             view.zoom      = m_tour.home_zoom;
 
-                            m_tour.phase       = TOUR_ZOOMING_OUT; // will reset to panning
+                            m_tour.phase       = TOUR_ZOOMING_OUT;
                             m_tour.phase_start = SDL_GetTicks() - 10000; 
                             SDL_SetWindowTitle(window, "Mandelbrot Explorer  [Auto-Zoom]");
                         } else {
@@ -405,7 +405,7 @@ int main(int argc, char *argv[]) {
             if (m_tour.phase != TOUR_IDLE) num_lines++;
             if (j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
 
-            // draw transparent background
+            // info box
             SDL_Rect bg = {2, 2, 450, num_lines * line_h + 6};
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 160);

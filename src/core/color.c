@@ -44,7 +44,7 @@ void init_color_palette(int max_iterations, int palette_idx) {
             break;
         }
     }
-    // set points are black
+    // set black
     color_lut[max_iterations][0] = 0;
     color_lut[max_iterations][1] = 0;
     color_lut[max_iterations][2] = 0;
@@ -62,7 +62,7 @@ void get_color(double iterations, int max_iterations, uint8_t *r, uint8_t *g, ui
     int i = (int)iterations;
     double t = iterations - i;
 
-    // interpolate colors for smoothness
+    // interpolate
     int i2 = i + 1;
     if (i2 > max_iterations) i2 = max_iterations;
 

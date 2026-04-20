@@ -71,7 +71,7 @@ typedef struct {
 
 static GlobalCtx ctx;
 
-// shaders (GLES2 / WebGL1 compatible)
+// shaders
 static const char* vs_src = 
     "attribute vec2 pos; attribute vec2 uv_in; varying vec2 uv; "
     "void main() { gl_Position = vec4(pos, 0.0, 1.0); uv = uv_in; }";
