@@ -2,23 +2,11 @@
 #define MANDELBROT_H
 
 #include "config.h"
+#include "core_math.h"
 
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
-
-#ifdef __AVX2__
-#include <immintrin.h>
-#endif
-
-typedef struct {
-    double re;
-    double im;
-} complex_t;
-
-// get iteration count for mandelbrot point
-// returns max_iterations if it's in the set
-double mandelbrot_check(complex_t c, int max_iterations);
 
 #ifdef __AVX2__
 // simd version: process 4 pixels at once

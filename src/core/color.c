@@ -1,6 +1,6 @@
 #include "color.h"
 #include <math.h>
-#include "../include/config.h"
+#include "config.h"
 
 static uint8_t color_lut[MAX_ITERATIONS_LIMIT + 1][3];
 
