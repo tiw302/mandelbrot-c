@@ -11,7 +11,7 @@ option(BUILD_WEB "Build Web-Engine (WASM)" OFF)
 
 # Include paths
 # This should make headers like fontstash.h accessible from third_party/fons/
-include_directories(include src/cpu-engine third_party third_party/sokol third_party/stb third_party/fons)
+include_directories(include src/engine third_party third_party/sokol third_party/stb third_party/fons)
 
 # Common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/color.c)
@@ -29,8 +29,8 @@ endmacro()
 
 # --- 1. CPU Engine ---
 if(BUILD_CPU)
-    # Ensure universal_main.c is NOT included here. Added main.c for CPU.
-    add_executable(mandelbrot-cpu ${CORE_SRC} src/cpu-engine/renderer.c src/cpu-engine/tour.c src/cpu-engine/screenshot.c src/cpu-engine/main.c)
+    # Ensure web_main.c is NOT included here. Added desktop_cpu_main.c for CPU.
+    add_executable(mandelbrot-cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_cpu_main.c)
     target_compile_definitions(mandelbrot-cpu PRIVATE SOKOL_GLCORE)
     target_compile_options(mandelbrot-cpu PRIVATE -mavx2 -mfma -pthread)
     find_system_libs(mandelbrot-cpu)
@@ -39,7 +39,7 @@ endif()
 
 # --- 2. GPU Engine ---
 if(BUILD_GPU)
-    add_executable(mandelbrot-gpu ${CORE_SRC} src/cpu-engine/renderer.c src/cpu-engine/tour.c src/cpu-engine/screenshot.c src/gpu-engine/gpu_main.c)
+    add_executable(mandelbrot-gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_gpu_main.c)
     target_compile_definitions(mandelbrot-gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
     target_compile_options(mandelbrot-gpu PRIVATE -mavx2 -mfma -pthread)
     find_system_libs(mandelbrot-gpu)
@@ -48,7 +48,7 @@ endif()
 # --- 3. Web Engine ---
 if(BUILD_WEB)
     # Ensure only web-specific sources are included here. Headers are handled by include_directories and #include directives.
-    add_executable(mandelbrot-web ${CORE_SRC} src/cpu-engine/renderer.c src/cpu-engine/tour.c src/web-engine/universal_main.c)
+    add_executable(mandelbrot-web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/app/web_main.c)
     target_compile_definitions(mandelbrot-web PRIVATE SOKOL_GLES3)
     target_compile_options(mandelbrot-web PRIVATE -msimd128 -D__wasm_simd128__ -pthread)
     target_link_options(mandelbrot-web PRIVATE "-sWASM=1" "-sALLOW_MEMORY_GROWTH=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-pthread" "-sPTHREAD_POOL_SIZE=navigator.hardwareConcurrency")
