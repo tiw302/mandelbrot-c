@@ -242,8 +242,9 @@
             statusText.style.color = "#ff5555";
         };
 
-        // check for webgl2 support
-        const gl = canvas.getContext('webgl2');
+        // check for webgl2 support using a temporary canvas so we don't steal the context from sokol
+        const tempCanvas = document.createElement('canvas');
+        const gl = tempCanvas.getContext('webgl2');
         if (!gl) {
             statusText.textContent = "error: webgl 2.0 not supported.";
             statusText.style.color = "#ff5555";
