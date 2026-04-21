@@ -1,69 +1,56 @@
 #!/bin/bash
 
-# professional build script for mandelbrot-c
-# supports both interactive menu and command line arguments
-
 build_cpu() {
-    echo "building cpu-engine..."
     cmake -S . -B build-cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
     cmake --build build-cpu
-    echo "done. run: ./build-cpu/mandelbrot-cpu"
 }
 
 build_gpu() {
-    echo "building gpu-engine..."
     cmake -S . -B build-gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
     cmake --build build-gpu
-    echo "done. run: ./build-gpu/mandelbrot-gpu"
 }
 
 build_web() {
-    echo "building web-engine..."
-    if ! command -v emcmake &> /dev/null; then
-        echo "error: emscripten not found. please install emsdk."
-        exit 1
-    fi
-    emcmake cmake -S . -B build-web -DBUILD_WEB=ON
+    cmake -S . -B build-web -DBUILD_WEB=ON
     cmake --build build-web
-    echo "done. serving from build-web..."
-    echo "skipping server.py"
+}
+
+build_all() {
+    build_cpu && build_gpu && build_web
 }
 
 clean() {
-    echo "cleaning..."
     rm -rf build-cpu build-gpu build-web build
-    echo "cleaned."
 }
 
-# check for command line arguments
 if [ $# -gt 0 ]; then
     case "$1" in
         cpu)   build_cpu ;;
         gpu)   build_gpu ;;
         web)   build_web ;;
+        all)   build_all ;;
         clean) clean ;;
-        *)     echo "usage: $0 {cpu|gpu|web|clean}"; exit 1 ;;
+        *)     echo "usage: $0 {cpu|gpu|web|all|clean}" ;;
     esac
     exit 0
 fi
 
-# interactive menu (if no arguments provided)
-echo "========================================"
-echo "    mandelbrot engine build menu"
-echo "========================================"
-echo "1) build cpu-engine (desktop/accurate)"
-echo "2) build gpu-engine (desktop/fast)"
-echo "3) build web-engine (wasm/sokol)"
-echo "4) clean build artifacts"
-echo "q) quit"
-echo "----------------------------------------"
-read -p "select option [1-4]: " choice
+echo "mandelbrot engine build"
+echo ""
+echo "  1) cpu"
+echo "  2) gpu"
+echo "  3) web"
+echo "  4) build all"
+echo "  5) clean"
+echo "  q) quit"
+echo ""
+read -p ">> " choice
 
 case $choice in
     1) build_cpu ;;
     2) build_gpu ;;
     3) build_web ;;
-    4) clean ;;
+    4) build_all ;;
+    5) clean ;;
     q) exit 0 ;;
-    *) echo "invalid option."; exit 1 ;;
 esac
