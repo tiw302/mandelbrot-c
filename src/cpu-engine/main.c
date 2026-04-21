@@ -22,9 +22,9 @@ typedef struct {
 #define JULIA_ZOOM        4.0
 
 static void calculate_boundaries(double center_re, double center_im, double zoom,
-                                  int width, int height,
-                                  double *re_min, double *re_max,
-                                  double *im_min, double *im_max);
+                                int width, int height,
+                                double *re_min, double *re_max,
+                                double *im_min, double *im_max);
 static void render_text(SDL_Renderer *renderer, TTF_Font *font,
                          const char *text, int x, int y, SDL_Color color);
 static TTF_Font *load_font(void);
@@ -62,11 +62,10 @@ int main(int argc, char *argv[]) {
 
     TTF_Font *font = load_font();
 
-
     SDL_Renderer *renderer = SDL_CreateRenderer(
         window, -1, SDL_RENDERER_ACCELERATED | SDL_RENDERER_PRESENTVSYNC);
     if (!renderer) {
-        fprintf(stderr, "Fatal: SDL_CreateRenderer failed: %s\n", SDL_GetError());
+        fprintf(stderr, "fatal: sdl_CreateRenderer failed: %s\n", SDL_GetError());
         SDL_DestroyWindow(window);
         if (font) TTF_CloseFont(font);
         TTF_Quit(); SDL_Quit();
@@ -77,7 +76,7 @@ int main(int argc, char *argv[]) {
         renderer, SDL_PIXELFORMAT_ARGB8888,
         SDL_TEXTUREACCESS_STREAMING, win_w, win_h);
     if (!texture) {
-        fprintf(stderr, "Fatal: SDL_CreateTexture failed: %s\n", SDL_GetError());
+        fprintf(stderr, "fatal: sdl_CreateTexture failed: %s\n", SDL_GetError());
         SDL_DestroyRenderer(renderer);
         SDL_DestroyWindow(window);
         if (font) TTF_CloseFont(font);
@@ -85,16 +84,13 @@ int main(int argc, char *argv[]) {
         return 1;
     }
 
-    // view state
     ViewState view          = {INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
     ViewState history[MAX_HISTORY_SIZE];
     int       history_count = 0;
 
-    // tour state
     TourState      m_tour = {TOUR_IDLE, 0,0,0, 0,0,0, 0, -1};
     JuliaTourState j_tour = {JULIA_TOUR_IDLE, 0,0, 0,0, 0, -1};
 
-    // julia state
     int          julia_mode    = 0;
     complex_t    julia_c       = {-0.7, 0.27};
     JuliaSession julia_session = {{0}, 0};
@@ -126,7 +122,6 @@ int main(int argc, char *argv[]) {
                     win_w = event.window.data1;
                     win_h = event.window.data2;
 
-                    // safety check
                     if (win_w < 1) win_w = 1;
                     if (win_h < 1) win_h = 1;
 
@@ -134,7 +129,7 @@ int main(int argc, char *argv[]) {
                     texture = SDL_CreateTexture(renderer, SDL_PIXELFORMAT_ARGB8888,
                                                 SDL_TEXTUREACCESS_STREAMING, win_w, win_h);
                     if (!texture) {
-                        fprintf(stderr, "Warning: failed to re-create texture during resize\n");
+                        fprintf(stderr, "warning: failed to re-create texture during resize\n");
                     }
                     needs_redraw = 1;
                 }
@@ -222,13 +217,10 @@ int main(int argc, char *argv[]) {
 
                     if (julia_mode) {
                         if (j_tour.phase == JULIA_TOUR_IDLE) {
-                            j_tour.from_re    = julia_c.re;
-                            j_tour.from_im    = julia_c.im;
-                            j_tour.phase      = JULIA_TOUR_DWELLING;
-                            j_tour.phase_start = SDL_GetTicks();
+                            start_julia_tour(&j_tour, &julia_c, SDL_GetTicks());
                             SDL_SetWindowTitle(window, "Julia Explorer  [Auto-c]");
                         } else {
-                            j_tour.phase = JULIA_TOUR_IDLE;
+                            stop_julia_tour(&j_tour);
                             SDL_SetWindowTitle(window, "Julia Explorer");
                             needs_redraw = 1;
                         }
@@ -239,20 +231,11 @@ int main(int argc, char *argv[]) {
                             julia_session.active = 0;
                             history_count        = 0;
 
-                            m_tour.home_re   = INITIAL_CENTER_RE;
-                            m_tour.home_im   = INITIAL_CENTER_IM;
-                            m_tour.home_zoom = INITIAL_ZOOM;
-                            m_tour.deep_zoom = INITIAL_ZOOM / 6000.0; // TOUR_ZOOM_DEPTH
-
-                            view.center_re = m_tour.home_re;
-                            view.center_im = m_tour.home_im;
-                            view.zoom      = m_tour.home_zoom;
-
-                            m_tour.phase       = TOUR_ZOOMING_OUT;
-                            m_tour.phase_start = SDL_GetTicks() - 10000; 
+                            view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+                            start_tour(&m_tour, &view);
                             SDL_SetWindowTitle(window, "Mandelbrot Explorer  [Auto-Zoom]");
                         } else {
-                            m_tour.phase    = TOUR_IDLE;
+                            stop_tour(&m_tour);
                             view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                             history_count = 0;
                             SDL_SetWindowTitle(window, "Mandelbrot Explorer");
@@ -286,14 +269,14 @@ int main(int argc, char *argv[]) {
 
             case SDL_MOUSEBUTTONDOWN:
                 if (m_tour.phase != TOUR_IDLE) {
-                    m_tour.phase    = TOUR_IDLE;
+                    stop_tour(&m_tour);
                     view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                     history_count = 0;
                     SDL_SetWindowTitle(window, "Mandelbrot Explorer");
                     needs_redraw  = 1;
                 }
                 if (j_tour.phase != JULIA_TOUR_IDLE) {
-                    j_tour.phase = JULIA_TOUR_IDLE;
+                    stop_julia_tour(&j_tour);
                     SDL_SetWindowTitle(window, "Julia Explorer");
                 }
                 if (event.button.button == SDL_BUTTON_RIGHT) {
@@ -372,7 +355,7 @@ int main(int argc, char *argv[]) {
 
             double re_min, re_max, im_min, im_max;
             calculate_boundaries(view.center_re, view.center_im, view.zoom,
-                                  win_w, win_h, &re_min, &re_max, &im_min, &im_max);
+                              win_w, win_h, &re_min, &re_max, &im_min, &im_max);
 
             if (julia_mode)
                 render_julia_threaded(pixels, pitch, win_w, win_h,
@@ -405,19 +388,18 @@ int main(int argc, char *argv[]) {
             if (m_tour.phase != TOUR_IDLE) num_lines++;
             if (j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
 
-            // info box
             SDL_Rect bg = {2, 2, 450, num_lines * line_h + 6};
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 160);
             SDL_RenderFillRect(renderer, &bg);
 
-            snprintf(buf, sizeof(buf), "%s | Render: %u ms | Threads: %d",
-                     julia_mode ? "JULIA" : "MANDELBROT", render_time, get_actual_thread_count());
+            snprintf(buf, sizeof(buf), "%s | render: %u ms | threads: %d",
+                     julia_mode ? "julia" : "mandelbrot", render_time, get_actual_thread_count());
             render_text(renderer, font, buf, 5, y, white); y += line_h;
-            snprintf(buf, sizeof(buf), "Center: (%.12f, %.12f)",
+            snprintf(buf, sizeof(buf), "center: (%.12f, %.12f)",
                      view.center_re, view.center_im);
             render_text(renderer, font, buf, 5, y, white); y += line_h;
-            snprintf(buf, sizeof(buf), "Zoom: %.6g | Iterations: %d | Palette: %s",
+            snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
                      view.zoom, max_iterations, PALETTE_NAMES[palette_idx]);
             render_text(renderer, font, buf, 5, y, white); y += line_h;
             if (julia_mode) {
@@ -425,12 +407,12 @@ int main(int argc, char *argv[]) {
                 render_text(renderer, font, buf, 5, y, white); y += line_h;
             }
             if (m_tour.phase != TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "Auto-Zoom [%s]  target #%d",
+                snprintf(buf, sizeof(buf), "auto-zoom [%s]  target #%d",
                          get_tour_phase_name(m_tour.phase), get_tour_target_idx(&m_tour) + 1);
                 render_text(renderer, font, buf, 5, y, white); y += line_h;
             }
             if (j_tour.phase != JULIA_TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "Auto-c [%s]  #%d  (%.4f, %.4f)",
+                snprintf(buf, sizeof(buf), "auto-c [%s]  #%d  (%.4f, %.4f)",
                          j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
                          get_julia_tour_target_idx(&j_tour) + 1,
                          julia_c.re, julia_c.im);
@@ -452,9 +434,9 @@ int main(int argc, char *argv[]) {
 }
 
 static void calculate_boundaries(double center_re, double center_im, double zoom,
-                                   int width, int height,
-                                   double *re_min, double *re_max,
-                                   double *im_min, double *im_max) {
+                               int width, int height,
+                               double *re_min, double *re_max,
+                               double *im_min, double *im_max) {
     if (height <= 0) height = 1;
     double aspect = (double)width / (double)height;
     *im_min = center_im - zoom / 2.0;
@@ -486,17 +468,17 @@ static TTF_Font *load_font(void) {
 }
 
 static void print_controls(void) {
-    puts("Mandelbrot Explorer Controls:");
-    puts("  Left Drag       : Zoom into selection");
-    puts("  Right Drag      : Pan");
-    puts("  Mouse Wheel     : Zoom at cursor");
-    puts("  Up / Down       : Adjust iterations (+/- 10, Shift for +/- 100)");
-    puts("  P               : Cycle color palettes");
-    puts("  Ctrl+Z          : Undo zoom");
-    puts("  R               : Reset view / iterations");
-    puts("  J               : Toggle Julia mode");
-    puts("  S               : Save screenshot");
-    puts("  T (Mandelbrot)  : Toggle auto-zoom tour");
-    puts("  T (Julia)       : Toggle auto-c tour (animates c parameter)");
-    puts("  Q / ESC         : Quit");
+    puts("mandelbrot explorer controls:");
+    puts("  left drag       : zoom into selection");
+    puts("  right drag      : pan");
+    puts("  mouse wheel     : zoom at cursor");
+    puts("  up / down       : adjust iterations (+/- 10, shift for +/- 100)");
+    puts("  p               : cycle color palettes");
+    puts("  ctrl+z          : undo zoom");
+    puts("  r               : reset view / iterations");
+    puts("  j               : toggle julia mode");
+    puts("  s               : save screenshot");
+    puts("  t (mandelbrot)  : toggle auto-zoom tour");
+    puts("  t (julia)       : toggle auto-c tour");
+    puts("  q / esc         : quit");
 }

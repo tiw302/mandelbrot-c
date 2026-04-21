@@ -24,7 +24,6 @@ static int   actual_thread_count = 0;
 static pthread_t      *threads_pool = NULL;
 static thread_data_t  *thread_data_pool = NULL;
 
-// detect cpu cores
 static int get_cpu_cores(void) {
 #if defined(__EMSCRIPTEN__)
     return emscripten_num_logical_cores();
@@ -39,7 +38,6 @@ static int get_cpu_cores(void) {
 #endif
 }
 
-// detect thread count
 static int detect_thread_count(void) {
     int cores = get_cpu_cores();
     int count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
@@ -48,12 +46,10 @@ static int detect_thread_count(void) {
     return count;
 }
 
-// optimal thread count api
 int get_optimal_thread_count(void) {
     return detect_thread_count();
 }
 
-// renderer initialization
 void init_renderer(int max_iterations, int palette_idx) {
     if (actual_thread_count == 0) {
         actual_thread_count = detect_thread_count();
@@ -69,7 +65,6 @@ void init_renderer(int max_iterations, int palette_idx) {
     init_color_palette(max_iterations, palette_idx);
 }
 
-// renderer cleanup
 void cleanup_renderer(void) {
     if (threads_pool) free(threads_pool);
     if (thread_data_pool) free(thread_data_pool);
@@ -78,12 +73,10 @@ void cleanup_renderer(void) {
     actual_thread_count = 0;
 }
 
-// active thread count
 int get_actual_thread_count(void) {
     return actual_thread_count;
 }
 
-// worker thread logic
 void *render_thread(void *arg) {
     thread_data_t *data = (thread_data_t *)arg;
 
@@ -97,7 +90,6 @@ void *render_thread(void *arg) {
         int x = 0;
 
 #ifdef __AVX2__
-        // avx2 processing
         __m256d v_re_min = _mm256_set1_pd(data->re_min);
         __m256d v_re_fac = _mm256_set1_pd(re_factor);
         __m256d v_im_val = _mm256_set1_pd(data->im_min + (double)y * im_factor);
@@ -125,7 +117,6 @@ void *render_thread(void *arg) {
             }
         }
 #elif defined(__wasm_simd128__)
-        // wasm simd128 processing
         for (; x <= data->window_width - 2; x += 2) {
             double res_re[2], res_im[2], iterations[2];
             res_re[0] = data->re_min + (double)x * re_factor;
@@ -146,7 +137,6 @@ void *render_thread(void *arg) {
         }
 #endif
 
-        // fallback scalar processing
         for (; x < data->window_width; x++) {
             complex_t point;
             point.re = data->re_min + (double)x * re_factor;
@@ -168,7 +158,6 @@ void *render_thread(void *arg) {
     return NULL;
 }
 
-// thread dispatcher
 static void dispatch_threads(uint32_t *pixels, int pitch,
                               int window_width, int window_height,
                               double re_min, double re_max,
@@ -204,7 +193,6 @@ static void dispatch_threads(uint32_t *pixels, int pitch,
     for (int i = 0; i < actual_thread_count; i++) pthread_join(threads_pool[i], NULL);
 }
 
-// mandelbrot api
 void render_mandelbrot_threaded(uint32_t *pixels, int pitch,
                                 int window_width, int window_height,
                                 double re_min, double re_max,
@@ -216,7 +204,6 @@ void render_mandelbrot_threaded(uint32_t *pixels, int pitch,
                      RENDER_MANDELBROT, dummy, max_iterations);
 }
 
-// julia api
 void render_julia_threaded(uint32_t *pixels, int pitch,
                            int window_width, int window_height,
                            double re_min, double re_max,

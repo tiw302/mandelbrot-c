@@ -9,12 +9,10 @@
 #endif
 
 #ifdef __AVX2__
-// simd version: process 4 pixels at once
 void mandelbrot_check_avx2(const double *re, const double *im, int max_iterations, double *results);
 #endif
 
 #ifdef __wasm_simd128__
-// wasm simd path
 void mandelbrot_check_wasm_simd128(const double *re, const double *im, int max_iterations, double *results);
 #endif
 

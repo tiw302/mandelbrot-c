@@ -11,30 +11,30 @@ const char *PALETTE_NAMES[PALETTE_COUNT] = {
 void init_color_palette(int max_iterations, int palette_idx) {
     for (int i = 0; i < max_iterations; i++) {
         switch (palette_idx) {
-        case 0: // sine wave
+        case 0:
             color_lut[i][0] = (uint8_t)(sin(0.1 * i + 0) * 127 + 128);
             color_lut[i][1] = (uint8_t)(sin(0.1 * i + 2) * 127 + 128);
             color_lut[i][2] = (uint8_t)(sin(0.1 * i + 4) * 127 + 128);
             break;
-        case 1: // grayscale
+        case 1:
             color_lut[i][0] = color_lut[i][1] = color_lut[i][2] = (uint8_t)(i % 256);
             break;
-        case 2: // fire
+        case 2:
             color_lut[i][0] = (uint8_t)fmin(255, i * 4);
             color_lut[i][1] = (uint8_t)fmin(255, i * 2);
             color_lut[i][2] = (uint8_t)fmin(255, i * 1);
             break;
-        case 3: // electric
+        case 3:
             color_lut[i][0] = (uint8_t)fmin(255, i * 1);
             color_lut[i][1] = (uint8_t)fmin(255, i * 4);
             color_lut[i][2] = (uint8_t)fmin(255, i * 8);
             break;
-        case 4: // ocean
+        case 4:
             color_lut[i][0] = (uint8_t)fmin(255, i * 0.5);
             color_lut[i][1] = (uint8_t)fmin(255, i * 2);
             color_lut[i][2] = (uint8_t)fmin(255, i * 5);
             break;
-        case 5: // inferno
+        case 5:
             color_lut[i][0] = (uint8_t)fmin(255, i * 8);
             color_lut[i][1] = (uint8_t)fmin(255, i * 2);
             color_lut[i][2] = (uint8_t)fmin(255, i * 0.5);
@@ -44,7 +44,6 @@ void init_color_palette(int max_iterations, int palette_idx) {
             break;
         }
     }
-    // set black
     color_lut[max_iterations][0] = 0;
     color_lut[max_iterations][1] = 0;
     color_lut[max_iterations][2] = 0;
@@ -62,7 +61,6 @@ void get_color(double iterations, int max_iterations, uint8_t *r, uint8_t *g, ui
     int i = (int)iterations;
     double t = iterations - i;
 
-    // interpolate
     int i2 = i + 1;
     if (i2 > max_iterations) i2 = max_iterations;
 

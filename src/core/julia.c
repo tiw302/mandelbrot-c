@@ -59,7 +59,6 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
 
         double mag_sq = z.re * z.re + z.im * z.im;
         if (mag_sq > escape_radius_sq) {
-            // smooth color
             return (double)iterations + 2.0 - log2(log(mag_sq));
         }
 

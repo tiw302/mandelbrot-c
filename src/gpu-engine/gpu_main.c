@@ -71,7 +71,6 @@ typedef struct {
 
 static GlobalCtx ctx;
 
-// shaders
 static const char* vs_src = 
     "#version 330\n"
     "layout(location=0) in vec2 pos; layout(location=1) in vec2 uv_in; out vec2 uv; "
@@ -118,7 +117,6 @@ static void init(void) {
     ctx.smp = sg_make_sampler(&(sg_sampler_desc){ .min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR });
     ctx.bind.views[0] = ctx.img_view; ctx.bind.samplers[0] = ctx.smp;
 
-    // pipelines
     sg_shader shd_cpu = sg_make_shader(&(sg_shader_desc){
         .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
         .vertex_func.source = vs_src, .fragment_func.source = fs_cpu_src,
@@ -189,16 +187,15 @@ static void frame(void) {
         sdtx_origin(2.0f, 2.0f);
         sdtx_color3b(255, 255, 255);
 
-        // info box
-        sdtx_printf("%s | %s | Threads: %d\n", 
-            ctx.gpu_mode ? "GPU" : "CPU",
-            ctx.julia_mode ? "JULIA" : "MANDELBROT",
+        sdtx_printf("%s | %s | threads: %d\n", 
+            ctx.gpu_mode ? "gpu" : "cpu",
+            ctx.julia_mode ? "julia" : "mandelbrot",
             get_actual_thread_count());
-        sdtx_printf("Center: (%.10f, %.10f)\n", ctx.view.center_re, ctx.view.center_im);
-        sdtx_printf("Zoom: %.6g | Iters: %d\n", ctx.view.zoom, ctx.max_iterations);
+        sdtx_printf("center: (%.10f, %.10f)\n", ctx.view.center_re, ctx.view.center_im);
+        sdtx_printf("zoom: %.6g | iters: %d\n", ctx.view.zoom, ctx.max_iterations);
         
         if (ctx.m_tour.phase != TOUR_IDLE) {
-            sdtx_printf("Auto-Tour Active\n");
+            sdtx_printf("auto-tour active\n");
         }
         sdtx_draw();
     }

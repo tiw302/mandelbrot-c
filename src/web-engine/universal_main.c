@@ -38,13 +38,13 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
     }
 }
 
-// uniform block for gpu rendering
 typedef struct {
     float center[2];
     float zoom;
     float iters;
     float aspect;
-    float _pad[3];
+    float julia_c[2];
+    float is_julia;
 } params_t;
 
 typedef struct {
@@ -73,7 +73,6 @@ typedef struct {
 
 static GlobalCtx ctx;
 
-// shaders updated for gles3 / webgl2
 static const char* vs_src = 
     "#version 300 es\n"
     "precision highp float;\n"
@@ -98,10 +97,12 @@ static const char* fs_cpu_src =
 static const char* fs_gpu_src =
     "#version 300 es\n"
     "precision highp float;\n"
-    "uniform vec2 center;\n"
-    "uniform float zoom;\n"
-    "uniform float iters;\n"
-    "uniform float aspect;\n"
+    "uniform vec2 u_center;\n"
+    "uniform float u_zoom;\n"
+    "uniform float u_iters;\n"
+    "uniform float u_aspect;\n"
+    "uniform vec2 u_julia_c;\n"
+    "uniform float u_is_julia;\n"
     "in vec2 uv;\n"
     "out vec4 frag_color;\n"
     "vec3 hsv2rgb(vec3 c) {\n"
@@ -110,29 +111,27 @@ static const char* fs_gpu_src =
     "    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);\n"
     "}\n"
     "void main() {\n"
-    "    // calculate complex plane coordinates\n"
-    "    vec2 c = vec2((uv.x - 0.5) * zoom * aspect + center.x, (0.5 - uv.y) * zoom + center.y);\n"
-    "    vec2 z = vec2(0.0);\n"
-    "    float i = 0.0;\n"
-    "    // escape time loop\n"
-    "    for (int j = 0; j < 2000; j++) {\n"
-    "        if (float(j) >= iters) break;\n"
+    "    vec2 p = vec2((uv.x - 0.5) * u_zoom * u_aspect + u_center.x, (0.5 - uv.y) * u_zoom + u_center.y);\n"
+    "    vec2 c_val = (u_is_julia > 0.5) ? u_julia_c : p;\n"
+    "    vec2 z = (u_is_julia > 0.5) ? p : vec2(0.0);\n"
+    "    int m = int(u_iters);\n"
+    "    int i = 0;\n"
+    "    for (i = 0; i < 2000; i++) {\n"
+    "        if (i >= m) break;\n"
     "        float x2 = z.x * z.x, y2 = z.y * z.y;\n"
     "        if (x2 + y2 > 4.0) break;\n"
-    "        z = vec2(x2 - y2 + c.x, 2.0 * z.x * z.y + c.y);\n"
-    "        i = float(j);\n"
+    "        z = vec2(x2 - y2 + c_val.x, 2.0 * z.x * z.y + c_val.y);\n"
     "    }\n"
-    "    // smooth coloring\n"
-    "    if (i >= iters - 1.0) {\n"
+    "    if (i >= m) {\n"
     "        frag_color = vec4(0.0, 0.0, 0.0, 1.0);\n"
     "    } else {\n"
-    "        float s = i + 1.0 - log2(log(length(z) + 0.0001));\n"
+    "        float dist = length(z);\n"
+    "        float s = float(i) + 1.0 - log2(log(dist + 0.00001));\n"
     "        frag_color = vec4(hsv2rgb(vec3(fract(s * 0.05), 0.8, 1.0)), 1.0);\n"
     "    }\n"
     "}\n";
 
 static void init(void) {
-    // initialize sokol_gfx
     sg_setup(&(sg_desc){ 
         .environment = sglue_environment(), 
         .logger.func = slog_func 
@@ -141,15 +140,14 @@ static void init(void) {
 
     ctx.win_w = sapp_width(); 
     ctx.win_h = sapp_height();
+    if (ctx.win_w <= 0) ctx.win_w = 1024;
+    if (ctx.win_h <= 0) ctx.win_h = 768;
     
-    // allocate pixel buffer for cpu fallback
     ctx.pixels = (uint32_t*) malloc((size_t)ctx.win_w * ctx.win_h * 4);
     if (!ctx.pixels) {
         printf("[sokol] fatal: failed to allocate pixel buffer\n");
-        return;
     }
 
-    // full-screen quad
     float verts[] = { 
         -1.0f,  1.0f, 0.0f, 0.0f, 
          1.0f,  1.0f, 1.0f, 0.0f, 
@@ -160,11 +158,10 @@ static void init(void) {
     
     uint16_t idx[] = { 0, 1, 2, 0, 2, 3 };
     ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){ 
-        .usage = { .index_buffer = true, .immutable = true }, 
+        .usage = { .index_buffer = true }, 
         .data = SG_RANGE(idx) 
     });
 
-    // dynamic texture for cpu rendering
     ctx.img = sg_make_image(&(sg_image_desc){ 
         .width = ctx.win_w, 
         .height = ctx.win_h, 
@@ -180,33 +177,27 @@ static void init(void) {
     ctx.bind.views[0] = ctx.img_view; 
     ctx.bind.samplers[0] = ctx.smp;
 
-    // shader creation with error logging
     sg_shader shd_cpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos", 
+        .attrs[0].glsl_name = "pos",
         .attrs[1].glsl_name = "uv_in",
         .vertex_func.source = vs_src, 
         .fragment_func.source = fs_cpu_src,
         .texture_sampler_pairs[0] = { 
-            .stage = SG_SHADERSTAGE_FRAGMENT, 
-            .view_slot = 0, 
-            .sampler_slot = 0, 
-            .glsl_name = "tex" 
+            .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0, .glsl_name = "tex" 
         }
     });
     
-    if (shd_cpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create cpu shader\n");
-    
     ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){ 
         .shader = shd_cpu, 
-        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, 
-        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, 
+        .layout = {
+            .attrs[0] = { .format = SG_VERTEXFORMAT_FLOAT2 },
+            .attrs[1] = { .format = SG_VERTEXFORMAT_FLOAT2 }
+        },
         .index_type = SG_INDEXTYPE_UINT16 
     });
     
-    if (ctx.pip_cpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create cpu pipeline\n");
-
     sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos", 
+        .attrs[0].glsl_name = "pos",
         .attrs[1].glsl_name = "uv_in",
         .vertex_func.source = vs_src, 
         .fragment_func.source = fs_gpu_src,
@@ -214,30 +205,31 @@ static void init(void) {
             .stage = SG_SHADERSTAGE_FRAGMENT, 
             .size = sizeof(params_t),
             .glsl_uniforms = { 
-                [0] = { .glsl_name = "center", .type = SG_UNIFORMTYPE_FLOAT2 }, 
-                [1] = { .glsl_name = "zoom", .type = SG_UNIFORMTYPE_FLOAT }, 
-                [2] = { .glsl_name = "iters", .type = SG_UNIFORMTYPE_FLOAT }, 
-                [3] = { .glsl_name = "aspect", .type = SG_UNIFORMTYPE_FLOAT } 
+                { .glsl_name = "u_center", .type = SG_UNIFORMTYPE_FLOAT2 }, 
+                { .glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT }, 
+                { .glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT }, 
+                { .glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT },
+                { .glsl_name = "u_julia_c", .type = SG_UNIFORMTYPE_FLOAT2 },
+                { .glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT }
             }
         }
     });
     
-    if (shd_gpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create gpu shader\n");
-    
     ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){ 
         .shader = shd_gpu, 
-        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, 
-        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, 
+        .layout = {
+            .attrs[0] = { .format = SG_VERTEXFORMAT_FLOAT2 },
+            .attrs[1] = { .format = SG_VERTEXFORMAT_FLOAT2 }
+        },
         .index_type = SG_INDEXTYPE_UINT16 
     });
-    
-    if (ctx.pip_gpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create gpu pipeline\n");
 
     ctx.pass_action = (sg_pass_action){ 
         .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = {0,0,0,1} } 
     };
     
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    ctx.julia_c = (complex_t){ -0.8, 0.156 }; 
     ctx.max_iterations = DEFAULT_ITERATIONS; 
     ctx.needs_redraw = 1; 
     
@@ -264,7 +256,12 @@ static void frame(void) {
         rmin = ctx.view.center_re - (ctx.view.zoom * aspect)/2; 
         rmax = ctx.view.center_re + (ctx.view.zoom * aspect)/2;
         
-        render_mandelbrot_threaded(ctx.pixels, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, imin, imax, ctx.max_iterations);
+        if (ctx.julia_mode) {
+            render_julia_threaded(ctx.pixels, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, imin, imax, ctx.julia_c, ctx.max_iterations);
+        } else {
+            render_mandelbrot_threaded(ctx.pixels, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, imin, imax, ctx.max_iterations);
+        }
+        
         sg_update_image(ctx.img, &(sg_image_data){ 
             .mip_levels[0] = { .ptr = ctx.pixels, .size = (size_t)ctx.win_w*ctx.win_h*4 } 
         });
@@ -272,21 +269,24 @@ static void frame(void) {
     }
 
     sg_begin_pass(&(sg_pass){ .action = ctx.pass_action, .swapchain = sglue_swapchain() });
-    if (ctx.gpu_mode) {
-        params_t params = {
-            .center = { (float)ctx.view.center_re, (float)ctx.view.center_im },
-            .zoom = (float)ctx.view.zoom,
-            .iters = (float)ctx.max_iterations,
-            .aspect = (float)ctx.win_w / ctx.win_h
-        };
-        sg_apply_pipeline(ctx.pip_gpu);
+    
+    sg_pipeline cur_pip = ctx.gpu_mode ? ctx.pip_gpu : ctx.pip_cpu;
+    if (sg_query_pipeline_state(cur_pip) == SG_RESOURCESTATE_VALID) {
+        sg_apply_pipeline(cur_pip);
         sg_apply_bindings(&ctx.bind);
-        sg_apply_uniforms(0, &SG_RANGE(params));
-    } else {
-        sg_apply_pipeline(ctx.pip_cpu);
-        sg_apply_bindings(&ctx.bind);
+        if (ctx.gpu_mode) {
+            params_t params = {
+                .center = { (float)ctx.view.center_re, (float)ctx.view.center_im },
+                .zoom = (float)ctx.view.zoom,
+                .iters = (float)ctx.max_iterations,
+                .aspect = (float)ctx.win_w / ctx.win_h,
+                .julia_c = { (float)ctx.julia_c.re, (float)ctx.julia_c.im },
+                .is_julia = ctx.julia_mode ? 1.0f : 0.0f
+            };
+            sg_apply_uniforms(0, &SG_RANGE(params));
+        }
+        sg_draw(0, 6, 1);
     }
-    sg_draw(0, 6, 1);
 
     sg_end_pass(); 
     sg_commit();
@@ -332,7 +332,6 @@ static void event(const sapp_event* ev) {
         return;
     }
         
-        // rebuild image with new resolution
         sg_destroy_image(ctx.img);
         ctx.img = sg_make_image(&(sg_image_desc){ 
             .width = ctx.win_w, 
@@ -403,7 +402,6 @@ void wasm_adjust_iterations(int diff) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_resolution(int w, int h) {
-    // resolution handled by sokol event loop
     (void)w; (void)h;
 }
 
@@ -418,19 +416,23 @@ void wasm_zoom_at(float cx, float cy, float factor) {
         ctx.history[ctx.history_count++] = ctx.view;
     }
     
-    double aspect = (double)ctx.win_w / ctx.win_h;
-    double re = ctx.view.center_re + (cx / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
-    double im = ctx.view.center_im + (0.5 - cy / ctx.win_h) * ctx.view.zoom;
+    float sw = sapp_widthf();
+    float sh = sapp_heightf();
+    if (sw <= 0 || sh <= 0) return;
+
+    double aspect = (double)sw / sh;
+    double re = ctx.view.center_re + (cx / sw - 0.5) * ctx.view.zoom * aspect;
+    double im = ctx.view.center_im + (0.5 - cy / sh) * ctx.view.zoom;
     
     ctx.view.zoom *= factor;
     
-    ctx.view.center_re = re - (cx / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
-    ctx.view.center_im = im - (0.5 - cy / ctx.win_h) * ctx.view.zoom;
+    ctx.view.center_re = re - (cx / sw - 0.5) * ctx.view.zoom * aspect;
+    ctx.view.center_im = im - (0.5 - cy / sh) * ctx.view.zoom;
     
     ctx.needs_redraw = 1;
 }
 
-#endif // __EMSCRIPTEN__
+#endif
 
 sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc; (void)argv;
