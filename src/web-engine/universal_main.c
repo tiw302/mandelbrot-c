@@ -33,9 +33,12 @@
 
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id, const char* message_or_null, uint32_t line_nr, const char* filename_or_null, void* user_data) {
     (void)tag; (void)log_level; (void)log_item_id;
-    if (message_or_null) printf("[sokol][%d] %s (line: %u, file: %s)\n", log_level, message_or_null, line_nr, filename_or_null ? filename_or_null : "unknown");
+    if (message_or_null) {
+        printf("[sokol][%d] %s (line: %u, file: %s)\n", log_level, message_or_null, line_nr, filename_or_null ? filename_or_null : "unknown");
+    }
 }
 
+// uniform block for gpu rendering
 typedef struct {
     float center[2];
     float zoom;
@@ -66,69 +69,150 @@ typedef struct {
     int is_panning, is_zooming;
     int last_mouse_x, last_mouse_y;
     int mouse_x, mouse_y;
-    struct { int x, y, w, h; } zoom_rect;
 } GlobalCtx;
 
 static GlobalCtx ctx;
 
-// shaders
+// shaders updated for gles3 / webgl2
 static const char* vs_src = 
-    "precision highp float; attribute vec2 pos; attribute vec2 uv_in; varying vec2 uv; "
-    "void main() { gl_Position = vec4(pos, 0.0, 1.0); uv = uv_in; }";
+    "#version 300 es\n"
+    "precision highp float;\n"
+    "in vec2 pos;\n"
+    "in vec2 uv_in;\n"
+    "out vec2 uv;\n"
+    "void main() {\n"
+    "    gl_Position = vec4(pos, 0.0, 1.0);\n"
+    "    uv = uv_in;\n"
+    "}\n";
 
 static const char* fs_cpu_src =
-    "precision mediump float; uniform sampler2D tex; varying vec2 uv; "
-    "void main() { gl_FragColor = texture2D(tex, uv); }";
+    "#version 300 es\n"
+    "precision mediump float;\n"
+    "uniform sampler2D tex;\n"
+    "in vec2 uv;\n"
+    "out vec4 frag_color;\n"
+    "void main() {\n"
+    "    frag_color = texture(tex, uv);\n"
+    "}\n";
 
 static const char* fs_gpu_src =
-    "precision highp float; uniform vec2 center; uniform float zoom; uniform float iters; uniform float aspect; "
-    "varying vec2 uv; "
-    "vec3 hsv2rgb(vec3 c) { vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0); vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www); return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y); }\n"
+    "#version 300 es\n"
+    "precision highp float;\n"
+    "uniform vec2 center;\n"
+    "uniform float zoom;\n"
+    "uniform float iters;\n"
+    "uniform float aspect;\n"
+    "in vec2 uv;\n"
+    "out vec4 frag_color;\n"
+    "vec3 hsv2rgb(vec3 c) {\n"
+    "    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);\n"
+    "    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);\n"
+    "    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);\n"
+    "}\n"
     "void main() {\n"
-    "  vec2 c = vec2((uv.x-0.5)*zoom*aspect + center.x, (0.5-uv.y)*zoom + center.y);\n"
-    "  vec2 z = vec2(0.0); float i = 0.0;\n"
-    "  for (int j=0; j<2000; j++) {\n"
-    "    if (float(j) >= iters) break;\n"
-    "    float x2=z.x*z.x, y2=z.y*z.y;\n"
-    "    if (x2+y2 > 4.0) break;\n"
-    "    z = vec2(x2-y2+c.x, 2.0*z.x*z.y+c.y); i = float(j);\n"
-    "  }\n"
-    "  if (i >= iters - 1.0) gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);\n"
-    "  else { float s = i + 1.0 - log2(log(length(z)+0.0001)); gl_FragColor = vec4(hsv2rgb(vec3(fract(s*0.05), 0.8, 1.0)), 1.0); }\n"
-    "}";
+    "    // calculate complex plane coordinates\n"
+    "    vec2 c = vec2((uv.x - 0.5) * zoom * aspect + center.x, (0.5 - uv.y) * zoom + center.y);\n"
+    "    vec2 z = vec2(0.0);\n"
+    "    float i = 0.0;\n"
+    "    // escape time loop\n"
+    "    for (int j = 0; j < 2000; j++) {\n"
+    "        if (float(j) >= iters) break;\n"
+    "        float x2 = z.x * z.x, y2 = z.y * z.y;\n"
+    "        if (x2 + y2 > 4.0) break;\n"
+    "        z = vec2(x2 - y2 + c.x, 2.0 * z.x * z.y + c.y);\n"
+    "        i = float(j);\n"
+    "    }\n"
+    "    // smooth coloring\n"
+    "    if (i >= iters - 1.0) {\n"
+    "        frag_color = vec4(0.0, 0.0, 0.0, 1.0);\n"
+    "    } else {\n"
+    "        float s = i + 1.0 - log2(log(length(z) + 0.0001));\n"
+    "        frag_color = vec4(hsv2rgb(vec3(fract(s * 0.05), 0.8, 1.0)), 1.0);\n"
+    "    }\n"
+    "}\n";
 
 static void init(void) {
-    sg_setup(&(sg_desc){ .environment = sglue_environment(), .logger.func = slog_func });
+    // initialize sokol_gfx
+    sg_setup(&(sg_desc){ 
+        .environment = sglue_environment(), 
+        .logger.func = slog_func 
+    });
     stm_setup();
 
-    ctx.win_w = sapp_width(); ctx.win_h = sapp_height();
+    ctx.win_w = sapp_width(); 
+    ctx.win_h = sapp_height();
+    
+    // allocate pixel buffer for cpu fallback
     ctx.pixels = (uint32_t*) malloc((size_t)ctx.win_w * ctx.win_h * 4);
+    if (!ctx.pixels) {
+        printf("[sokol] fatal: failed to allocate pixel buffer\n");
+        return;
+    }
 
-    float verts[] = { -1,1,0,0, 1,1,1,0, 1,-1,1,1, -1,-1,0,1 };
+    // full-screen quad
+    float verts[] = { 
+        -1.0f,  1.0f, 0.0f, 0.0f, 
+         1.0f,  1.0f, 1.0f, 0.0f, 
+         1.0f, -1.0f, 1.0f, 1.0f, 
+        -1.0f, -1.0f, 0.0f, 1.0f 
+    };
     ctx.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){ .data = SG_RANGE(verts) });
-    uint16_t idx[] = { 0,1,2, 0,2,3 };
-    ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){ .usage = { .index_buffer = true, .immutable = true }, .data = SG_RANGE(idx) });
-
-    ctx.img = sg_make_image(&(sg_image_desc){ .width = ctx.win_w, .height = ctx.win_h, .pixel_format = SG_PIXELFORMAT_RGBA8, .usage = { .dynamic_update = true } });
-    ctx.img_view = sg_make_view(&(sg_view_desc){ .texture.image = ctx.img });
-    ctx.smp = sg_make_sampler(&(sg_sampler_desc){ .min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR });
-    ctx.bind.views[0] = ctx.img_view; ctx.bind.samplers[0] = ctx.smp;
-
-    // pipelines
-    sg_shader shd_cpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
-        .vertex_func.source = vs_src, .fragment_func.source = fs_cpu_src,
-        .texture_sampler_pairs[0] = { .stage = SG_SHADERSTAGE_FRAGMENT, .view_slot = 0, .sampler_slot = 0, .glsl_name = "tex" }
+    
+    uint16_t idx[] = { 0, 1, 2, 0, 2, 3 };
+    ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){ 
+        .usage = { .index_buffer = true, .immutable = true }, 
+        .data = SG_RANGE(idx) 
     });
-    if (shd_cpu.id == SG_INVALID_ID) printf("[sokol] ERROR: cpu shader id is invalid\n");
-    ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_cpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
-    if (ctx.pip_cpu.id == SG_INVALID_ID) printf("[sokol] ERROR: cpu pipeline id is invalid\n");
+
+    // dynamic texture for cpu rendering
+    ctx.img = sg_make_image(&(sg_image_desc){ 
+        .width = ctx.win_w, 
+        .height = ctx.win_h, 
+        .pixel_format = SG_PIXELFORMAT_RGBA8, 
+        .usage = { .dynamic_update = true } 
+    });
+    ctx.img_view = sg_make_view(&(sg_view_desc){ .texture.image = ctx.img });
+    ctx.smp = sg_make_sampler(&(sg_sampler_desc){ 
+        .min_filter = SG_FILTER_LINEAR, 
+        .mag_filter = SG_FILTER_LINEAR 
+    });
+    
+    ctx.bind.views[0] = ctx.img_view; 
+    ctx.bind.samplers[0] = ctx.smp;
+
+    // shader creation with error logging
+    sg_shader shd_cpu = sg_make_shader(&(sg_shader_desc){
+        .attrs[0].glsl_name = "pos", 
+        .attrs[1].glsl_name = "uv_in",
+        .vertex_func.source = vs_src, 
+        .fragment_func.source = fs_cpu_src,
+        .texture_sampler_pairs[0] = { 
+            .stage = SG_SHADERSTAGE_FRAGMENT, 
+            .view_slot = 0, 
+            .sampler_slot = 0, 
+            .glsl_name = "tex" 
+        }
+    });
+    
+    if (shd_cpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create cpu shader\n");
+    
+    ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){ 
+        .shader = shd_cpu, 
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, 
+        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, 
+        .index_type = SG_INDEXTYPE_UINT16 
+    });
+    
+    if (ctx.pip_cpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create cpu pipeline\n");
 
     sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
-        .vertex_func.source = vs_src, .fragment_func.source = fs_gpu_src,
+        .attrs[0].glsl_name = "pos", 
+        .attrs[1].glsl_name = "uv_in",
+        .vertex_func.source = vs_src, 
+        .fragment_func.source = fs_gpu_src,
         .uniform_blocks[0] = {
-            .stage = SG_SHADERSTAGE_FRAGMENT, .size = sizeof(params_t),
+            .stage = SG_SHADERSTAGE_FRAGMENT, 
+            .size = sizeof(params_t),
             .glsl_uniforms = { 
                 [0] = { .glsl_name = "center", .type = SG_UNIFORMTYPE_FLOAT2 }, 
                 [1] = { .glsl_name = "zoom", .type = SG_UNIFORMTYPE_FLOAT }, 
@@ -137,31 +221,53 @@ static void init(void) {
             }
         }
     });
-    if (shd_gpu.id == SG_INVALID_ID) printf("[sokol] ERROR: gpu shader id is invalid\n");
-    ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){ .shader = shd_gpu, .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, .index_type = SG_INDEXTYPE_UINT16 });
-    if (ctx.pip_gpu.id == SG_INVALID_ID) printf("[sokol] ERROR: gpu pipeline id is invalid\n");
+    
+    if (shd_gpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create gpu shader\n");
+    
+    ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){ 
+        .shader = shd_gpu, 
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2, 
+        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2, 
+        .index_type = SG_INDEXTYPE_UINT16 
+    });
+    
+    if (ctx.pip_gpu.id == SG_INVALID_ID) printf("[sokol] fatal: failed to create gpu pipeline\n");
 
-    ctx.pass_action = (sg_pass_action){ .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = {0,0,0,1} } };
+    ctx.pass_action = (sg_pass_action){ 
+        .colors[0] = { .load_action = SG_LOADACTION_CLEAR, .clear_value = {0,0,0,1} } 
+    };
+    
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-    ctx.max_iterations = DEFAULT_ITERATIONS; ctx.needs_redraw = 1; 
+    ctx.max_iterations = DEFAULT_ITERATIONS; 
+    ctx.needs_redraw = 1; 
+    
 #if defined(FORCE_GPU_MODE)
     ctx.gpu_mode = 1;
 #else
     ctx.gpu_mode = 0;
 #endif
+
     init_renderer(ctx.max_iterations, 0);
 }
 
 static void frame(void) {
-    if (ctx.m_tour.phase != TOUR_IDLE) { update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now())); ctx.needs_redraw = 1; }
+    if (ctx.m_tour.phase != TOUR_IDLE) { 
+        update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now())); 
+        ctx.needs_redraw = 1; 
+    }
 
     if (!ctx.gpu_mode && ctx.needs_redraw) {
         double rmin, rmax, imin, imax;
         double aspect = (double)ctx.win_w/ctx.win_h;
-        imin = ctx.view.center_im - ctx.view.zoom/2; imax = ctx.view.center_im + ctx.view.zoom/2;
-        rmin = ctx.view.center_re - (ctx.view.zoom * aspect)/2; rmax = ctx.view.center_re + (ctx.view.zoom * aspect)/2;
+        imin = ctx.view.center_im - ctx.view.zoom/2; 
+        imax = ctx.view.center_im + ctx.view.zoom/2;
+        rmin = ctx.view.center_re - (ctx.view.zoom * aspect)/2; 
+        rmax = ctx.view.center_re + (ctx.view.zoom * aspect)/2;
+        
         render_mandelbrot_threaded(ctx.pixels, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, imin, imax, ctx.max_iterations);
-        sg_update_image(ctx.img, &(sg_image_data){ .mip_levels[0] = { .ptr = ctx.pixels, .size = (size_t)ctx.win_w*ctx.win_h*4 } });
+        sg_update_image(ctx.img, &(sg_image_data){ 
+            .mip_levels[0] = { .ptr = ctx.pixels, .size = (size_t)ctx.win_w*ctx.win_h*4 } 
+        });
         ctx.needs_redraw = 0;
     }
 
@@ -182,12 +288,17 @@ static void frame(void) {
     }
     sg_draw(0, 6, 1);
 
-    sg_end_pass(); sg_commit();
+    sg_end_pass(); 
+    sg_commit();
 }
 
 static void event(const sapp_event* ev) {
     if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
-        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) { ctx.is_panning = 1; ctx.last_mouse_x = (int)ev->mouse_x; ctx.last_mouse_y = (int)ev->mouse_y; }
+        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) { 
+            ctx.is_panning = 1; 
+            ctx.last_mouse_x = (int)ev->mouse_x; 
+            ctx.last_mouse_y = (int)ev->mouse_y; 
+        }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
         if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ctx.is_panning = 0;
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
@@ -195,19 +306,141 @@ static void event(const sapp_event* ev) {
             double aspect = (double)ctx.win_w/ctx.win_h;
             ctx.view.center_re -= (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
             ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
-            ctx.last_mouse_x = (int)ev->mouse_x; ctx.last_mouse_y = (int)ev->mouse_y; ctx.needs_redraw = 1;
+            ctx.last_mouse_x = (int)ev->mouse_x; 
+            ctx.last_mouse_y = (int)ev->mouse_y; 
+            ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        ctx.view.zoom *= (ev->scroll_y > 0) ? 0.9 : 1.1; ctx.needs_redraw = 1;
+        ctx.view.zoom *= (ev->scroll_y > 0) ? 0.9 : 1.1; 
+        ctx.needs_redraw = 1;
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        if (ev->key_code == SAPP_KEYCODE_G) { ctx.gpu_mode = !ctx.gpu_mode; ctx.needs_redraw = 1; }
-        else if (ev->key_code == SAPP_KEYCODE_R) { ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM}; ctx.needs_redraw = 1; }
+        if (ev->key_code == SAPP_KEYCODE_G) { 
+            ctx.gpu_mode = !ctx.gpu_mode; 
+            ctx.needs_redraw = 1; 
+        }
+        else if (ev->key_code == SAPP_KEYCODE_R) { 
+            ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM}; 
+            ctx.needs_redraw = 1; 
+        }
+    } else if (ev->type == SAPP_EVENTTYPE_RESIZED) {
+        ctx.win_w = (int)ev->framebuffer_width;
+        ctx.win_h = (int)ev->framebuffer_height;
+        if (ctx.pixels) free(ctx.pixels);
+        ctx.pixels = (uint32_t*) malloc((size_t)ctx.win_w * ctx.win_h * 4);
+    if (!ctx.pixels) {
+        printf("[sokol] fatal: failed to allocate pixel buffer\n");
+        return;
+    }
+        
+        // rebuild image with new resolution
+        sg_destroy_image(ctx.img);
+        ctx.img = sg_make_image(&(sg_image_desc){ 
+            .width = ctx.win_w, 
+            .height = ctx.win_h, 
+            .pixel_format = SG_PIXELFORMAT_RGBA8, 
+            .usage = { .dynamic_update = true } 
+        });
+        sg_destroy_view(ctx.img_view);
+        ctx.img_view = sg_make_view(&(sg_view_desc){ .texture.image = ctx.img });
+        ctx.bind.views[0] = ctx.img_view;
+        ctx.needs_redraw = 1;
     }
 }
 
-static void cleanup(void) { free(ctx.pixels); cleanup_renderer(); sg_shutdown(); }
+static void cleanup(void) { 
+    free(ctx.pixels); 
+    cleanup_renderer(); 
+    sg_shutdown(); 
+}
+
+#if defined(__EMSCRIPTEN__)
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_reset_view(void) {
+    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_undo_zoom(void) {
+    if (ctx.history_count > 0) {
+        ctx.view = ctx.history[--ctx.history_count];
+        ctx.needs_redraw = 1;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_tour(void) {
+    if (ctx.m_tour.phase == TOUR_IDLE) {
+        start_tour(&ctx.m_tour, &ctx.view);
+    } else {
+        stop_tour(&ctx.m_tour);
+    }
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_next_palette(void) {
+    ctx.palette_idx = (ctx.palette_idx + 1) % 5;
+    init_renderer(ctx.max_iterations, ctx.palette_idx);
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_julia(void) {
+    ctx.julia_mode = !ctx.julia_mode;
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_adjust_iterations(int diff) {
+    ctx.max_iterations += diff;
+    if (ctx.max_iterations < 10) ctx.max_iterations = 10;
+    if (ctx.max_iterations > 10000) ctx.max_iterations = 10000;
+    init_renderer(ctx.max_iterations, ctx.palette_idx);
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_resolution(int w, int h) {
+    // resolution handled by sokol event loop
+    (void)w; (void)h;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_cancel_zoom(void) {
+    ctx.is_panning = 0;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_zoom_at(float cx, float cy, float factor) {
+    if (ctx.history_count < MAX_HISTORY_SIZE) {
+        ctx.history[ctx.history_count++] = ctx.view;
+    }
+    
+    double aspect = (double)ctx.win_w / ctx.win_h;
+    double re = ctx.view.center_re + (cx / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+    double im = ctx.view.center_im + (0.5 - cy / ctx.win_h) * ctx.view.zoom;
+    
+    ctx.view.zoom *= factor;
+    
+    ctx.view.center_re = re - (cx / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+    ctx.view.center_im = im - (0.5 - cy / ctx.win_h) * ctx.view.zoom;
+    
+    ctx.needs_redraw = 1;
+}
+
+#endif // __EMSCRIPTEN__
 
 sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc; (void)argv;
-    return (sapp_desc){ .init_cb = init, .frame_cb = frame, .cleanup_cb = cleanup, .event_cb = event, .width = 1024, .height = 768, .window_title = "mandelbrot web" };
+    return (sapp_desc){ 
+        .init_cb = init, 
+        .frame_cb = frame, 
+        .cleanup_cb = cleanup, 
+        .event_cb = event, 
+        .width = 1024, 
+        .height = 768, 
+        .window_title = "mandelbrot web" 
+    };
 }
