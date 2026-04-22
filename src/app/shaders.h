@@ -22,11 +22,12 @@ static const char* fs_cpu_src =
     "    frag_color = texture(tex, uv);\n"
     "}\n";
 
-/* gpu shader: all 5 palettes implemented in GLSL to match cpu color.c */
+/* gpu shader: 5 palettes + split-float center for better zoom depth */
 static const char* fs_gpu_src =
     "#version 300 es\n"
     "precision highp float;\n"
-    "uniform vec2 u_center;\n"
+    "uniform vec2 u_center_hi;\n"  /* high bits of double center */
+    "uniform vec2 u_center_lo;\n"  /* low bits residual */
     "uniform float u_zoom;\n"
     "uniform float u_iters;\n"
     "uniform float u_aspect;\n"
@@ -43,32 +44,21 @@ static const char* fs_gpu_src =
     "}\n"
 
     "vec3 palette_color(float s, int pal) {\n"
-    /* 0: smooth - classic smooth hue cycle */
     "    if (pal == 0) return hsv2rgb(vec3(fract(s * 0.05), 0.8, 1.0));\n"
-    /* 1: zebra - alternating black/white bands */
-    "    if (pal == 1) {\n"
-    "        float b = mod(floor(s), 2.0);\n"
-    "        return vec3(b, b, b);\n"
-    "    }\n"
-    /* 2: neon - vivid electric hues at high saturation */
+    "    if (pal == 1) { float b = mod(floor(s), 2.0); return vec3(b); }\n"
     "    if (pal == 2) return hsv2rgb(vec3(fract(s * 0.07 + 0.6), 1.0, 1.0));\n"
-    /* 3: fire - red → orange → yellow → white */
     "    if (pal == 3) {\n"
     "        float t = fract(s * 0.05);\n"
-    "        return vec3(\n"
-    "            min(1.0, t * 3.0),\n"
-    "            min(1.0, max(0.0, t * 3.0 - 1.0)),\n"
-    "            min(1.0, max(0.0, t * 3.0 - 2.0))\n"
-    "        );\n"
+    "        return vec3(min(1.0,t*3.0), min(1.0,max(0.0,t*3.0-1.0)), min(1.0,max(0.0,t*3.0-2.0)));\n"
     "    }\n"
-    /* 4: ice - cool blue gradient */
-    "    float t2 = fract(s * 0.05);\n"
-    "    return vec3(t2 * 0.3, t2 * 0.7, 1.0);\n"
+    "    float t = fract(s * 0.05);\n"
+    "    return vec3(t * 0.3, t * 0.7, 1.0);\n"
     "}\n"
 
     "void main() {\n"
-    "    vec2 p = vec2((uv.x - 0.5) * u_zoom * u_aspect + u_center.x,\n"
-    "                  (0.5 - uv.y) * u_zoom + u_center.y);\n"
+    "    vec2 center = u_center_hi + u_center_lo;\n"
+    "    vec2 p = vec2((uv.x - 0.5) * u_zoom * u_aspect + center.x,\n"
+    "                  (0.5 - uv.y) * u_zoom + center.y);\n"
     "    vec2 c_val = (u_is_julia > 0.5) ? u_julia_c : p;\n"
     "    vec2 z = (u_is_julia > 0.5) ? p : vec2(0.0);\n"
     "    int m = int(u_iters);\n"

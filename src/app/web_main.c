@@ -58,7 +58,8 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
 }
 
 typedef struct {
-    float center[2];
+    float center_hi[2]; /* high bits of double center */
+    float center_lo[2]; /* low bits (residual) for extra precision */
     float zoom;
     float iters;
     float aspect;
@@ -157,7 +158,8 @@ static void init(void) {
         .uniform_blocks[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT,
             .size = sizeof(params_t),
-            .glsl_uniforms = {{.glsl_name = "u_center", .type = SG_UNIFORMTYPE_FLOAT2},
+            .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
                               {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
@@ -195,19 +197,19 @@ static void frame(void) {
     }
 
     if (!ctx.gpu_mode && ctx.needs_redraw) {
-        double rmin, rmax, imin, imax;
         double aspect = (double)ctx.win_w / ctx.win_h;
-        imin = ctx.view.center_im - ctx.view.zoom / 2;
-        imax = ctx.view.center_im + ctx.view.zoom / 2;
-        rmin = ctx.view.center_re - (ctx.view.zoom * aspect) / 2;
-        rmax = ctx.view.center_re + (ctx.view.zoom * aspect) / 2;
+        double rmin = ctx.view.center_re - (ctx.view.zoom * aspect) / 2;
+        double rmax = ctx.view.center_re + (ctx.view.zoom * aspect) / 2;
+        /* pass im_max as first arg (y=0 → high im) to match GPU y-up orientation */
+        double im_top = ctx.view.center_im + ctx.view.zoom / 2;
+        double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
 
         if (ctx.julia_mode) {
-            render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax, imin,
-                                  imax, ctx.julia_c, ctx.max_iterations);
+            render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                  im_top, im_bot, ctx.julia_c, ctx.max_iterations);
         } else {
             render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                       imin, imax, ctx.max_iterations);
+                                       im_top, im_bot, ctx.max_iterations);
         }
 
         sg_update_image(ctx.img, &(sg_image_data){
@@ -223,13 +225,19 @@ static void frame(void) {
         sg_apply_pipeline(cur_pip);
         sg_apply_bindings(&ctx.bind);
         if (ctx.gpu_mode) {
-            params_t params = {.center = {(float)ctx.view.center_re, (float)ctx.view.center_im},
-                               .zoom = (float)ctx.view.zoom,
-                               .iters = (float)ctx.max_iterations,
-                               .aspect = (float)ctx.win_w / ctx.win_h,
-                               .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
-                               .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
-                               .palette = (float)ctx.palette_idx};
+            /* split double center into hi+lo floats for better zoom precision */
+            float chi_re = (float)ctx.view.center_re;
+            float chi_im = (float)ctx.view.center_im;
+            params_t params = {
+                .center_hi = {chi_re, chi_im},
+                .center_lo = {(float)(ctx.view.center_re - chi_re),
+                              (float)(ctx.view.center_im - chi_im)},
+                .zoom = (float)ctx.view.zoom,
+                .iters = (float)ctx.max_iterations,
+                .aspect = (float)ctx.win_w / ctx.win_h,
+                .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
+                .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
+                .palette = (float)ctx.palette_idx};
             sg_apply_uniforms(0, &SG_RANGE(params));
         }
         sg_draw(0, 6, 1);
@@ -261,16 +269,17 @@ static void event(const sapp_event* ev) {
             if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
                 if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
                 double aspect = (double)ctx.win_w / ctx.win_h;
-                double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
-                double im_min = ctx.view.center_im - ctx.view.zoom / 2.0;
                 double re_pp = (ctx.view.zoom * aspect) / ctx.win_w;
                 double im_pp = ctx.view.zoom / ctx.win_h;
                 int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
                 int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
                 int zw = abs(ctx.zoom_rect.w);
                 int zh = abs(ctx.zoom_rect.h);
+                double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
+                double im_max = ctx.view.center_im + ctx.view.zoom / 2.0;
                 ctx.view.center_re = re_min + (zx + zw / 2.0) * re_pp;
-                ctx.view.center_im = im_min + (zy + zh / 2.0) * im_pp;
+                /* Y-up: screen y=0 is top=high im, so invert y */
+                ctx.view.center_im = im_max - (zy + zh / 2.0) * im_pp;
                 ctx.view.zoom = fmax(zw * re_pp, zh * im_pp);
                 ctx.needs_redraw = 1;
             }
@@ -283,7 +292,8 @@ static void event(const sapp_event* ev) {
         if (ctx.is_panning) {
             double aspect = (double)ctx.win_w / ctx.win_h;
             ctx.view.center_re -= (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
-            ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
+            /* Y-up: dragging down (positive delta_y) should lower center_im */
+            ctx.view.center_im -= (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
             ctx.last_mouse_x = (int)ev->mouse_x;
             ctx.last_mouse_y = (int)ev->mouse_y;
             ctx.needs_redraw = 1;
@@ -294,11 +304,11 @@ static void event(const sapp_event* ev) {
             int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
             update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
         } else if (ctx.julia_mode && ctx.m_tour.phase == TOUR_IDLE) {
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
-            double im_min = ctx.view.center_im - ctx.view.zoom / 2.0;
-            ctx.julia_c.re = re_min + (double)ctx.mouse_x * (ctx.view.zoom * aspect) / ctx.win_w;
-            ctx.julia_c.im = im_min + (double)ctx.mouse_y * ctx.view.zoom / ctx.win_h;
+            /* Y-up: top of screen = high im */
+            ctx.julia_c.re = ctx.view.center_re +
+                ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * ((double)ctx.win_w / ctx.win_h);
+            ctx.julia_c.im = ctx.view.center_im +
+                (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
@@ -306,13 +316,14 @@ static void event(const sapp_event* ev) {
         if (ev->scroll_y != 0.0f) {
             if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
             double aspect = (double)ctx.win_w / ctx.win_h;
-            double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
-            double im_min = ctx.view.center_im - ctx.view.zoom / 2.0;
-            double mouse_re = re_min + (double)ev->mouse_x * (ctx.view.zoom * aspect) / ctx.win_w;
-            double mouse_im = im_min + (double)ev->mouse_y * ctx.view.zoom / ctx.win_h;
+            /* Y-up: top = high im; scroll zoom at cursor using Y-up mapping */
+            double mouse_re = ctx.view.center_re +
+                ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+            double mouse_im = ctx.view.center_im +
+                (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.view.zoom *= zoom_factor;
-            ctx.view.center_re = mouse_re + (ctx.view.center_re - mouse_re) * zoom_factor;
-            ctx.view.center_im = mouse_im + (ctx.view.center_im - mouse_im) * zoom_factor;
+            ctx.view.center_re = mouse_re - ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+            ctx.view.center_im = mouse_im - (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
