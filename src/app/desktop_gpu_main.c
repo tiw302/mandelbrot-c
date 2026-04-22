@@ -226,8 +226,8 @@ static void frame(void) {
 
     /* debug info background */
     int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
-    float bg_w = 460.0f;
-    float bg_h = num_lines * 19.0f + 10.0f;
+    float bg_w = 450.0f;
+    float bg_h = num_lines * 18.0f + 10.0f;
     sgl_begin_quads();
     sgl_c4b(0, 0, 0, 160);
     sgl_v2f(2.0f, 2.0f);
@@ -279,8 +279,8 @@ static void frame(void) {
         fonsClearState(ctx.fons);
         fonsSetFont(ctx.fons, ctx.font_id);
         fonsSetSize(ctx.fons, 16.0f);
-        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
-        float x = 10.0f, y = 20.0f, lh = 18.0f;
+        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 160));
+        float x = 10.0f, y = 22.0f, lh = 18.0f;
         char buf[256];
         
         snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",

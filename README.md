@@ -196,7 +196,8 @@ Rendering parameters can be tuned in `include/config.h` to balance performance a
 - [x] Integrate a pre-calculated Look-Up Table (LUT) for color mapping to bypass expensive real-time trigonometric calculations.
 - [x] Implement smooth coloring algorithms using fractional iteration counts for high-fidelity gradients.
 - [x] Deploy hardware-specific vectorization (AVX2 for Desktop, SIMD128 for WebAssembly) to process multiple pixels per cycle.
-- [ ] Research and implement pure-shader fractal calculation for extreme-scale GPU rendering.
+- [x] Research and implement pure-shader fractal calculation for extreme-scale GPU rendering.
+- [x] Optimize Julia set calculation using hardware-specific vectorization.
 
 ### Features and Exploration
 - [x] Add interactive runtime controls for iteration depth adjustment and dynamic color palette switching.
