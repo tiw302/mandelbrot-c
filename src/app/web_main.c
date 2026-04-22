@@ -192,7 +192,16 @@ static void init(void) {
 
 static void frame(void) {
     if (ctx.m_tour.phase != TOUR_IDLE) {
-        update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now()));
+        if (ctx.julia_mode) {
+            /* julia tour: animate julia_c through the classic parametric family
+             * c = r*e^(it) which sweeps through many beautiful julia sets */
+            double t = stm_ms(stm_now()) * 0.0006;
+            double r = 0.7885;
+            ctx.julia_c.re = r * cos(t);
+            ctx.julia_c.im = r * sin(t);
+        } else {
+            update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now()));
+        }
         ctx.needs_redraw = 1;
     }
 
@@ -292,8 +301,9 @@ static void event(const sapp_event* ev) {
         if (ctx.is_panning) {
             double aspect = (double)ctx.win_w / ctx.win_h;
             ctx.view.center_re -= (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
-            /* Y-up: dragging down (positive delta_y) should lower center_im */
-            ctx.view.center_im -= (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
+            /* Y-up grab model: dragging down (delta_y > 0) moves image down
+             * which means center_im must increase so the grabbed point follows */
+            ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
             ctx.last_mouse_x = (int)ev->mouse_x;
             ctx.last_mouse_y = (int)ev->mouse_y;
             ctx.needs_redraw = 1;
