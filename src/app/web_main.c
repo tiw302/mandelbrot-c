@@ -410,7 +410,7 @@ void wasm_toggle_tour(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
-    ctx.palette_idx = (ctx.palette_idx + 1) % 5;
+    ctx.palette_idx = (ctx.palette_idx + 1) % 6;
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
