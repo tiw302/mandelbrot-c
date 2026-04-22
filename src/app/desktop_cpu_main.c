@@ -156,7 +156,7 @@ int main(int argc, char* argv[]) {
                         m_tour.phase = TOUR_IDLE;
                         j_tour.phase = JULIA_TOUR_IDLE;
                         max_iterations = DEFAULT_ITERATIONS;
-                        palette_idx = 0;
+                        /* keep palette_idx as is */
                         init_renderer(max_iterations, palette_idx);
                         view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                         history_count = 0;
