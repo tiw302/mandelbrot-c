@@ -129,11 +129,13 @@
     <div id="toolbar">
         <button onclick="Module._wasm_reset_view()">reset</button>
         <button onclick="Module._wasm_undo_zoom()">undo</button>
-        <button onclick="Module._wasm_toggle_tour()" id="tourBtn">tour</button>
-        <button onclick="Module._wasm_next_palette()">palette</button>
-        <button onclick="Module._wasm_toggle_julia()">julia</button>
+        <button onclick="toggleTour()" id="tourBtn">tour</button>
+        <button onclick="Module._wasm_next_palette()" id="paletteBtn">palette</button>
+        <button onclick="toggleGpu()" id="gpuBtn">gpu ✓</button>
+        <button onclick="Module._wasm_toggle_julia()" id="juliaBtn">julia</button>
         <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
         <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
+        <button onclick="downloadScreenshot()">screenshot</button>
     </div>
 
     <div id="debug-info"></div>
@@ -147,6 +149,21 @@
         const zoomBox = document.getElementById('zoom-box');
 
         const PALETTES = ["smooth", "zebra", "neon", "fire", "ice"];
+        let _gpuMode = true;
+        let _tourActive = false;
+        let _juliaMode = false;
+
+        function toggleTour() {
+            Module._wasm_toggle_tour();
+            _tourActive = !_tourActive;
+            document.getElementById('tourBtn').textContent = _tourActive ? 'stop tour' : 'tour';
+        }
+
+        function toggleGpu() {
+            Module._wasm_toggle_gpu();
+            _gpuMode = !_gpuMode;
+            document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
+        }
 
         // Global functions called by WASM via EM_JS
         window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im) {
@@ -154,18 +171,18 @@
             if (gpu_mode) engine += " (gpu)";
             else engine += " (cpu)";
 
-            let tour_str = tour_phase !== 0 ? " | auto-tour: active" : "";
-            
-            let html = `${engine} | threads: WASM${tour_str}\n`;
-            
+            let tour_str = tour_phase !== 0 ? " | tour: on" : "";
+
+            let html = `${engine}${tour_str}\n`;
+
             if (julia_mode) {
-                html += `c: (${julia_re.toFixed(12)}, ${julia_im.toFixed(12)})\n`;
+                html += `c: (${julia_re.toFixed(10)}, ${julia_im.toFixed(10)})\n`;
             } else {
-                html += `center: (${center_re.toFixed(12)}, ${center_im.toFixed(12)})\n`;
+                html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
             }
-            
-            html += `zoom: ${zoom.toPrecision(4)} | iterations: ${max_iters} | palette: ${PALETTES[palette_idx % 5]}`;
-            
+
+            html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 5]}`;
+
             debugInfo.textContent = html;
         };
 
@@ -212,14 +229,56 @@
                     const key = e.key.toLowerCase();
                     if (key === 'r') Module._wasm_reset_view();
                     if (key === 'p') Module._wasm_next_palette();
-                    if (key === 't') Module._wasm_toggle_tour();
+                    if (key === 't') toggleTour();
                     if (key === 'j') Module._wasm_toggle_julia();
+                    if (key === 'g') toggleGpu();
                     if (key === 's') downloadScreenshot();
+                    if (e.key === 'ArrowUp') Module._wasm_adjust_iterations(10);
+                    if (e.key === 'ArrowDown') Module._wasm_adjust_iterations(-10);
                     if (key === 'z' && (e.ctrlKey || e.metaKey)) {
                         e.preventDefault();
                         Module._wasm_undo_zoom();
                     }
                 });
+
+                // touch support for mobile: pinch-to-zoom + single-finger pan
+                let lastTouches = [];
+                canvas.addEventListener('touchstart', (e) => {
+                    e.preventDefault();
+                    lastTouches = Array.from(e.touches);
+                }, { passive: false });
+
+                canvas.addEventListener('touchmove', (e) => {
+                    e.preventDefault();
+                    const touches = Array.from(e.touches);
+                    if (touches.length === 1 && lastTouches.length === 1) {
+                        // single finger pan
+                        const dx = touches[0].clientX - lastTouches[0].clientX;
+                        const dy = touches[0].clientY - lastTouches[0].clientY;
+                        // simulate right-drag pan via wasm_zoom_at trick - just re-center
+                        const w = window.innerWidth, h = window.innerHeight;
+                        Module._wasm_zoom_at(w/2 - dx, h/2 - dy, 1.0);
+                    } else if (touches.length === 2 && lastTouches.length === 2) {
+                        // pinch zoom
+                        const d0 = Math.hypot(
+                            lastTouches[0].clientX - lastTouches[1].clientX,
+                            lastTouches[0].clientY - lastTouches[1].clientY);
+                        const d1 = Math.hypot(
+                            touches[0].clientX - touches[1].clientX,
+                            touches[0].clientY - touches[1].clientY);
+                        if (d0 > 0) {
+                            const factor = d0 / d1;
+                            const cx = (touches[0].clientX + touches[1].clientX) / 2;
+                            const cy = (touches[0].clientY + touches[1].clientY) / 2;
+                            Module._wasm_zoom_at(cx, cy, factor);
+                        }
+                    }
+                    lastTouches = touches;
+                }, { passive: false });
+
+                canvas.addEventListener('touchend', (e) => {
+                    lastTouches = Array.from(e.touches);
+                }, { passive: false });
             }],
             print: (text) => console.log(text),
             canvas: canvas,

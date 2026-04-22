@@ -64,6 +64,7 @@ typedef struct {
     float aspect;
     float julia_c[2];
     float is_julia;
+    float palette;
 } params_t;
 
 typedef struct {
@@ -161,7 +162,8 @@ static void init(void) {
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_julia_c", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT}}}});
+                              {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT}}}});
 
     ctx.pip_gpu = sg_make_pipeline(
         &(sg_pipeline_desc){.shader = shd_gpu,
@@ -226,7 +228,8 @@ static void frame(void) {
                                .iters = (float)ctx.max_iterations,
                                .aspect = (float)ctx.win_w / ctx.win_h,
                                .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
-                               .is_julia = ctx.julia_mode ? 1.0f : 0.0f};
+                               .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
+                               .palette = (float)ctx.palette_idx};
             sg_apply_uniforms(0, &SG_RANGE(params));
         }
         sg_draw(0, 6, 1);
@@ -436,6 +439,12 @@ void wasm_zoom_at(float cx, float cy, float factor) {
     ctx.view.center_re = re - (cx / sw - 0.5) * ctx.view.zoom * aspect;
     ctx.view.center_im = im - (0.5 - cy / sh) * ctx.view.zoom;
 
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_gpu(void) {
+    ctx.gpu_mode = !ctx.gpu_mode;
     ctx.needs_redraw = 1;
 }
 
