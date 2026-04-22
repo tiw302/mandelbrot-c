@@ -11,7 +11,11 @@ build_gpu() {
 }
 
 build_web() {
-    cmake -S . -B build-web -DBUILD_WEB=ON
+    if ! command -v emcmake &> /dev/null; then
+        echo "error: emscripten not found. please install emsdk."
+        exit 1
+    fi
+    emcmake cmake -S . -B build-web -DBUILD_WEB=ON
     cmake --build build-web
 }
 

@@ -14,11 +14,13 @@
 #include "core_math.h"
 #include "renderer.h"
 #include "screenshot.h"
+// clang-format off
 #include "sokol/sokol_app.h"
-#include "sokol/sokol_debugtext.h"
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_time.h"
+#include "sokol/sokol_debugtext.h"
+// clang-format on
 #include "tour.h"
 
 #if defined(__EMSCRIPTEN__)
