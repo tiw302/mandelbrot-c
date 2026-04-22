@@ -91,6 +91,31 @@
             z-index: 5;
         }
 
+        #info {
+            position: fixed;
+            bottom: 0; left: 0; right: 0;
+            padding: 4px 10px;
+            background: rgba(0,0,0,0.6);
+            font-size: 11px;
+            color: #eee;
+            z-index: 10;
+            display: flex;
+            justify-content: space-between;
+            font-family: monospace;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border-top: 1px solid rgba(255,255,255,0.1);
+        }
+
+        #info a { color: #fff; text-decoration: none; opacity: 0.8; }
+        #info a:hover { opacity: 1; text-decoration: underline; }
+
+        @media (max-width: 600px) {
+            #info { font-size: 9px; padding: 6px 8px; }
+            #info span:first-child { display: none; } /* hide long text on mobile */
+            #info::before { content: "Scroll/Pinch=Zoom | Drag=Move"; }
+        }
+
         #loading-screen {
             position: fixed;
             inset: 0;
@@ -140,6 +165,11 @@
 
     <div id="debug-info"></div>
     <div id="zoom-box"></div>
+
+    <div id="info">
+        <span>Scroll=Zoom | Left-drag=Select | Right-drag=Pan | R=Reset P=Palette J=Julia</span>
+        <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
+    </div>
 
     <script>
         const loadingScreen = document.getElementById('loading-screen');
