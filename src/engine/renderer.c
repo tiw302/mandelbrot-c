@@ -28,7 +28,7 @@ static thread_data_t* thread_data_pool = NULL;
 
 static int get_cpu_cores(void) {
 #if defined(__EMSCRIPTEN__)
-    return emscripten_num_logical_cores();
+    return 1;
 #elif defined(_WIN32) || defined(_WIN64)
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
@@ -180,7 +180,12 @@ static void dispatch_threads(uint32_t* pixels, int pitch, int window_width, int 
                                               .julia_c = julia_c,
                                               .max_iterations = max_iterations,
                                               .next_row = &next_row};
+    }
 
+#if defined(__EMSCRIPTEN__)
+    render_thread(&thread_data_pool[0]);
+#else
+    for (int i = 0; i < actual_thread_count; i++) {
         if (pthread_create(&threads_pool[i], NULL, render_thread, &thread_data_pool[i]) != 0) {
             fprintf(stderr, "failed to spawn thread %d\n", i);
             for (int j = 0; j < i; j++) pthread_join(threads_pool[j], NULL);
@@ -189,6 +194,7 @@ static void dispatch_threads(uint32_t* pixels, int pitch, int window_width, int 
     }
 
     for (int i = 0; i < actual_thread_count; i++) pthread_join(threads_pool[i], NULL);
+#endif
 }
 
 void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,

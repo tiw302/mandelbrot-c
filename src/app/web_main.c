@@ -180,7 +180,7 @@ static void init(void) {
 #if defined(FORCE_GPU_MODE)
     ctx.gpu_mode = 1;
 #else
-    ctx.gpu_mode = 0;
+    ctx.gpu_mode = 1;
 #endif
 
     init_renderer(ctx.max_iterations, 0);
