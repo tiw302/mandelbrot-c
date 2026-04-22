@@ -80,6 +80,7 @@ typedef struct {
     struct { int x, y, w, h; } zoom_rect;
     uint32_t render_time_ms;
 
+    sgl_pipeline pip_blend;
     FONScontext* fons;
     int font_id;
 } GlobalCtx;
@@ -109,6 +110,15 @@ static void init(void) {
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
     stm_setup();
     sgl_setup(&(sgl_desc_t){.logger.func = slog_func});
+
+    /* create a blending pipeline for sgl UI elements */
+    ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
+        .colors[0].blend = {
+            .enabled = true,
+            .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
+            .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+        }
+    });
 
     /* fontstash setup */
     ctx.fons = sfons_create(&(sfons_desc_t){ .width = 512, .height = 512 });
@@ -224,7 +234,8 @@ static void frame(void) {
     sgl_matrix_mode_projection();
     sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
 
-    /* debug info background */
+    /* debug info background with blending */
+    sgl_load_pipeline(ctx.pip_blend);
     int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
     float bg_w = 450.0f;
     float bg_h = num_lines * 18.0f + 10.0f;
@@ -250,6 +261,7 @@ static void frame(void) {
         sgl_v2f(x1, y2); sgl_v2f(x1, y1);
         sgl_end();
     }
+    sgl_load_default_pipeline();
 
     sg_begin_pass(&(sg_pass){.action=ctx.pass_action, .swapchain=sglue_swapchain()});
     sg_pipeline cur = ctx.gpu_mode ? ctx.pip_gpu : ctx.pip_cpu;
@@ -279,7 +291,7 @@ static void frame(void) {
         fonsClearState(ctx.fons);
         fonsSetFont(ctx.fons, ctx.font_id);
         fonsSetSize(ctx.fons, 16.0f);
-        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 160));
+        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
         float x = 10.0f, y = 22.0f, lh = 18.0f;
         char buf[256];
         
