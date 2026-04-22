@@ -37,9 +37,40 @@
             outline: none;
         }
 
+        #toolbar {
+            position: fixed;
+            top: env(safe-area-inset-top, 0); 
+            left: 0; right: 0;
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            padding: 8px;
+            background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+            z-index: 10;
+        }
+
+        #toolbar button {
+            background: rgba(34, 34, 34, 0.8);
+            color: #eee;
+            border: 1px solid #444;
+            padding: 6px 12px;
+            font-family: monospace;
+            font-size: 12px;
+            cursor: pointer;
+            backdrop-filter: blur(4px);
+            -webkit-backdrop-filter: blur(4px);
+            border-radius: 2px;
+        }
+
+        #toolbar button:active { background: #555; }
+
+        @media (max-width: 600px) {
+            #toolbar button { padding: 12px 16px; font-size: 13px; }
+        }
+
         #debug-info {
             position: fixed;
-            top: 10px;
+            top: 50px; /* adjusted so it's below the toolbar */
             left: 10px;
             background: rgba(0, 0, 0, 0.7);
             color: #ffffff;
@@ -95,6 +126,16 @@
     </div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
+
+    <div id="toolbar">
+        <button onclick="Module._wasm_reset_view()">reset</button>
+        <button onclick="Module._wasm_undo_zoom()">undo</button>
+        <button onclick="Module._wasm_toggle_tour()" id="tourBtn">tour</button>
+        <button onclick="Module._wasm_next_palette()">palette</button>
+        <button onclick="Module._wasm_toggle_julia()">julia</button>
+        <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
+        <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
+    </div>
 
     <div id="debug-info"></div>
     <div id="zoom-box"></div>

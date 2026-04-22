@@ -135,6 +135,8 @@ static void init(void) {
                           .attrs[1].glsl_name = "uv_in",
                           .vertex_func.source = vs_src,
                           .fragment_func.source = fs_cpu_src,
+                          .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
+                          .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
                           .texture_sampler_pairs[0] = {.stage = SG_SHADERSTAGE_FRAGMENT,
                                                        .view_slot = 0,
                                                        .sampler_slot = 0,

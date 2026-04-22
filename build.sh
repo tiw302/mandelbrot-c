@@ -39,15 +39,17 @@ if [ $# -gt 0 ]; then
     exit 0
 fi
 
-echo "mandelbrot engine build"
-echo ""
+echo "mandelbrot engine build!!"
+echo " "
+echo "___________________________"
 echo "  1) cpu"
 echo "  2) gpu"
 echo "  3) web"
 echo "  4) build all"
 echo "  5) clean"
 echo "  q) quit"
-echo ""
+echo "___________________________"
+echo " "
 read -p ">> " choice
 
 case $choice in
