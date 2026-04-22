@@ -3,22 +3,27 @@
 #define SOKOL_GFX_IMPL
 #define SOKOL_GLUE_IMPL
 #define SOKOL_TIME_IMPL
-#define SOKOL_DEBUGTEXT_IMPL
 #define SOKOL_GL_IMPL
+#define FONTSTASH_IMPLEMENTATION
+#define SOKOL_FONTSTASH_IMPL
+
 #include "config.h"
 #include "color.h"
 #include "julia.h"
 #include "mandelbrot.h"
 #include "renderer.h"
 #include "screenshot.h"
+
 // clang-format off
 #include "sokol/sokol_app.h"
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_time.h"
-#include "sokol/sokol_debugtext.h"
 #include "sokol/sokol_gl.h"
+#include "fons/fontstash.h"
+#include "sokol/sokol_fontstash.h"
 // clang-format on
+
 #include "desktop_gpu_shaders.h"
 #include "tour.h"
 
@@ -74,6 +79,9 @@ typedef struct {
     int mouse_x, mouse_y;
     struct { int x, y, w, h; } zoom_rect;
     uint32_t render_time_ms;
+
+    FONScontext* fons;
+    int font_id;
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -100,8 +108,16 @@ static double mouse_im(void) {
 static void init(void) {
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
     stm_setup();
-    sdtx_setup(&(sdtx_desc_t){.fonts[0] = sdtx_font_c64()});
     sgl_setup(&(sgl_desc_t){.logger.func = slog_func});
+
+    /* fontstash setup */
+    ctx.fons = sfons_create(&(sfons_desc_t){ .width = 512, .height = 512 });
+    const char* font_paths[] = { FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL };
+    ctx.font_id = FONS_INVALID;
+    for (int i = 0; font_paths[i] && font_paths[i][0]; i++) {
+        ctx.font_id = fonsAddFont(ctx.fons, "sans", font_paths[i]);
+        if (ctx.font_id != FONS_INVALID) break;
+    }
 
     ctx.win_w = sapp_width();
     ctx.win_h = sapp_height();
@@ -203,16 +219,15 @@ static void frame(void) {
         ctx.needs_redraw = 0;
     }
 
-    /* prepare shapes (zoom box, bg rects) */
     sgl_viewport(0, 0, ctx.win_w, ctx.win_h, true);
     sgl_defaults();
     sgl_matrix_mode_projection();
     sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
 
-    /* debug info background (parity with CPU SDL version) */
+    /* debug info background */
     int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
-    float bg_w = 450.0f;
-    float bg_h = num_lines * 18.0f + 6.0f;
+    float bg_w = 460.0f;
+    float bg_h = num_lines * 19.0f + 10.0f;
     sgl_begin_quads();
     sgl_c4b(0, 0, 0, 160);
     sgl_v2f(2.0f, 2.0f);
@@ -259,29 +274,46 @@ static void frame(void) {
         sg_draw(0, 6, 1);
     }
 
+    /* render smooth text using fontstash */
+    if (ctx.font_id != FONS_INVALID) {
+        fonsClearState(ctx.fons);
+        fonsSetFont(ctx.fons, ctx.font_id);
+        fonsSetSize(ctx.fons, 16.0f);
+        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
+        float x = 10.0f, y = 20.0f, lh = 18.0f;
+        char buf[256];
+        
+        snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",
+            ctx.gpu_mode ? "gpu" : "cpu", ctx.julia_mode ? "julia" : "mandelbrot",
+            get_actual_thread_count(), ctx.render_time_ms);
+        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        
+        snprintf(buf, sizeof(buf), "center: (%.12f, %.12f)", ctx.view.center_re, ctx.view.center_im);
+        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        
+        snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
+            ctx.view.zoom, ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx]);
+        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        
+        if (ctx.julia_mode) {
+            snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", ctx.julia_c.re, ctx.julia_c.im);
+            fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        }
+        if (ctx.m_tour.phase != TOUR_IDLE) {
+            snprintf(buf, sizeof(buf), "auto-zoom [%s] target #%d",
+                get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour)+1);
+            fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        }
+        if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
+            snprintf(buf, sizeof(buf), "auto-c [%s] #%d (%.4f, %.4f)",
+                ctx.j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
+                get_julia_tour_target_idx(&ctx.j_tour)+1, ctx.julia_c.re, ctx.julia_c.im);
+            fonsDrawText(ctx.fons, x, y, buf, NULL);
+        }
+        sfons_flush(ctx.fons);
+    }
+
     sgl_draw();
-
-    sdtx_canvas((float)ctx.win_w, (float)ctx.win_h);
-    sdtx_origin(2.0f, 2.0f);
-    sdtx_color3b(255,255,255);
-    sdtx_printf("%s | %s | threads: %d | render: %u ms\n",
-        ctx.gpu_mode ? "gpu" : "cpu",
-        ctx.julia_mode ? "julia" : "mandelbrot",
-        get_actual_thread_count(), ctx.render_time_ms);
-    sdtx_printf("center: (%.12f, %.12f)\n", ctx.view.center_re, ctx.view.center_im);
-    sdtx_printf("zoom: %.6g | iters: %d | palette: %s\n",
-        ctx.view.zoom, ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx]);
-    if (ctx.julia_mode)
-        sdtx_printf("c = (%.6f, %.6f)\n", ctx.julia_c.re, ctx.julia_c.im);
-    if (ctx.m_tour.phase != TOUR_IDLE)
-        sdtx_printf("auto-zoom [%s] target #%d\n",
-            get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour)+1);
-    if (ctx.j_tour.phase != JULIA_TOUR_IDLE)
-        sdtx_printf("auto-c [%s] #%d (%.4f, %.4f)\n",
-            ctx.j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
-            get_julia_tour_target_idx(&ctx.j_tour)+1, ctx.julia_c.re, ctx.julia_c.im);
-    sdtx_draw();
-
     sg_end_pass();
     sg_commit();
 }
@@ -478,8 +510,8 @@ static void event(const sapp_event* ev) {
 static void cleanup(void) {
     free(ctx.pixels);
     cleanup_renderer();
+    sfons_destroy(ctx.fons);
     sgl_shutdown();
-    sdtx_shutdown();
     sg_shutdown();
 }
 

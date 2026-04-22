@@ -9,15 +9,10 @@
 A high-performance, multi-threaded Mandelbrot and Julia set explorer written in C.
 This project uses an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2), Web (WebAssembly/SIMD128), and GPU (Sokol GFX).
 
----
-### ⚠️ Project Status: Experimental/Unstable
-This project is currently in an active state of development. 
-- **Web Engine:** Currently unstable and undergoing debugging for WebGL2/Sokol initialization issues. You may encounter a black screen or runtime errors when running the web version. 
-- **Desktop Engines (CPU/GPU):** Stable and functional.
----
-
 Live Web Demo - 
 **[(https://tiw302.github.io/mandelbrot-c/)](https://tiw302.github.io/mandelbrot-c/)**
+
+---
 
 ## Table of Contents
 
