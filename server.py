@@ -22,7 +22,21 @@ def kill_port_owner(port):
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=DIRECTORY, **kwargs)
+        super().__init__(*args, directory=".", **kwargs)
+
+    def translate_path(self, path):
+        # Map paths to simulate the GitHub Pages 'deploy' folder layout
+        if path == "/" or path == "":
+            path = "/index.html"
+            
+        if path.startswith("/index.js") or path.startswith("/index.wasm"):
+            return os.path.abspath(os.path.join("build-web", path.lstrip("/")))
+        elif path.startswith("/assets/"):
+            return os.path.abspath(os.path.join(".", path.lstrip("/")))
+        elif path == "/index.html" or path == "/coi-serviceworker.js":
+            return os.path.abspath(os.path.join("web", path.lstrip("/")))
+            
+        return super().translate_path(path)
 
     def end_headers(self):
         # required for sharedarraybuffer/pthreads
@@ -41,10 +55,6 @@ def run_server():
 
     DIRECTORY = args.dir
     port = args.port
-
-    if not os.path.exists(DIRECTORY):
-        print(f"error: directory '{DIRECTORY}' not found.")
-        sys.exit(1)
 
     kill_port_owner(port)
     socketserver.TCPServer.allow_reuse_address = True
