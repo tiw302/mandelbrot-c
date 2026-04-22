@@ -1,9 +1,11 @@
 #include "julia.h"
+
 #include <math.h>
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
-void julia_check_wasm_simd128(const double *re, const double *im, complex_t c, int max_iterations, double *results) {
+void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, int max_iterations,
+                              double* results) {
     v128_t cre = wasm_f64x2_splat(c.re);
     v128_t cim = wasm_f64x2_splat(c.im);
     v128_t zre = wasm_v128_load(re);
@@ -15,12 +17,15 @@ void julia_check_wasm_simd128(const double *re, const double *im, complex_t c, i
     v128_t final_mag_sq = wasm_f64x2_splat(0.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (wasm_i64x2_all_true(wasm_v128_and(escaped_mask, wasm_i64x2_make(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF)))) break;
+        if (wasm_i64x2_all_true(wasm_v128_and(
+                escaped_mask, wasm_i64x2_make(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF))))
+            break;
 
         v128_t zre2 = wasm_f64x2_mul(zre, zre);
         v128_t zim2 = wasm_f64x2_mul(zim, zim);
         v128_t next_re = wasm_f64x2_add(wasm_f64x2_sub(zre2, zim2), cre);
-        v128_t next_im = wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(2.0), wasm_f64x2_mul(zre, zim)), cim);
+        v128_t next_im =
+            wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(2.0), wasm_f64x2_mul(zre, zim)), cim);
         zre = next_re;
         zim = next_im;
 
@@ -69,7 +74,8 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
 }
 
 #ifdef __AVX2__
-void julia_check_avx2(const double *re, const double *im, complex_t c, int max_iterations, double *results) {
+void julia_check_avx2(const double* re, const double* im, complex_t c, int max_iterations,
+                      double* results) {
     __m256d cre = _mm256_set1_pd(c.re);
     __m256d cim = _mm256_set1_pd(c.im);
     __m256d zre = _mm256_loadu_pd(re);
@@ -87,7 +93,8 @@ void julia_check_avx2(const double *re, const double *im, complex_t c, int max_i
         __m256d zim2 = _mm256_mul_pd(zim, zim);
 
         __m256d next_re = _mm256_add_pd(_mm256_sub_pd(zre2, zim2), cre);
-        __m256d next_im = _mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(2.0), _mm256_mul_pd(zre, zim)), cim);
+        __m256d next_im =
+            _mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(2.0), _mm256_mul_pd(zre, zim)), cim);
         zre = next_re;
         zim = next_im;
 

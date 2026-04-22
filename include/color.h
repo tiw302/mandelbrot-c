@@ -5,9 +5,9 @@
 
 #define PALETTE_COUNT 6
 
-extern const char *PALETTE_NAMES[PALETTE_COUNT];
+extern const char* PALETTE_NAMES[PALETTE_COUNT];
 
 void init_color_palette(int max_iterations, int palette_idx);
-void get_color(double iterations, int max_iterations, uint8_t *r, uint8_t *g, uint8_t *b);
+void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, uint8_t* b);
 
 #endif

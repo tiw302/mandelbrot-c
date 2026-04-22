@@ -1,7 +1,8 @@
 #include "mandelbrot.h"
+
+#include <immintrin.h>
 #include <math.h>
 #include <stdint.h>
-#include <immintrin.h>
 
 double mandelbrot_check(complex_t c, int max_iterations) {
     double cr_minus_025 = c.re - 0.25;
@@ -23,7 +24,7 @@ double mandelbrot_check(complex_t c, int max_iterations) {
     while (iterations < max_iterations) {
         double zre2 = z.re * z.re;
         double zim2 = z.im * z.im;
-        
+
         if (zre2 + zim2 > escape_radius_sq) {
             return (double)iterations + 2.0 - log2(log(zre2 + zim2));
         }
@@ -37,7 +38,8 @@ double mandelbrot_check(complex_t c, int max_iterations) {
 }
 
 #ifdef __AVX2__
-void mandelbrot_check_avx2(const double *re, const double *im, int max_iterations, double *results) {
+void mandelbrot_check_avx2(const double* re, const double* im, int max_iterations,
+                           double* results) {
     __m256d cre = _mm256_loadu_pd(re);
     __m256d cim = _mm256_loadu_pd(im);
 
@@ -45,7 +47,7 @@ void mandelbrot_check_avx2(const double *re, const double *im, int max_iteration
     __m256d cim2 = _mm256_mul_pd(cim, cim);
     __m256d q = _mm256_add_pd(_mm256_mul_pd(cre_m_025, cre_m_025), cim2);
     __m256d cardioid_mask = _mm256_cmp_pd(_mm256_mul_pd(q, _mm256_add_pd(q, cre_m_025)),
-                                         _mm256_mul_pd(_mm256_set1_pd(0.25), cim2), _CMP_LE_OQ);
+                                          _mm256_mul_pd(_mm256_set1_pd(0.25), cim2), _CMP_LE_OQ);
     __m256d cre_p_1 = _mm256_add_pd(cre, _mm256_set1_pd(1.0));
     __m256d bulb_mask = _mm256_cmp_pd(_mm256_add_pd(_mm256_mul_pd(cre_p_1, cre_p_1), cim2),
                                       _mm256_set1_pd(0.0625), _CMP_LE_OQ);
@@ -97,7 +99,8 @@ void mandelbrot_check_avx2(const double *re, const double *im, int max_iteration
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
-void mandelbrot_check_wasm_simd128(const double *re, const double *im, int max_iterations, double *results) {
+void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_iterations,
+                                   double* results) {
     v128_t cre = wasm_v128_load(re);
     v128_t cim = wasm_v128_load(im);
 
@@ -105,7 +108,7 @@ void mandelbrot_check_wasm_simd128(const double *re, const double *im, int max_i
     v128_t cim2 = wasm_f64x2_mul(cim, cim);
     v128_t q = wasm_f64x2_add(wasm_f64x2_mul(cre_m_025, cre_m_025), cim2);
     v128_t cardioid_mask = wasm_f64x2_le(wasm_f64x2_mul(q, wasm_f64x2_add(q, cre_m_025)),
-                                        wasm_f64x2_mul(wasm_f64x2_splat(0.25), cim2));
+                                         wasm_f64x2_mul(wasm_f64x2_splat(0.25), cim2));
 
     v128_t cre_p_1 = wasm_f64x2_add(cre, wasm_f64x2_splat(1.0));
     v128_t bulb_mask = wasm_f64x2_le(wasm_f64x2_add(wasm_f64x2_mul(cre_p_1, cre_p_1), cim2),
@@ -127,7 +130,7 @@ void mandelbrot_check_wasm_simd128(const double *re, const double *im, int max_i
         v128_t zre2 = wasm_f64x2_mul(zre, zre);
         v128_t zim2 = wasm_f64x2_mul(zim, zim);
         v128_t mag_sq = wasm_f64x2_add(zre2, zim2);
-        
+
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 

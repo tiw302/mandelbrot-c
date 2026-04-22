@@ -1,13 +1,15 @@
 #include "renderer.h"
-#include "mandelbrot.h"
-#include "julia.h"
-#include "config.h"
-#include <pthread.h>
-#include <stdio.h>
-#include <stdlib.h>
+
 #include <math.h>
+#include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "config.h"
+#include "julia.h"
+#include "mandelbrot.h"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -20,9 +22,9 @@
 #include <unistd.h>
 #endif
 
-static int   actual_thread_count = 0;
-static pthread_t      *threads_pool = NULL;
-static thread_data_t  *thread_data_pool = NULL;
+static int actual_thread_count = 0;
+static pthread_t* threads_pool = NULL;
+static thread_data_t* thread_data_pool = NULL;
 
 static int get_cpu_cores(void) {
 #if defined(__EMSCRIPTEN__)
@@ -77,13 +79,13 @@ int get_actual_thread_count(void) {
     return actual_thread_count;
 }
 
-void *render_thread(void *arg) {
-    thread_data_t *data = (thread_data_t *)arg;
+void* render_thread(void* arg) {
+    thread_data_t* data = (thread_data_t*)arg;
 
-    double re_factor = (data->window_width > 0) ?
-                       (data->re_max - data->re_min) / data->window_width : 0;
-    double im_factor = (data->window_height > 0) ?
-                       (data->im_max - data->im_min) / data->window_height : 0;
+    double re_factor =
+        (data->window_width > 0) ? (data->re_max - data->re_min) / data->window_width : 0;
+    double im_factor =
+        (data->window_height > 0) ? (data->im_max - data->im_min) / data->window_height : 0;
 
     int y;
     while ((y = atomic_fetch_add(data->next_row, 1)) < data->window_height) {
@@ -124,7 +126,8 @@ void *render_thread(void *arg) {
             res_im[0] = res_im[1] = data->im_min + (double)y * im_factor;
 
             if (data->mode == RENDER_JULIA)
-                julia_check_wasm_simd128(res_re, res_im, data->julia_c, data->max_iterations, iterations);
+                julia_check_wasm_simd128(res_re, res_im, data->julia_c, data->max_iterations,
+                                         iterations);
             else
                 mandelbrot_check_wasm_simd128(res_re, res_im, data->max_iterations, iterations);
 
@@ -158,30 +161,25 @@ void *render_thread(void *arg) {
     return NULL;
 }
 
-static void dispatch_threads(uint32_t *pixels, int pitch,
-                              int window_width, int window_height,
-                              double re_min, double re_max,
-                              double im_min, double im_max,
-                              RenderMode mode, complex_t julia_c,
-                              int max_iterations) {
-    atomic_int      next_row    = 0;
+static void dispatch_threads(uint32_t* pixels, int pitch, int window_width, int window_height,
+                             double re_min, double re_max, double im_min, double im_max,
+                             RenderMode mode, complex_t julia_c, int max_iterations) {
+    atomic_int next_row = 0;
 
     for (int i = 0; i < actual_thread_count; i++) {
-        thread_data_pool[i] = (thread_data_t){
-            .id = i,
-            .pixels = pixels,
-            .pitch = pitch,
-            .window_width = window_width,
-            .window_height = window_height,
-            .re_min = re_min,
-            .re_max = re_max,
-            .im_min = im_min,
-            .im_max = im_max,
-            .mode = mode,
-            .julia_c = julia_c,
-            .max_iterations = max_iterations,
-            .next_row = &next_row
-        };
+        thread_data_pool[i] = (thread_data_t){.id = i,
+                                              .pixels = pixels,
+                                              .pitch = pitch,
+                                              .window_width = window_width,
+                                              .window_height = window_height,
+                                              .re_min = re_min,
+                                              .re_max = re_max,
+                                              .im_min = im_min,
+                                              .im_max = im_max,
+                                              .mode = mode,
+                                              .julia_c = julia_c,
+                                              .max_iterations = max_iterations,
+                                              .next_row = &next_row};
 
         if (pthread_create(&threads_pool[i], NULL, render_thread, &thread_data_pool[i]) != 0) {
             fprintf(stderr, "failed to spawn thread %d\n", i);
@@ -193,24 +191,17 @@ static void dispatch_threads(uint32_t *pixels, int pitch,
     for (int i = 0; i < actual_thread_count; i++) pthread_join(threads_pool[i], NULL);
 }
 
-void render_mandelbrot_threaded(uint32_t *pixels, int pitch,
-                                int window_width, int window_height,
-                                double re_min, double re_max,
-                                double im_min, double im_max,
+void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
+                                double re_min, double re_max, double im_min, double im_max,
                                 int max_iterations) {
     complex_t dummy = {0};
-    dispatch_threads(pixels, pitch, window_width, window_height,
-                     re_min, re_max, im_min, im_max,
+    dispatch_threads(pixels, pitch, window_width, window_height, re_min, re_max, im_min, im_max,
                      RENDER_MANDELBROT, dummy, max_iterations);
 }
 
-void render_julia_threaded(uint32_t *pixels, int pitch,
-                           int window_width, int window_height,
-                           double re_min, double re_max,
-                           double im_min, double im_max,
-                           complex_t julia_c,
-                           int max_iterations) {
-    dispatch_threads(pixels, pitch, window_width, window_height,
-                     re_min, re_max, im_min, im_max,
+void render_julia_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
+                           double re_min, double re_max, double im_min, double im_max,
+                           complex_t julia_c, int max_iterations) {
+    dispatch_threads(pixels, pitch, window_width, window_height, re_min, re_max, im_min, im_max,
                      RENDER_JULIA, julia_c, max_iterations);
 }

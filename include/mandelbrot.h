@@ -9,11 +9,12 @@
 #endif
 
 #ifdef __AVX2__
-void mandelbrot_check_avx2(const double *re, const double *im, int max_iterations, double *results);
+void mandelbrot_check_avx2(const double* re, const double* im, int max_iterations, double* results);
 #endif
 
 #ifdef __wasm_simd128__
-void mandelbrot_check_wasm_simd128(const double *re, const double *im, int max_iterations, double *results);
+void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_iterations,
+                                   double* results);
 #endif
 
 #endif
