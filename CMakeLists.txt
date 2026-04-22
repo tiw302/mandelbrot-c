@@ -11,7 +11,7 @@ option(BUILD_WEB "Build Web-Engine (WASM)" OFF)
 
 # Include paths
 # This should make headers like fontstash.h accessible from third_party/fons/
-include_directories(include src/engine third_party third_party/sokol third_party/stb third_party/fons)
+include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons)
 
 # Common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/color.c)
