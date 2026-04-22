@@ -57,3 +57,4 @@ screenshot_*.tga
 
 # Temporary Scripts
 fix_*.py
+tests/test_math
