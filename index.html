@@ -211,7 +211,7 @@
                 html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
             }
 
-            html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 5]}`;
+            html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 6]}`;
 
             debugInfo.textContent = html;
         };
