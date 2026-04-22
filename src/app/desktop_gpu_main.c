@@ -4,6 +4,7 @@
 #define SOKOL_GLUE_IMPL
 #define SOKOL_TIME_IMPL
 #define SOKOL_DEBUGTEXT_IMPL
+#define SOKOL_GL_IMPL
 #include "config.h"
 #include "color.h"
 #include "julia.h"
@@ -16,6 +17,7 @@
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_time.h"
 #include "sokol/sokol_debugtext.h"
+#include "sokol/sokol_gl.h"
 // clang-format on
 #include "desktop_gpu_shaders.h"
 #include "tour.h"
@@ -76,7 +78,6 @@ typedef struct {
 
 static GlobalCtx ctx;
 
-/* helpers */
 static void rebuild_texture(void) {
     if (ctx.img.id) sg_destroy_view(ctx.img_view);
     if (ctx.img.id) sg_destroy_image(ctx.img);
@@ -100,6 +101,7 @@ static void init(void) {
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
     stm_setup();
     sdtx_setup(&(sdtx_desc_t){.fonts[0] = sdtx_font_c64()});
+    sgl_setup(&(sgl_desc_t){.logger.func = slog_func});
 
     ctx.win_w = sapp_width();
     ctx.win_h = sapp_height();
@@ -161,14 +163,13 @@ static void init(void) {
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 
-    printf("mandelbrot gpu explorer\n");
-    printf("  left drag   : zoom selection  right drag : pan\n");
-    printf("  scroll      : zoom at cursor  ctrl+z     : undo\n");
-    printf("  up/down     : iterations      shift+up/dn: x100\n");
-    printf("  p           : cycle palette   g          : toggle gpu/cpu\n");
-    printf("  j           : julia mode      t          : tour\n");
-    printf("  s           : screenshot      r          : reset\n");
-    printf("  q/esc       : quit\n");
+    puts("mandelbrot explorer");
+    puts("  left drag   : zoom selection  right drag : pan");
+    puts("  scroll      : zoom at cursor  ctrl+z     : undo");
+    puts("  up/down     : iterations      shift+up/dn: x100");
+    puts("  p           : cycle palette   r          : reset");
+    puts("  j           : julia mode      t          : tour");
+    puts("  s           : screenshot      q / esc    : quit");
 }
 
 static void frame(void) {
@@ -202,6 +203,39 @@ static void frame(void) {
         ctx.needs_redraw = 0;
     }
 
+    /* prepare shapes (zoom box, bg rects) */
+    sgl_viewport(0, 0, ctx.win_w, ctx.win_h, true);
+    sgl_defaults();
+    sgl_matrix_mode_projection();
+    sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
+
+    /* debug info background (parity with CPU SDL version) */
+    int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
+    float bg_w = 450.0f;
+    float bg_h = num_lines * 18.0f + 6.0f;
+    sgl_begin_quads();
+    sgl_c4b(0, 0, 0, 160);
+    sgl_v2f(2.0f, 2.0f);
+    sgl_v2f(bg_w, 2.0f);
+    sgl_v2f(bg_w, bg_h);
+    sgl_v2f(2.0f, bg_h);
+    sgl_end();
+
+    /* yellow zoom box */
+    if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
+        float x1 = (float)ctx.zoom_rect.x;
+        float y1 = (float)ctx.zoom_rect.y;
+        float x2 = (float)(ctx.zoom_rect.x + ctx.zoom_rect.w);
+        float y2 = (float)(ctx.zoom_rect.y + ctx.zoom_rect.h);
+        sgl_begin_lines();
+        sgl_c3b(255, 255, 0);
+        sgl_v2f(x1, y1); sgl_v2f(x2, y1);
+        sgl_v2f(x2, y1); sgl_v2f(x2, y2);
+        sgl_v2f(x2, y2); sgl_v2f(x1, y2);
+        sgl_v2f(x1, y2); sgl_v2f(x1, y1);
+        sgl_end();
+    }
+
     sg_begin_pass(&(sg_pass){.action=ctx.pass_action, .swapchain=sglue_swapchain()});
     sg_pipeline cur = ctx.gpu_mode ? ctx.pip_gpu : ctx.pip_cpu;
     if (sg_query_pipeline_state(cur) == SG_RESOURCESTATE_VALID) {
@@ -225,9 +259,7 @@ static void frame(void) {
         sg_draw(0, 6, 1);
     }
 
-    if (ctx.is_zooming && ctx.zoom_rect.w && ctx.zoom_rect.h) {
-        /* draw zoom box via sdtx not possible; skip visual rect for now */
-    }
+    sgl_draw();
 
     sdtx_canvas((float)ctx.win_w, (float)ctx.win_h);
     sdtx_origin(2.0f, 2.0f);
@@ -260,7 +292,6 @@ static void event(const sapp_event* ev) {
         ctx.win_h = ev->window_height;
         rebuild_texture();
         ctx.needs_redraw = 1;
-
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
         if (ctx.m_tour.phase != TOUR_IDLE) {
             stop_tour(&ctx.m_tour);
@@ -284,7 +315,6 @@ static void event(const sapp_event* ev) {
             ctx.zoom_rect.y = (int)ev->mouse_y;
             ctx.zoom_rect.w = ctx.zoom_rect.h = 0;
         }
-
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
         if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
             ctx.is_panning = 0;
@@ -307,7 +337,6 @@ static void event(const sapp_event* ev) {
             }
             ctx.is_zooming = 0;
         }
-
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
         ctx.mouse_x = (int)ev->mouse_x;
         ctx.mouse_y = (int)ev->mouse_y;
@@ -329,7 +358,6 @@ static void event(const sapp_event* ev) {
                 (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
-
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
         if (ev->scroll_y != 0.0f) {
             if (ctx.history_count < MAX_HISTORY_SIZE)
@@ -342,42 +370,33 @@ static void event(const sapp_event* ev) {
             ctx.view.center_im = mim - (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
-
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         int mod_ctrl = ev->modifiers & SAPP_MODIFIER_CTRL;
         int mod_shift = ev->modifiers & SAPP_MODIFIER_SHIFT;
-
         if (ev->key_code == SAPP_KEYCODE_ESCAPE || ev->key_code == SAPP_KEYCODE_Q) {
             sapp_quit();
-
         } else if (ev->key_code == SAPP_KEYCODE_Z && mod_ctrl) {
-            if (ctx.m_tour.phase == TOUR_IDLE && ctx.j_tour.phase == JULIA_TOUR_IDLE
-                && ctx.history_count > 0)
+            if (ctx.m_tour.phase == TOUR_IDLE && ctx.j_tour.phase == JULIA_TOUR_IDLE && ctx.history_count > 0)
                 ctx.view = ctx.history[--ctx.history_count];
             ctx.needs_redraw = 1;
-
         } else if (ev->key_code == SAPP_KEYCODE_R) {
             ctx.julia_mode = 0;
             ctx.julia_session.active = 0;
             ctx.m_tour.phase = TOUR_IDLE;
             ctx.j_tour.phase = JULIA_TOUR_IDLE;
             ctx.max_iterations = DEFAULT_ITERATIONS;
-            /* keep palette_idx */
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
             ctx.history_count = 0;
             sapp_set_window_title("Mandelbrot GPU Explorer");
             ctx.needs_redraw = 1;
-
         } else if (ev->key_code == SAPP_KEYCODE_G) {
             ctx.gpu_mode = !ctx.gpu_mode;
             ctx.needs_redraw = 1;
-
         } else if (ev->key_code == SAPP_KEYCODE_P) {
             ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
-
         } else if (ev->key_code == SAPP_KEYCODE_J) {
             ctx.m_tour.phase = TOUR_IDLE;
             ctx.j_tour.phase = JULIA_TOUR_IDLE;
@@ -397,9 +416,7 @@ static void event(const sapp_event* ev) {
                 sapp_set_window_title("Mandelbrot GPU Explorer");
             }
             ctx.needs_redraw = 1;
-
         } else if (ev->key_code == SAPP_KEYCODE_S) {
-            /* screenshot: do cpu render to tmp buffer */
             uint32_t* buf = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
             if (buf) {
                 double aspect = (double)ctx.win_w / ctx.win_h;
@@ -408,15 +425,12 @@ static void event(const sapp_event* ev) {
                 double im_top = ctx.view.center_im + ctx.view.zoom / 2;
                 double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
                 if (ctx.julia_mode)
-                    render_julia_threaded(buf, ctx.win_w*4, ctx.win_w, ctx.win_h,
-                                         rmin, rmax, im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+                    render_julia_threaded(buf, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, im_top, im_bot, ctx.julia_c, ctx.max_iterations);
                 else
-                    render_mandelbrot_threaded(buf, ctx.win_w*4, ctx.win_w, ctx.win_h,
-                                               rmin, rmax, im_top, im_bot, ctx.max_iterations);
+                    render_mandelbrot_threaded(buf, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, im_top, im_bot, ctx.max_iterations);
                 save_screenshot(buf, ctx.win_w, ctx.win_h);
                 free(buf);
             }
-
         } else if (ev->key_code == SAPP_KEYCODE_T) {
             if (ctx.julia_mode) {
                 if (ctx.j_tour.phase == JULIA_TOUR_IDLE) {
@@ -443,7 +457,6 @@ static void event(const sapp_event* ev) {
                     ctx.needs_redraw = 1;
                 }
             }
-
         } else if (ev->key_code == SAPP_KEYCODE_UP) {
             int step = mod_shift ? 100 : 10;
             if (ctx.max_iterations + step <= MAX_ITERATIONS_LIMIT) {
@@ -451,7 +464,6 @@ static void event(const sapp_event* ev) {
                 init_renderer(ctx.max_iterations, ctx.palette_idx);
                 ctx.needs_redraw = 1;
             }
-
         } else if (ev->key_code == SAPP_KEYCODE_DOWN) {
             int step = mod_shift ? 100 : 10;
             if (ctx.max_iterations - step >= 10) {
@@ -466,6 +478,7 @@ static void event(const sapp_event* ev) {
 static void cleanup(void) {
     free(ctx.pixels);
     cleanup_renderer();
+    sgl_shutdown();
     sdtx_shutdown();
     sg_shutdown();
 }
@@ -473,12 +486,12 @@ static void cleanup(void) {
 sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc; (void)argv;
     return (sapp_desc){
-        .init_cb    = init,
-        .frame_cb   = frame,
+        .init_cb = init,
+        .frame_cb = frame,
         .cleanup_cb = cleanup,
-        .event_cb   = event,
-        .width      = WINDOW_WIDTH,
-        .height     = WINDOW_HEIGHT,
+        .event_cb = event,
+        .width = WINDOW_WIDTH,
+        .height = WINDOW_HEIGHT,
         .window_title = "Mandelbrot GPU Explorer",
-        .high_dpi   = false};
+        .high_dpi = false};
 }

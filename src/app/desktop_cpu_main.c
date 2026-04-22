@@ -473,17 +473,11 @@ static TTF_Font* load_font(void) {
 }
 
 static void print_controls(void) {
-    puts("mandelbrot explorer controls:");
-    puts("  left drag       : zoom into selection");
-    puts("  right drag      : pan");
-    puts("  mouse wheel     : zoom at cursor");
-    puts("  up / down       : adjust iterations (+/- 10, shift for +/- 100)");
-    puts("  p               : cycle color palettes");
-    puts("  ctrl+z          : undo zoom");
-    puts("  r               : reset view / iterations");
-    puts("  j               : toggle julia mode");
-    puts("  s               : save screenshot");
-    puts("  t (mandelbrot)  : toggle auto-zoom tour");
-    puts("  t (julia)       : toggle auto-c tour");
-    puts("  q / esc         : quit");
+    puts("mandelbrot explorer");
+    puts("  left drag   : zoom selection  right drag : pan");
+    puts("  scroll      : zoom at cursor  ctrl+z     : undo");
+    puts("  up/down     : iterations      shift+up/dn: x100");
+    puts("  p           : cycle palette   r          : reset");
+    puts("  j           : julia mode      t          : tour");
+    puts("  s           : screenshot      q / esc    : quit");
 }
