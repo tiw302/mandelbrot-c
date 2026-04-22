@@ -28,6 +28,21 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
+
+EM_JS(void, update_debug_info_js, (int gpu_mode, int julia_mode, int max_iters, double zoom, double center_re, double center_im, int palette_idx, int tour_phase, double julia_re, double julia_im), {
+    if (typeof updateDebugInfo === 'function') {
+        updateDebugInfo(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im);
+    }
+});
+
+EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
+    if (typeof updateZoomBox === 'function') {
+        updateZoomBox(is_zooming, x, y, w, h);
+    }
+});
+#else
+#define update_debug_info_js(...)
+#define update_zoom_box_js(...)
 #endif
 
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
@@ -73,6 +88,9 @@ typedef struct {
     int is_panning, is_zooming;
     int last_mouse_x, last_mouse_y;
     int mouse_x, mouse_y;
+    struct {
+        int x, y, w, h;
+    } zoom_rect;
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -214,6 +232,7 @@ static void frame(void) {
 
     sg_end_pass();
     sg_commit();
+    update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.max_iterations, ctx.view.zoom, ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase, ctx.julia_c.re, ctx.julia_c.im);
 }
 
 static void event(const sapp_event* ev) {
@@ -222,28 +241,91 @@ static void event(const sapp_event* ev) {
             ctx.is_panning = 1;
             ctx.last_mouse_x = (int)ev->mouse_x;
             ctx.last_mouse_y = (int)ev->mouse_y;
+        } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+            ctx.is_zooming = 1;
+            ctx.zoom_rect.x = (int)ev->mouse_x;
+            ctx.zoom_rect.y = (int)ev->mouse_y;
+            ctx.zoom_rect.w = 0;
+            ctx.zoom_rect.h = 0;
+            update_zoom_box_js(1, ctx.zoom_rect.x, ctx.zoom_rect.y, 0, 0);
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
-        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ctx.is_panning = 0;
+        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
+            ctx.is_panning = 0;
+        } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
+            if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
+                if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
+                double aspect = (double)ctx.win_w / ctx.win_h;
+                double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
+                double im_min = ctx.view.center_im - ctx.view.zoom / 2.0;
+                double re_pp = (ctx.view.zoom * aspect) / ctx.win_w;
+                double im_pp = ctx.view.zoom / ctx.win_h;
+                int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
+                int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
+                int zw = abs(ctx.zoom_rect.w);
+                int zh = abs(ctx.zoom_rect.h);
+                ctx.view.center_re = re_min + (zx + zw / 2.0) * re_pp;
+                ctx.view.center_im = im_min + (zy + zh / 2.0) * im_pp;
+                ctx.view.zoom = fmax(zw * re_pp, zh * im_pp);
+                ctx.needs_redraw = 1;
+            }
+            ctx.is_zooming = 0;
+            update_zoom_box_js(0, 0, 0, 0, 0);
+        }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
+        ctx.mouse_x = (int)ev->mouse_x;
+        ctx.mouse_y = (int)ev->mouse_y;
         if (ctx.is_panning) {
             double aspect = (double)ctx.win_w / ctx.win_h;
-            ctx.view.center_re -=
-                (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
+            ctx.view.center_re -= (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
             ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
             ctx.last_mouse_x = (int)ev->mouse_x;
             ctx.last_mouse_y = (int)ev->mouse_y;
             ctx.needs_redraw = 1;
+        } else if (ctx.is_zooming) {
+            ctx.zoom_rect.w = (int)ev->mouse_x - ctx.zoom_rect.x;
+            ctx.zoom_rect.h = (int)ev->mouse_y - ctx.zoom_rect.y;
+            int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
+            int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
+            update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
+        } else if (ctx.julia_mode && ctx.m_tour.phase == TOUR_IDLE) {
+            double aspect = (double)ctx.win_w / ctx.win_h;
+            double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
+            double im_min = ctx.view.center_im - ctx.view.zoom / 2.0;
+            ctx.julia_c.re = re_min + (double)ctx.mouse_x * (ctx.view.zoom * aspect) / ctx.win_w;
+            ctx.julia_c.im = im_min + (double)ctx.mouse_y * ctx.view.zoom / ctx.win_h;
+            ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        ctx.view.zoom *= (ev->scroll_y > 0) ? 0.9 : 1.1;
-        ctx.needs_redraw = 1;
+        double zoom_factor = (ev->scroll_y > 0) ? 0.9 : 1.1;
+        if (ev->scroll_y != 0.0f) {
+            if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
+            double aspect = (double)ctx.win_w / ctx.win_h;
+            double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
+            double im_min = ctx.view.center_im - ctx.view.zoom / 2.0;
+            double mouse_re = re_min + (double)ev->mouse_x * (ctx.view.zoom * aspect) / ctx.win_w;
+            double mouse_im = im_min + (double)ev->mouse_y * ctx.view.zoom / ctx.win_h;
+            ctx.view.zoom *= zoom_factor;
+            ctx.view.center_re = mouse_re + (ctx.view.center_re - mouse_re) * zoom_factor;
+            ctx.view.center_im = mouse_im + (ctx.view.center_im - mouse_im) * zoom_factor;
+            ctx.needs_redraw = 1;
+        }
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         if (ev->key_code == SAPP_KEYCODE_G) {
             ctx.gpu_mode = !ctx.gpu_mode;
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_R) {
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_UP) {
+            ctx.max_iterations += 10;
+            if (ctx.max_iterations > 10000) ctx.max_iterations = 10000;
+            init_renderer(ctx.max_iterations, ctx.palette_idx);
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_DOWN) {
+            ctx.max_iterations -= 10;
+            if (ctx.max_iterations < 10) ctx.max_iterations = 10;
+            init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_RESIZED) {
