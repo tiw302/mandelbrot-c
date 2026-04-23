@@ -17,6 +17,15 @@ build_web() {
     fi
     emcmake cmake -S . -B build-web -DBUILD_WEB=ON
     cmake --build build-web
+    mkdir -p deploy
+    cp web/index.html deploy/
+    cp web/style.css deploy/
+    cp web/app.js deploy/
+    cp web/coi-serviceworker.js deploy/
+    cp build-web/index.js deploy/
+    cp build-web/index.wasm deploy/
+    if [ -d "assets" ]; then cp -r assets deploy/; fi
+    echo "web: build and deployment package ready in 'deploy/' folder."
 }
 
 build_all() {
@@ -39,6 +48,7 @@ if [ $# -gt 0 ]; then
     exit 0
 fi
 
+echo " "
 echo "mandelbrot engine build!!"
 echo " "
 echo "___________________________"
