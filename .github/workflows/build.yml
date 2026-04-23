@@ -51,9 +51,11 @@ jobs:
       run: |
         mkdir -p deploy
         cp web/index.html deploy/
+        cp web/style.css deploy/
+        cp web/app.js deploy/
+        cp web/coi-serviceworker.js deploy/
         cp build-web/index.js deploy/
         cp build-web/index.wasm deploy/
-        cp web/coi-serviceworker.js deploy/
         # Copy assets if needed
         if [ -d "assets" ]; then cp -r assets deploy/; fi
 

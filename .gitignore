@@ -22,8 +22,9 @@ mandelbrot-desktop
 *.out
 *.app
 *.wasm
-*.js
-!coi-serviceworker.js
+web/index.js
+!web/app.js
+!web/coi-serviceworker.js
 
 # Debugging
 *.dSYM/

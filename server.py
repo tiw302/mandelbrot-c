@@ -33,7 +33,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             return os.path.abspath(os.path.join("build-web", path.lstrip("/")))
         elif path.startswith("/assets/"):
             return os.path.abspath(os.path.join(".", path.lstrip("/")))
-        elif path == "/index.html" or path == "/coi-serviceworker.js":
+        elif path == "/index.html" or path == "/coi-serviceworker.js" or path == "/style.css" or path == "/app.js":
             return os.path.abspath(os.path.join("web", path.lstrip("/")))
             
         return super().translate_path(path)
