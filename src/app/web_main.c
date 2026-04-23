@@ -439,6 +439,71 @@ void wasm_set_resolution(int w, int h) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_cancel_zoom(void) {
     ctx.is_panning = 0;
+    ctx.is_zooming = 0;
+    update_zoom_box_js(0, 0, 0, 0, 0);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_mouse_down(float x, float y, int button) {
+    if (button == 0) { // Left
+        ctx.is_zooming = 1;
+        ctx.zoom_rect.x = (int)x;
+        ctx.zoom_rect.y = (int)y;
+        ctx.zoom_rect.w = 0;
+        ctx.zoom_rect.h = 0;
+        update_zoom_box_js(1, ctx.zoom_rect.x, ctx.zoom_rect.y, 0, 0);
+    } else if (button == 1) { // Right (panning)
+        ctx.is_panning = 1;
+        ctx.last_mouse_x = (int)x;
+        ctx.last_mouse_y = (int)y;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_mouse_move(float x, float y) {
+    ctx.mouse_x = (int)x;
+    ctx.mouse_y = (int)y;
+    if (ctx.is_panning) {
+        double aspect = (double)ctx.win_w / ctx.win_h;
+        ctx.view.center_re -= (x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
+        ctx.view.center_im += (y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
+        ctx.last_mouse_x = (int)x;
+        ctx.last_mouse_y = (int)y;
+        ctx.needs_redraw = 1;
+    } else if (ctx.is_zooming) {
+        ctx.zoom_rect.w = (int)x - ctx.zoom_rect.x;
+        ctx.zoom_rect.h = (int)y - ctx.zoom_rect.y;
+        int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
+        int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
+        update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_mouse_up(float x, float y, int button) {
+    (void)x; (void)y;
+    if (button == 0) { // Left
+        if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
+            if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
+            double aspect = (double)ctx.win_w / ctx.win_h;
+            double re_pp = (ctx.view.zoom * aspect) / ctx.win_w;
+            double im_pp = ctx.view.zoom / ctx.win_h;
+            int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
+            int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
+            int zw = abs(ctx.zoom_rect.w);
+            int zh = abs(ctx.zoom_rect.h);
+            double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
+            double im_max = ctx.view.center_im + ctx.view.zoom / 2.0;
+            ctx.view.center_re = re_min + (zx + zw / 2.0) * re_pp;
+            ctx.view.center_im = im_max - (zy + zh / 2.0) * im_pp;
+            ctx.view.zoom = fmax(zw * re_pp, zh * im_pp);
+            ctx.needs_redraw = 1;
+        }
+        ctx.is_zooming = 0;
+        update_zoom_box_js(0, 0, 0, 0, 0);
+    } else if (button == 1) { // Right
+        ctx.is_panning = 0;
+    }
 }
 
 EMSCRIPTEN_KEEPALIVE
