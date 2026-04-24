@@ -85,21 +85,17 @@ function loadFromURL() {
     const p = parseInt(params.get('p')) || 0;
 
     if (!isNaN(re) && !isNaN(im) && !isNaN(z)) {
-        console.log(`[url] loading coordinates: re=${re}, im=${im}, z=${z}`);
         if (Module._wasm_set_view) {
             Module._wasm_set_view(re, im, z);
         }
         if (Module._wasm_set_state) {
             Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
         }
-    } else {
-        console.log("[url] no coordinates found or invalid format, using defaults");
     }
     
     // delay enabling updates to let the engine settle
     setTimeout(() => {
         _urlInitialized = true;
-        console.log("[url] updates enabled");
     }, 500);
 }
 
