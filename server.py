@@ -25,16 +25,17 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         super().__init__(*args, directory=".", **kwargs)
 
     def translate_path(self, path):
-        # Map paths to simulate the GitHub Pages 'deploy' folder layout
-        if path == "/" or path == "":
-            path = "/index.html"
+        # strip query parameters for routing logic
+        clean_path = path.split('?')[0]
+        if clean_path == "/" or clean_path == "":
+            clean_path = "/index.html"
             
-        if path.startswith("/index.js") or path.startswith("/index.wasm"):
-            return os.path.abspath(os.path.join("build-web", path.lstrip("/")))
-        elif path.startswith("/assets/"):
-            return os.path.abspath(os.path.join(".", path.lstrip("/")))
-        elif path == "/index.html" or path == "/coi-serviceworker.js" or path == "/style.css" or path == "/app.js":
-            return os.path.abspath(os.path.join("web", path.lstrip("/")))
+        if clean_path.startswith("/index.js") or clean_path.startswith("/index.wasm"):
+            return os.path.abspath(os.path.join("build-web", clean_path.lstrip("/")))
+        elif clean_path.startswith("/assets/"):
+            return os.path.abspath(os.path.join(".", clean_path.lstrip("/")))
+        elif clean_path == "/index.html" or clean_path == "/coi-serviceworker.js" or clean_path == "/style.css" or clean_path == "/app.js":
+            return os.path.abspath(os.path.join("web", clean_path.lstrip("/")))
             
         return super().translate_path(path)
 
