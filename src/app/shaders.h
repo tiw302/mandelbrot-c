@@ -22,21 +22,7 @@ static const char* fs_cpu_src =
     "    frag_color = texture(tex, uv);\n"
     "}\n";
 
-/* gpu shader: exact match to cpu color.c palettes and mandelbrot.c smooth formula.
- *
- * cpu smooth iteration (mandelbrot.c:29):
- *   s = iterations + 2.0 - log2(log(|z|^2))   (uses mag-squared, escape_radius=10)
- *
- * cpu palettes (color.c) use iteration index i into a LUT built with:
- *   0 sine wave:  sin(0.1*i + phase) * 127 + 128  per channel (phases 0,2,4)
- *   1 grayscale:  i % 256  per channel
- *   2 fire:       r=min(255,i*4) g=min(255,i*2) b=min(255,i*1)
- *   3 electric:   r=min(255,i*1) g=min(255,i*4) b=min(255,i*8)
- *   4 ocean:      r=min(255,i*0.5) g=min(255,i*2) b=min(255,i*5)
- *   5 inferno:    r=min(255,i*8) g=min(255,i*2) b=min(255,i*0.5)
- *
- * LUT interpolation: lerp between lut[floor(s)] and lut[floor(s)+1] by frac(s).
- */
+/* gpu shader: exact match to cpu color.c palettes and mandelbrot.c smooth formula. */
 static const char* fs_gpu_src =
     "#version 300 es\n"
     "precision highp float;\n"
@@ -51,29 +37,28 @@ static const char* fs_gpu_src =
     "in vec2 uv;\n"
     "out vec4 frag_color;\n"
 
-    /* exact match to color.c get_color() with LUT lerp */
     "vec3 lut_color(float fi, int pal) {\n"
     "    float i = fi;\n"
     "    vec3 a, b;\n"
-    "    if (pal == 0) {\n"  /* sine wave */
-    "        a = vec3(sin(0.1*i)*127.0+128.0, sin(0.1*i+2.0)*127.0+128.0, sin(0.1*i+4.0)*127.0+128.0) / 255.0;\n"
-    "        b = vec3(sin(0.1*(i+1.0))*127.0+128.0, sin(0.1*(i+1.0)+2.0)*127.0+128.0, sin(0.1*(i+1.0)+4.0)*127.0+128.0) / 255.0;\n"
+    "    if (pal == 0) {\n"  /* sine wave: Swapped phases (4,2,0) to match CPU Mint appearance */
+    "        a = vec3(sin(0.1*i+4.0)*127.0+128.0, sin(0.1*i+2.0)*127.0+128.0, sin(0.1*i+0.0)*127.0+128.0) / 255.0;\n"
+    "        b = vec3(sin(0.1*(i+1.0)+4.0)*127.0+128.0, sin(0.1*(i+1.0)+2.0)*127.0+128.0, sin(0.1*(i+1.0)+0.0)*127.0+128.0) / 255.0;\n"
     "    } else if (pal == 1) {\n"  /* grayscale */
     "        float v = mod(i, 256.0) / 255.0;\n"
     "        float v2 = mod(i+1.0, 256.0) / 255.0;\n"
     "        a = vec3(v); b = vec3(v2);\n"
-    "    } else if (pal == 2) {\n"  /* fire */
-    "        a = vec3(min(255.0,i*4.0), min(255.0,i*2.0), min(255.0,i*1.0)) / 255.0;\n"
-    "        b = vec3(min(255.0,(i+1.0)*4.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*1.0)) / 255.0;\n"
-    "    } else if (pal == 3) {\n"  /* electric */
-    "        a = vec3(min(255.0,i*1.0), min(255.0,i*4.0), min(255.0,i*8.0)) / 255.0;\n"
-    "        b = vec3(min(255.0,(i+1.0)*1.0), min(255.0,(i+1.0)*4.0), min(255.0,(i+1.0)*8.0)) / 255.0;\n"
-    "    } else if (pal == 4) {\n"  /* ocean */
-    "        a = vec3(min(255.0,i*0.5), min(255.0,i*2.0), min(255.0,i*5.0)) / 255.0;\n"
-    "        b = vec3(min(255.0,(i+1.0)*0.5), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*5.0)) / 255.0;\n"
-    "    } else {\n"  /* inferno */
-    "        a = vec3(min(255.0,i*8.0), min(255.0,i*2.0), min(255.0,i*0.5)) / 255.0;\n"
-    "        b = vec3(min(255.0,(i+1.0)*8.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*0.5)) / 255.0;\n"
+    "    } else if (pal == 2) {\n"  /* fire (swapped to match CPU) */
+    "        a = vec3(min(255.0,i*1.0), min(255.0,i*2.0), min(255.0,i*4.0)) / 255.0;\n"
+    "        b = vec3(min(255.0,(i+1.0)*1.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*4.0)) / 255.0;\n"
+    "    } else if (pal == 3) {\n"  /* electric (swapped to match CPU) */
+    "        a = vec3(min(255.0,i*8.0), min(255.0,i*4.0), min(255.0,i*1.0)) / 255.0;\n"
+    "        b = vec3(min(255.0,(i+1.0)*8.0), min(255.0,(i+1.0)*4.0), min(255.0,(i+1.0)*1.0)) / 255.0;\n"
+    "    } else if (pal == 4) {\n"  /* ocean (swapped to match CPU) */
+    "        a = vec3(min(255.0,i*5.0), min(255.0,i*2.0), min(255.0,i*0.5)) / 255.0;\n"
+    "        b = vec3(min(255.0,(i+1.0)*5.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*0.5)) / 255.0;\n"
+    "    } else {\n"  /* inferno (swapped to match CPU) */
+    "        a = vec3(min(255.0,i*0.5), min(255.0,i*2.0), min(255.0,i*8.0)) / 255.0;\n"
+    "        b = vec3(min(255.0,(i+1.0)*0.5), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*8.0)) / 255.0;\n"
     "    }\n"
     "    return mix(a, b, fract(fi));\n"
     "}\n"
@@ -84,9 +69,8 @@ static const char* fs_gpu_src =
     "                  (0.5 - uv.y) * u_zoom + center.y);\n"
     "    vec2 c_val = (u_is_julia > 0.5) ? u_julia_c : p;\n"
     "    vec2 z = (u_is_julia > 0.5) ? p : vec2(0.0);\n"
-    "    float escape_sq = 100.0;\n"  /* escape_radius=10, matches config.h */
-    "    int m = int(u_iters);\n"
-    "    int i = 0;\n"
+    "    float escape_sq = 100.0;\n"
+    "    int m = int(u_iters), i = 0;\n"
     "    for (i = 0; i < 2000; i++) {\n"
     "        if (i >= m) break;\n"
     "        float x2 = z.x * z.x, y2 = z.y * z.y;\n"
@@ -96,11 +80,10 @@ static const char* fs_gpu_src =
     "    if (i >= m) {\n"
     "        frag_color = vec4(0.0, 0.0, 0.0, 1.0);\n"
     "    } else {\n"
-    /* exact match to mandelbrot.c: s = i + 2.0 - log2(log(mag_sq)) */
     "        float mag_sq = z.x*z.x + z.y*z.y;\n"
     "        float s = float(i) + 2.0 - log2(log(max(1.0, mag_sq)));\n"
     "        frag_color = vec4(lut_color(max(0.0, s), int(u_palette)), 1.0);\n"
     "    }\n"
     "}\n";
 
-#endif // SHADERS_H
+#endif

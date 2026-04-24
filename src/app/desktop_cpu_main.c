@@ -102,7 +102,7 @@ int main(int argc, char* argv[]) {
     JuliaSession julia_session = {{0}, 0};
 
     int max_iterations = DEFAULT_ITERATIONS;
-    int palette_idx = 0;
+    int palette_idx = DEFAULT_PALETTE;
     int running = 1;
     int needs_redraw = 1;
     int is_panning = 0, is_zooming = 0;
@@ -387,15 +387,18 @@ int main(int argc, char* argv[]) {
             int x = 15;
             int y = 12;
             int line_h = FONT_SIZE + 4;
-            int num_lines = 3 + (julia_mode ? 1 : 0) + (m_tour.phase != TOUR_IDLE ? 1 : 0) + (j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
+            int num_lines = 3 + (m_tour.phase != TOUR_IDLE ? 1 : 0) + (j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
 
-            SDL_Rect bg = {5, 5, 540, num_lines * line_h + 12};
+            SDL_Rect bg = {5, 5, 600, num_lines * line_h + 12};
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
             SDL_RenderFillRect(renderer, &bg);
 
-            snprintf(buf, sizeof(buf), "%s | render: %u ms | threads: %d",
-                     julia_mode ? "julia" : "mandelbrot", render_time, get_actual_thread_count());
+            /* Line 1: Engine | Mode | Threads | Render */
+            int num_threads = get_actual_thread_count();
+            snprintf(buf, sizeof(buf), "cpu | %s | threads: %d | render: %u ms",
+                     julia_mode ? "julia" : "mandelbrot",
+                     num_threads, render_time);
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 

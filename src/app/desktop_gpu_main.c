@@ -277,9 +277,11 @@ static void frame(void) {
 
     /* debug info background with blending */
     sgl_load_pipeline(ctx.pip_blend);
-    int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
-    float bg_w = 540.0f;
-    float bg_h = num_lines * (FONT_SIZE + 4) + 12.0f;
+    int num_lines = 3 + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
+    float visual_font_size = FONT_SIZE * 1.25f;
+    float lh = visual_font_size + 4.0f;
+    float bg_w = 600.0f;
+    float bg_h = num_lines * lh + 12.0f;
     sgl_begin_quads();
     sgl_c4b(0, 0, 0, 180);
     sgl_v2f(5.0f, 5.0f);
@@ -292,9 +294,10 @@ static void frame(void) {
     if (ctx.font_id != FONS_INVALID) {
         fonsClearState(ctx.fons);
         fonsSetFont(ctx.fons, ctx.font_id);
-        fonsSetSize(ctx.fons, (float)FONT_SIZE);
+        fonsSetSize(ctx.fons, visual_font_size);
+        fonsSetAlign(ctx.fons, FONS_ALIGN_LEFT | FONS_ALIGN_TOP);
         fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
-        float x = 15.0f, y = 22.0f, lh = (float)(FONT_SIZE + 4);
+        float x = 15.0f, y = 12.0f;
         char buf[256];
         
         snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",

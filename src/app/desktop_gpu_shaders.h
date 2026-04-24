@@ -12,7 +12,6 @@ static const char* dg_fs_cpu =
     "uniform sampler2D tex; in vec2 uv; out vec4 color;"
     "void main() { color = texture(tex, uv); }";
 
-/* matches web shader logic: escape_radius=10, 6 palettes, julia, split-float center */
 static const char* dg_fs_gpu =
     "#version 330\n"
     "uniform vec2 u_center_hi; uniform vec2 u_center_lo;"
@@ -22,23 +21,23 @@ static const char* dg_fs_gpu =
 
     "vec3 lut_color(float fi, int pal) {\n"
     "  float i = fi; vec3 a,b;\n"
-    "  if (pal==0) {\n"
-    "    a=vec3(sin(0.1*i)*127.+128., sin(0.1*i+2.)*127.+128., sin(0.1*i+4.)*127.+128.)/255.;\n"
-    "    b=vec3(sin(0.1*(i+1.))*127.+128., sin(0.1*(i+1.)+2.)*127.+128., sin(0.1*(i+1.)+4.)*127.+128.)/255.;\n"
+    "  if (pal==0) {\n" /* sine wave: Swapped phases (4,2,0) for Mint */
+    "    a=vec3(sin(0.1*i+4.0)*127.+128., sin(0.1*i+2.0)*127.+128., sin(0.1*i+0.0)*127.+128.)/255.;\n"
+    "    b=vec3(sin(0.1*(i+1.0)+4.0)*127.+128., sin(0.1*(i+1.0)+2.0)*127.+128., sin(0.1*(i+1.0)+0.0)*127.+128.)/255.;\n"
     "  } else if (pal==1) {\n"
     "    a=vec3(mod(i,256.)/255.); b=vec3(mod(i+1.,256.)/255.);\n"
-    "  } else if (pal==2) {\n"
-    "    a=vec3(min(255.,i*4.),min(255.,i*2.),min(255.,i*1.))/255.;\n"
-    "    b=vec3(min(255.,(i+1.)*4.),min(255.,(i+1.)*2.),min(255.,(i+1.)*1.))/255.;\n"
-    "  } else if (pal==3) {\n"
-    "    a=vec3(min(255.,i*1.),min(255.,i*4.),min(255.,i*8.))/255.;\n"
-    "    b=vec3(min(255.,(i+1.)*1.),min(255.,(i+1.)*4.),min(255.,(i+1.)*8.))/255.;\n"
-    "  } else if (pal==4) {\n"
-    "    a=vec3(min(255.,i*.5),min(255.,i*2.),min(255.,i*5.))/255.;\n"
-    "    b=vec3(min(255.,(i+1.)*.5),min(255.,(i+1.)*2.),min(255.,(i+1.)*5.))/255.;\n"
-    "  } else {\n"
-    "    a=vec3(min(255.,i*8.),min(255.,i*2.),min(255.,i*.5))/255.;\n"
-    "    b=vec3(min(255.,(i+1.)*8.),min(255.,(i+1.)*2.),min(255.,(i+1.)*.5))/255.;\n"
+    "  } else if (pal==2) {\n" /* fire swapped */
+    "    a=vec3(min(255.,i*1.),min(255.,i*2.),min(255.,i*4.))/255.;\n"
+    "    b=vec3(min(255.,(i+1.)*1.),min(255.,(i+1.)*2.),min(255.,(i+1.)*4.))/255.;\n"
+    "  } else if (pal==3) {\n" /* electric swapped */
+    "    a=vec3(min(255.,i*8.),min(255.,i*4.),min(255.,i*1.))/255.;\n"
+    "    b=vec3(min(255.,(i+1.)*8.),min(255.,(i+1.)*4.),min(255.,(i+1.)*1.))/255.;\n"
+    "  } else if (pal==4) {\n" /* ocean swapped */
+    "    a=vec3(min(255.,i*5.),min(255.,i*2.),min(255.,i*.5))/255.;\n"
+    "    b=vec3(min(255.,(i+1.)*5.),min(255.,(i+1.)*2.),min(255.,(i+1.)*.5))/255.;\n"
+    "  } else {\n" /* inferno swapped */
+    "    a=vec3(min(255.,i*.5),min(255.,i*2.),min(255.,i*8.))/255.;\n"
+    "    b=vec3(min(255.,(i+1.)*.5),min(255.,(i+1.)*2.),min(255.,(i+1.)*8.))/255.;\n"
     "  }\n"
     "  return mix(a, b, fract(fi));\n"
     "}\n"

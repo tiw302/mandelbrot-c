@@ -202,7 +202,8 @@ static void init(void) {
     ctx.gpu_mode = 1;
 #endif
 
-    init_renderer(ctx.max_iterations, 0);
+    init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
+    ctx.palette_idx = DEFAULT_PALETTE;
 }
 
 static void frame(void) {

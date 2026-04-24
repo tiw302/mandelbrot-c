@@ -6,6 +6,7 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 #include "config.h"
 #include "julia.h"
@@ -114,6 +115,7 @@ void* render_thread(void* arg) {
             for (int i = 0; i < 4; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
+                /* v4.0.0 packing: r at bit 16, g at 8, b at 0 */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
             }
@@ -134,6 +136,7 @@ void* render_thread(void* arg) {
             for (int i = 0; i < 2; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
+                /* v4.0.0 packing */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
             }
@@ -153,6 +156,7 @@ void* render_thread(void* arg) {
 
             uint8_t r, g, b;
             get_color(iterations, data->max_iterations, &r, &g, &b);
+            /* v4.0.0 packing */
             data->pixels[y * (data->pitch / sizeof(uint32_t)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
         }

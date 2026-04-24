@@ -13,6 +13,7 @@
 
 #define DEBUG_INFO 1
 #define FONT_SIZE 16
+#define DEFAULT_PALETTE 0
 
 #define FONT_PATH_LOCAL "assets/fonts/font.ttf"
 

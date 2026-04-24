@@ -1,53 +1,20 @@
 #include "color.h"
-
 #include <math.h>
+#include <stdlib.h>
 
-#include "config.h"
+const char* PALETTE_NAMES[PALETTE_COUNT] = {
+    "Sine Wave",
+    "Grayscale",
+    "Fire",
+    "Electric",
+    "Ocean",
+    "Inferno"
+};
 
-static uint8_t color_lut[MAX_ITERATIONS_LIMIT + 1][3];
-
-const char* PALETTE_NAMES[PALETTE_COUNT] = {"Sine Wave", "Grayscale", "Fire",
-                                            "Electric",  "Ocean",     "Inferno"};
+static int current_palette = 0;
 
 void init_color_palette(int max_iterations, int palette_idx) {
-    for (int i = 0; i < max_iterations; i++) {
-        switch (palette_idx) {
-            case 0:
-                color_lut[i][0] = (uint8_t)(sin(0.1 * i + 0) * 127 + 128);
-                color_lut[i][1] = (uint8_t)(sin(0.1 * i + 2) * 127 + 128);
-                color_lut[i][2] = (uint8_t)(sin(0.1 * i + 4) * 127 + 128);
-                break;
-            case 1:
-                color_lut[i][0] = color_lut[i][1] = color_lut[i][2] = (uint8_t)(i % 256);
-                break;
-            case 2:
-                color_lut[i][0] = (uint8_t)fmin(255, i * 4);
-                color_lut[i][1] = (uint8_t)fmin(255, i * 2);
-                color_lut[i][2] = (uint8_t)fmin(255, i * 1);
-                break;
-            case 3:
-                color_lut[i][0] = (uint8_t)fmin(255, i * 1);
-                color_lut[i][1] = (uint8_t)fmin(255, i * 4);
-                color_lut[i][2] = (uint8_t)fmin(255, i * 8);
-                break;
-            case 4:
-                color_lut[i][0] = (uint8_t)fmin(255, i * 0.5);
-                color_lut[i][1] = (uint8_t)fmin(255, i * 2);
-                color_lut[i][2] = (uint8_t)fmin(255, i * 5);
-                break;
-            case 5:
-                color_lut[i][0] = (uint8_t)fmin(255, i * 8);
-                color_lut[i][1] = (uint8_t)fmin(255, i * 2);
-                color_lut[i][2] = (uint8_t)fmin(255, i * 0.5);
-                break;
-            default:
-                color_lut[i][0] = color_lut[i][1] = color_lut[i][2] = 127;
-                break;
-        }
-    }
-    color_lut[max_iterations][0] = 0;
-    color_lut[max_iterations][1] = 0;
-    color_lut[max_iterations][2] = 0;
+    current_palette = palette_idx;
 }
 
 void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, uint8_t* b) {
@@ -56,16 +23,47 @@ void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, ui
         return;
     }
 
-    if (iterations < 0) iterations = 0;
-    if (iterations > max_iterations) iterations = (double)max_iterations;
+    double i = iterations;
+    double fi = floor(i);
+    double frac = i - fi;
 
-    int i = (int)iterations;
-    double t = iterations - i;
+    double r1, g1, b1, r2, g2, b2;
 
-    int i2 = i + 1;
-    if (i2 > max_iterations) i2 = max_iterations;
+    switch (current_palette) {
+        case 0: /* Sine Wave: Use 4, 2, 0 for Mint */
+            r1 = sin(0.1 * fi + 4.0) * 127.0 + 128.0;
+            g1 = sin(0.1 * fi + 2.0) * 127.0 + 128.0;
+            b1 = sin(0.1 * fi + 0.0) * 127.0 + 128.0;
+            r2 = sin(0.1 * (fi + 1.0) + 4.0) * 127.0 + 128.0;
+            g2 = sin(0.1 * (fi + 1.0) + 2.0) * 127.0 + 128.0;
+            b2 = sin(0.1 * (fi + 1.0) + 0.0) * 127.0 + 128.0;
+            break;
+        case 1: /* Grayscale */
+            r1 = g1 = b1 = fmod(fi, 256.0);
+            r2 = g2 = b2 = fmod(fi + 1.0, 256.0);
+            break;
+        case 2: /* Fire */
+            r1 = fmin(255.0, fi * 1.0); g1 = fmin(255.0, fi * 2.0); b1 = fmin(255.0, fi * 4.0);
+            r2 = fmin(255.0, (fi+1.0) * 1.0); g2 = fmin(255.0, (fi+1.0) * 2.0); b2 = fmin(255.0, (fi+1.0) * 4.0);
+            break;
+        case 3: /* Electric */
+            r1 = fmin(255.0, fi * 8.0); g1 = fmin(255.0, fi * 4.0); b1 = fmin(255.0, fi * 1.0);
+            r2 = fmin(255.0, (fi+1.0) * 8.0); g2 = fmin(255.0, (fi+1.0) * 4.0); b2 = fmin(255.0, (fi+1.0) * 1.0);
+            break;
+        case 4: /* Ocean */
+            r1 = fmin(255.0, fi * 5.0); g1 = fmin(255.0, fi * 2.0); b1 = fmin(255.0, fi * 0.5);
+            r2 = fmin(255.0, (fi+1.0) * 5.0); g2 = fmin(255.0, (fi+1.0) * 2.0); b2 = fmin(255.0, (fi+1.0) * 0.5);
+            break;
+        case 5: /* Inferno */
+            r1 = fmin(255.0, fi * 0.5); g1 = fmin(255.0, fi * 2.0); b1 = fmin(255.0, fi * 8.0);
+            r2 = fmin(255.0, (fi+1.0) * 0.5); g2 = fmin(255.0, (fi+1.0) * 2.0); b2 = fmin(255.0, (fi+1.0) * 8.0);
+            break;
+        default:
+            r1 = g1 = b1 = r2 = g2 = b2 = 0;
+            break;
+    }
 
-    *r = (uint8_t)(color_lut[i][0] * (1.0 - t) + color_lut[i2][0] * t);
-    *g = (uint8_t)(color_lut[i][1] * (1.0 - t) + color_lut[i2][1] * t);
-    *b = (uint8_t)(color_lut[i][2] * (1.0 - t) + color_lut[i2][2] * t);
+    *r = (uint8_t)(r1 + frac * (r2 - r1));
+    *g = (uint8_t)(g1 + frac * (g2 - g1));
+    *b = (uint8_t)(b1 + frac * (b2 - b1));
 }
