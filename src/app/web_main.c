@@ -44,7 +44,7 @@ EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
 
 EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
     if (typeof downloadScreenshotData === 'function') {
-        downloadScreenshotData(ptr, w, h);
+        downloadScreenshotData(ptr, w, h, HEAPU8);
     }
 });
 #else
