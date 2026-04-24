@@ -65,8 +65,8 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
 }
 
 typedef struct {
-    float center_hi[2]; /* high bits of double center */
-    float center_lo[2]; /* low bits (residual) for extra precision */
+    float center_hi[2]; /* high bits of double */
+    float center_lo[2]; /* low bits for precision */
     float zoom;
     float iters;
     float aspect;
@@ -201,8 +201,7 @@ static void init(void) {
 static void frame(void) {
     if (ctx.m_tour.phase != TOUR_IDLE) {
         if (ctx.julia_mode) {
-            /* julia tour: animate julia_c through the classic parametric family
-             * c = r*e^(it) which sweeps through many beautiful julia sets */
+            /* julia tour: animate julia_c */
             double t = stm_ms(stm_now()) * 0.0006;
             double r = 0.7885;
             ctx.julia_c.re = r * cos(t);
@@ -217,7 +216,7 @@ static void frame(void) {
         double aspect = (double)ctx.win_w / ctx.win_h;
         double rmin = ctx.view.center_re - (ctx.view.zoom * aspect) / 2;
         double rmax = ctx.view.center_re + (ctx.view.zoom * aspect) / 2;
-        /* pass im_max as first arg (y=0 → high im) to match GPU y-up orientation */
+        /* y-up orientation */
         double im_top = ctx.view.center_im + ctx.view.zoom / 2;
         double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
 
@@ -242,7 +241,7 @@ static void frame(void) {
         sg_apply_pipeline(cur_pip);
         sg_apply_bindings(&ctx.bind);
         if (ctx.gpu_mode) {
-            /* split double center into hi+lo floats for better zoom precision */
+            /* uniform setup */
             float chi_re = (float)ctx.view.center_re;
             float chi_im = (float)ctx.view.center_im;
             params_t params = {
@@ -263,7 +262,9 @@ static void frame(void) {
             int h = ctx.win_h;
             uint32_t* temp_pixels = (uint32_t*)malloc(w * h * 4);
             if (temp_pixels) {
+                /* webgl readback */
                 glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, temp_pixels);
+                /* vertical flip */
                 uint32_t* row_buf = (uint32_t*)malloc(w * 4);
                 if (row_buf) {
                     for (int y = 0; y < h / 2; y++) {
@@ -429,6 +430,25 @@ static void cleanup(void) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_reset_view(void) {
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_view(double re, double im, double zoom) {
+    ctx.view.center_re = re;
+    ctx.view.center_im = im;
+    ctx.view.zoom = zoom;
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_state(int julia_mode, double jre, double jim, int iters, int palette) {
+    ctx.julia_mode = julia_mode;
+    ctx.julia_c.re = jre;
+    ctx.julia_c.im = jim;
+    if (iters > 0) ctx.max_iterations = iters;
+    if (palette >= 0) ctx.palette_idx = palette % 6;
+    init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
 

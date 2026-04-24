@@ -21,7 +21,7 @@ function toggleGpu() {
     document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
 }
 
-// Global functions called by WASM via EM_JS
+// wasm callbacks
 window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im) {
     let engine = julia_mode ? "julia" : "mandelbrot";
     if (gpu_mode) engine += " (gpu)";
@@ -40,7 +40,68 @@ window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_
     html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 6]}`;
 
     debugInfo.textContent = html;
+
+    // throttled url update
+    updateURL(julia_mode, max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im);
 };
+
+let _lastUrlUpdate = 0;
+function updateURL(julia_mode, iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im) {
+    const now = Date.now();
+    if (now - _lastUrlUpdate < 500) return;
+    _lastUrlUpdate = now;
+
+    const params = new URLSearchParams(window.location.search);
+    params.set('re', center_re.toFixed(14));
+    params.set('im', center_im.toFixed(14));
+    params.set('z', zoom.toExponential(6));
+    if (julia_mode) {
+        params.set('j', '1');
+        params.set('jre', julia_re.toFixed(14));
+        params.set('jim', julia_im.toFixed(14));
+    } else {
+        params.delete('j');
+        params.delete('jre');
+        params.delete('jim');
+    }
+    params.set('it', iters);
+    params.set('p', palette_idx);
+
+    const newUrl = window.location.pathname + '?' + params.toString();
+    window.history.replaceState(null, '', newUrl);
+}
+
+function loadFromURL() {
+    const params = new URLSearchParams(window.location.search);
+    const re = parseFloat(params.get('re'));
+    const im = parseFloat(params.get('im'));
+    const z = parseFloat(params.get('z'));
+    const j = params.get('j') === '1';
+    const jre = parseFloat(params.get('jre')) || 0;
+    const jim = parseFloat(params.get('jim')) || 0;
+    const it = parseInt(params.get('it')) || 0;
+    const p = parseInt(params.get('p')) || 0;
+
+    if (!isNaN(re) && !isNaN(im) && !isNaN(z)) {
+        if (Module._wasm_set_view) {
+            Module._wasm_set_view(re, im, z);
+        }
+        if (Module._wasm_set_state) {
+            Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
+        }
+    }
+}
+
+function copyLink() {
+    const btn = document.getElementById('copyBtn');
+    navigator.clipboard.writeText(window.location.href).then(() => {
+        const oldText = btn.textContent;
+        btn.textContent = 'copied!';
+        setTimeout(() => btn.textContent = oldText, 2000);
+    }).catch(err => {
+        alert("Link: " + window.location.href);
+    });
+}
 
 window.updateZoomBox = function(is_zooming, x, y, w, h) {
     if (is_zooming) {
@@ -63,12 +124,12 @@ window.downloadScreenshotData = function(ptr, w, h, heap) {
         return;
     }
     
-    // Create a copy of the pixel data from WASM memory
+    // copy pixels from wasm heap
     const data = new Uint8ClampedArray(wasmHeap.buffer, ptr, w * h * 4);
     const pixels = new Uint8ClampedArray(data);
     const imgData = new ImageData(pixels, w, h);
     
-    // Use a temporary canvas to generate the PNG
+    // generate png via temp canvas
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width = w;
     tmpCanvas.height = h;
@@ -95,17 +156,18 @@ function downloadScreenshot() {
     }
 }
 
-// emscripten module configuration
+// emscripten config
 var Module = {
     preRun: [],
     postRun: [function() {
+        loadFromURL();
         syncSize();
         window.addEventListener('resize', () => {
             clearTimeout(window._rt);
             window._rt = setTimeout(syncSize, 100);
         });
 
-        // keyboard shortcuts
+        // keyboard events
         window.addEventListener('keydown', (e) => {
             if (e.repeat) return;
             const key = e.key.toLowerCase();
@@ -123,7 +185,7 @@ var Module = {
             }
         });
 
-        // touch support for mobile: 1-finger zoom box, 2-finger pinch
+        // mobile touch: 1-finger zoom, 2-finger pinch
         let lastTouches = [];
         let isPinching = false;
 
@@ -194,7 +256,7 @@ window.onerror = (event) => {
     statusText.style.color = "#ff5555";
 };
 
-// check for webgl2 support
+// webgl2 check
 const tempCanvas = document.createElement('canvas');
 const gl = tempCanvas.getContext('webgl2');
 if (!gl) {
