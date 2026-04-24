@@ -54,16 +54,17 @@ window.updateZoomBox = function(is_zooming, x, y, w, h) {
     }
 };
 
-window.downloadScreenshotData = function(ptr, w, h) {
+window.downloadScreenshotData = function(ptr, w, h, heap) {
     if (!ptr || w <= 0 || h <= 0) return;
     
-    if (!Module.HEAPU8) {
-        console.error("WASM Memory (HEAPU8) is not available. The engine might have crashed.");
+    const wasmHeap = heap || Module.HEAPU8;
+    if (!wasmHeap) {
+        console.error("WASM Memory is not available.");
         return;
     }
     
     // Create a copy of the pixel data from WASM memory
-    const data = new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, w * h * 4);
+    const data = new Uint8ClampedArray(wasmHeap.buffer, ptr, w * h * 4);
     const pixels = new Uint8ClampedArray(data);
     const imgData = new ImageData(pixels, w, h);
     
