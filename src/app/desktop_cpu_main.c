@@ -464,7 +464,7 @@ static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text
 }
 
 static TTF_Font* load_font(void) {
-    const char* paths[] = {FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL};
+    const char* paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL};
     for (int i = 0; paths[i] && paths[i][0]; i++) {
         TTF_Font* f = TTF_OpenFont(paths[i], FONT_SIZE);
         if (f) return f;

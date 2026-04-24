@@ -14,6 +14,8 @@
 #define DEBUG_INFO 1
 #define FONT_SIZE 16
 
+#define FONT_PATH_LOCAL "assets/fonts/font.ttf"
+
 #if defined(_WIN32) || defined(_WIN64)
 #define FONT_PATH_1 "C:\\Windows\\Fonts\\arial.ttf"
 #define FONT_PATH_2 "C:\\Windows\\Fonts\\segoeui.ttf"

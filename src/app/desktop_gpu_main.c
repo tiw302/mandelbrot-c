@@ -122,7 +122,7 @@ static void init(void) {
 
     /* fontstash setup */
     ctx.fons = sfons_create(&(sfons_desc_t){ .width = 512, .height = 512 });
-    const char* font_paths[] = { FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL };
+    const char* font_paths[] = { FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL };
     ctx.font_id = FONS_INVALID;
     for (int i = 0; font_paths[i] && font_paths[i][0]; i++) {
         ctx.font_id = fonsAddFont(ctx.fons, "sans", font_paths[i]);

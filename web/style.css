@@ -3,7 +3,7 @@
 
 @font-face {
     font-family: 'AppFont';
-    src: url('assets/font.ttf') format('truetype');
+    src: url('assets/fonts/font.ttf') format('truetype');
 }
 
 body {
