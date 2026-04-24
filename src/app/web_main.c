@@ -184,9 +184,16 @@ static void init(void) {
     ctx.pass_action = (sg_pass_action){
         .colors[0] = {.load_action = SG_LOADACTION_CLEAR, .clear_value = {0, 0, 0, 1}}};
 
-    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-    ctx.julia_c = (complex_t){-0.8, 0.156};
-    ctx.max_iterations = DEFAULT_ITERATIONS;
+    /* only set defaults if not already set by wasm export */
+    if (ctx.view.zoom == 0.0) {
+        ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    }
+    if (ctx.julia_c.re == 0.0 && ctx.julia_c.im == 0.0) {
+        ctx.julia_c = (complex_t){-0.8, 0.156};
+    }
+    if (ctx.max_iterations == 0) {
+        ctx.max_iterations = DEFAULT_ITERATIONS;
+    }
     ctx.needs_redraw = 1;
 
 #if defined(FORCE_GPU_MODE)
