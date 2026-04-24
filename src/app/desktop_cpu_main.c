@@ -384,45 +384,46 @@ int main(int argc, char* argv[]) {
         if (DEBUG_INFO && font) {
             char buf[256];
             SDL_Color white = {255, 255, 255, 255};
-            int y_start = 5;
-            int y = y_start;
-            int line_h = FONT_SIZE + 2;
-            int num_lines = julia_mode ? 4 : 3;
-            if (m_tour.phase != TOUR_IDLE) num_lines++;
-            if (j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
+            int x = 15;
+            int y = 12;
+            int line_h = FONT_SIZE + 4;
+            int num_lines = 3 + (julia_mode ? 1 : 0) + (m_tour.phase != TOUR_IDLE ? 1 : 0) + (j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
 
-            SDL_Rect bg = {2, 2, 450, num_lines * line_h + 6};
+            SDL_Rect bg = {5, 5, 540, num_lines * line_h + 12};
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 160);
+            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
             SDL_RenderFillRect(renderer, &bg);
 
             snprintf(buf, sizeof(buf), "%s | render: %u ms | threads: %d",
                      julia_mode ? "julia" : "mandelbrot", render_time, get_actual_thread_count());
-            render_text(renderer, font, buf, 5, y, white);
+            render_text(renderer, font, buf, x, y, white);
             y += line_h;
-            snprintf(buf, sizeof(buf), "center: (%.12f, %.12f)", view.center_re, view.center_im);
-            render_text(renderer, font, buf, 5, y, white);
-            y += line_h;
-            snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s", view.zoom,
-                     max_iterations, PALETTE_NAMES[palette_idx]);
-            render_text(renderer, font, buf, 5, y, white);
-            y += line_h;
+
             if (julia_mode) {
-                snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", julia_c.re, julia_c.im);
-                render_text(renderer, font, buf, 5, y, white);
-                y += line_h;
+                snprintf(buf, sizeof(buf), "c: (%.14f, %.14f)", julia_c.re, julia_c.im);
+            } else {
+                snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", view.center_re, view.center_im);
             }
+            render_text(renderer, font, buf, x, y, white);
+            y += line_h;
+
+            snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
+                     view.zoom, max_iterations, PALETTE_NAMES[palette_idx % PALETTE_COUNT]);
+            render_text(renderer, font, buf, x, y, white);
+            y += line_h;
+
             if (m_tour.phase != TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "auto-zoom [%s]  target #%d",
+                snprintf(buf, sizeof(buf), "auto-zoom [%s] target #%d",
                          get_tour_phase_name(m_tour.phase), get_tour_target_idx(&m_tour) + 1);
-                render_text(renderer, font, buf, 5, y, white);
+                render_text(renderer, font, buf, x, y, white);
                 y += line_h;
             }
             if (j_tour.phase != JULIA_TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "auto-c [%s]  #%d  (%.4f, %.4f)",
+                snprintf(buf, sizeof(buf), "auto-c [%s] #%d (%.4f, %.4f)",
                          j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
                          get_julia_tour_target_idx(&j_tour) + 1, julia_c.re, julia_c.im);
-                render_text(renderer, font, buf, 5, y, white);
+                render_text(renderer, font, buf, x, y, white);
+                y += line_h;
             }
         }
 

@@ -234,18 +234,7 @@ static void frame(void) {
     sgl_matrix_mode_projection();
     sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
 
-    /* debug info background with blending */
-    sgl_load_pipeline(ctx.pip_blend);
-    int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
-    float bg_w = 450.0f;
-    float bg_h = num_lines * 18.0f + 10.0f;
-    sgl_begin_quads();
-    sgl_c4b(0, 0, 0, 160);
-    sgl_v2f(2.0f, 2.0f);
-    sgl_v2f(bg_w, 2.0f);
-    sgl_v2f(bg_w, bg_h);
-    sgl_v2f(2.0f, bg_h);
-    sgl_end();
+
 
     /* yellow zoom box */
     if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
@@ -286,13 +275,26 @@ static void frame(void) {
         sg_draw(0, 6, 1);
     }
 
+    /* debug info background with blending */
+    sgl_load_pipeline(ctx.pip_blend);
+    int num_lines = 3 + (ctx.julia_mode ? 1 : 0) + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
+    float bg_w = 540.0f;
+    float bg_h = num_lines * (FONT_SIZE + 4) + 12.0f;
+    sgl_begin_quads();
+    sgl_c4b(0, 0, 0, 180);
+    sgl_v2f(5.0f, 5.0f);
+    sgl_v2f(bg_w, 5.0f);
+    sgl_v2f(bg_w, bg_h);
+    sgl_v2f(5.0f, bg_h);
+    sgl_end();
+
     /* render smooth text using fontstash */
     if (ctx.font_id != FONS_INVALID) {
         fonsClearState(ctx.fons);
         fonsSetFont(ctx.fons, ctx.font_id);
-        fonsSetSize(ctx.fons, 16.0f);
+        fonsSetSize(ctx.fons, (float)FONT_SIZE);
         fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
-        float x = 10.0f, y = 22.0f, lh = 18.0f;
+        float x = 15.0f, y = 22.0f, lh = (float)(FONT_SIZE + 4);
         char buf[256];
         
         snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",
@@ -300,27 +302,27 @@ static void frame(void) {
             get_actual_thread_count(), ctx.render_time_ms);
         fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
         
-        snprintf(buf, sizeof(buf), "center: (%.12f, %.12f)", ctx.view.center_re, ctx.view.center_im);
-        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
-        
-        snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
-            ctx.view.zoom, ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx]);
-        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
-        
         if (ctx.julia_mode) {
-            snprintf(buf, sizeof(buf), "c = (%.6f, %.6f)", ctx.julia_c.re, ctx.julia_c.im);
-            fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+            snprintf(buf, sizeof(buf), "c: (%.14f, %.14f)", ctx.julia_c.re, ctx.julia_c.im);
+        } else {
+            snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", ctx.view.center_re, ctx.view.center_im);
         }
+        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+
+        snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
+            ctx.view.zoom, ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx % PALETTE_COUNT]);
+        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+
         if (ctx.m_tour.phase != TOUR_IDLE) {
             snprintf(buf, sizeof(buf), "auto-zoom [%s] target #%d",
-                get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour)+1);
+                get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour) + 1);
             fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
         }
         if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
             snprintf(buf, sizeof(buf), "auto-c [%s] #%d (%.4f, %.4f)",
                 ctx.j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
-                get_julia_tour_target_idx(&ctx.j_tour)+1, ctx.julia_c.re, ctx.julia_c.im);
-            fonsDrawText(ctx.fons, x, y, buf, NULL);
+                get_julia_tour_target_idx(&ctx.j_tour) + 1, ctx.julia_c.re, ctx.julia_c.im);
+            fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
         }
         sfons_flush(ctx.fons);
     }
