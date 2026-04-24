@@ -28,6 +28,7 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
+#include <GLES3/gl3.h>
 
 EM_JS(void, update_debug_info_js, (int gpu_mode, int julia_mode, int max_iters, double zoom, double center_re, double center_im, int palette_idx, int tour_phase, double julia_re, double julia_im), {
     if (typeof updateDebugInfo === 'function') {
@@ -38,6 +39,12 @@ EM_JS(void, update_debug_info_js, (int gpu_mode, int julia_mode, int max_iters, 
 EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
     if (typeof updateZoomBox === 'function') {
         updateZoomBox(is_zooming, x, y, w, h);
+    }
+});
+
+EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
+    if (typeof downloadScreenshotData === 'function') {
+        downloadScreenshotData(ptr, w, h);
     }
 });
 #else
@@ -532,6 +539,35 @@ EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_gpu(void) {
     ctx.gpu_mode = !ctx.gpu_mode;
     ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_request_screenshot(void) {
+    int w = ctx.win_w;
+    int h = ctx.win_h;
+    uint32_t* temp_pixels = (uint32_t*)malloc(w * h * 4);
+    if (!temp_pixels) return;
+
+    if (ctx.gpu_mode) {
+        /* Capture from WebGL framebuffer */
+        uint8_t* rgba = (uint8_t*)malloc(w * h * 4);
+        if (rgba) {
+            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
+            /* Flip vertically: glReadPixels is bottom-up, canvas/PNG is top-down */
+            for (int y = 0; y < h; y++) {
+                uint32_t* src_row = (uint32_t*)(rgba + (h - 1 - y) * w * 4);
+                uint32_t* dst_row = temp_pixels + y * w;
+                memcpy(dst_row, src_row, w * 4);
+            }
+            free(rgba);
+        }
+    } else {
+        /* Capture from CPU pixel buffer */
+        memcpy(temp_pixels, ctx.pixels, w * h * 4);
+    }
+
+    download_screenshot_js(temp_pixels, w, h);
+    free(temp_pixels);
 }
 
 #endif
