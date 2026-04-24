@@ -54,6 +54,27 @@ window.updateZoomBox = function(is_zooming, x, y, w, h) {
     }
 };
 
+window.downloadScreenshotData = function(ptr, w, h) {
+    if (!ptr || w <= 0 || h <= 0) return;
+    
+    // Create a copy of the pixel data from WASM memory
+    const data = new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, w * h * 4);
+    const pixels = new Uint8ClampedArray(data);
+    const imgData = new ImageData(pixels, w, h);
+    
+    // Use a temporary canvas to generate the PNG
+    const tmpCanvas = document.createElement('canvas');
+    tmpCanvas.width = w;
+    tmpCanvas.height = h;
+    const ctx2d = tmpCanvas.getContext('2d');
+    ctx2d.putImageData(imgData, 0, 0);
+    
+    const link = document.createElement('a');
+    link.download = `mandelbrot_${Date.now()}.png`;
+    link.href = tmpCanvas.toDataURL('image/png');
+    link.click();
+};
+
 function syncSize() {
     const w = window.innerWidth;
     const h = window.innerHeight;
@@ -63,10 +84,9 @@ function syncSize() {
 }
 
 function downloadScreenshot() {
-    const link = document.createElement('a');
-    link.download = `mandelbrot_${Date.now()}.png`;
-    link.href = canvas.toDataURL('image/png');
-    link.click();
+    if (Module._wasm_request_screenshot) {
+        Module._wasm_request_screenshot();
+    }
 }
 
 // emscripten module configuration
