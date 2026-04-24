@@ -40,15 +40,15 @@ For an in-depth technical analysis of the project's architecture, SIMD optimizat
 
 ### Mandelbrot
 
-![Mandelbrot Screenshot](assets/Mandelbrot-Screenshot.png)
-![Mandelbrot Screenshot](assets/Mandelbrot-Screenshot2.png)
-![Mandelbrot Screenshot](assets/Mandelbrot-Screenshot3.png)
+![Mandelbrot Screenshot](assets/images/Mandelbrot-Screenshot.png)
+![Mandelbrot Screenshot](assets/images/Mandelbrot-Screenshot2.png)
+![Mandelbrot Screenshot](assets/images/Mandelbrot-Screenshot3.png)
 
 ### Julia
 
-![julia Screenshot](assets/julia-Screenshot.png)
-![julia Screenshot](assets/julia-Screenshot2.png)
-![julia Screenshot](assets/julia-Screenshot3.png)
+![julia Screenshot](assets/images/julia-Screenshot.png)
+![julia Screenshot](assets/images/julia-Screenshot2.png)
+![julia Screenshot](assets/images/julia-Screenshot3.png)
 
 ## The Math
 
@@ -169,15 +169,19 @@ chmod +x build.sh
 
 ```text
 .
-├── src/core/            # Pure Mathematical Engine
-├── src/cpu-engine/      # Desktop Renderer, SDL UI, and Thread Pools
-├── src/web-engine/      # Sokol GFX WebAssembly Runtime
 ├── include/             # Global configuration headers
-├── shaders/             # GLSL Shaders for Sokol engine
-├── tests/               # Automated regression frameworks
-├── third_party/         # External libraries (Sokol, stb, etc.)
+├── src/
+│   ├── core/           # Pure Mathematical Engine (SSOT)
+│   ├── engine/         # Platform-Agnostic Renderers, Tours, and Logic
+│   └── app/            # Platform-Specific Main Entries (Desktop, Web)
+├── web/                 # Web Frontend (HTML, CSS, JS)
+├── assets/
+│   ├── fonts/          # Shared Typography
+│   └── images/         # Screenshots and Media
+├── tests/               # Automated Unit Tests
+├── third_party/         # External Libraries (Sokol, stb, etc.)
 ├── CMakeLists.txt       # Cross-platform Build System
-└── build.sh             # Build abstraction script
+└── build.sh             # Build Wrapper Script
 ```
 
 ## Configuration

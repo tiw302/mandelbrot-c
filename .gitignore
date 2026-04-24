@@ -52,7 +52,7 @@ undo/
 
 # Screenshots & Assets
 *.png
-!assets/*.png
+!assets/**/*.png
 screenshot_*.tga
 *.tga
 
