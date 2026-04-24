@@ -46,7 +46,9 @@ window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_
 };
 
 let _lastUrlUpdate = 0;
+let _urlInitialized = false;
 function updateURL(julia_mode, iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im) {
+    if (!_urlInitialized) return;
     const now = Date.now();
     if (now - _lastUrlUpdate < 500) return;
     _lastUrlUpdate = now;
@@ -90,6 +92,7 @@ function loadFromURL() {
             Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
         }
     }
+    _urlInitialized = true;
 }
 
 function copyLink() {
