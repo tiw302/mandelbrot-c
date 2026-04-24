@@ -94,6 +94,7 @@ typedef struct {
     complex_t julia_c;
     int max_iterations, palette_idx;
     int needs_redraw;
+    int screenshot_requested;
     int is_panning, is_zooming;
     int last_mouse_x, last_mouse_y;
     int mouse_x, mouse_y;
@@ -257,10 +258,44 @@ static void frame(void) {
             sg_apply_uniforms(0, &SG_RANGE(params));
         }
         sg_draw(0, 6, 1);
+        if (ctx.screenshot_requested && ctx.gpu_mode) {
+            int w = ctx.win_w;
+            int h = ctx.win_h;
+            uint32_t* temp_pixels = (uint32_t*)malloc(w * h * 4);
+            if (temp_pixels) {
+                glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, temp_pixels);
+                uint32_t* row_buf = (uint32_t*)malloc(w * 4);
+                if (row_buf) {
+                    for (int y = 0; y < h / 2; y++) {
+                        uint32_t* r1 = temp_pixels + y * w;
+                        uint32_t* r2 = temp_pixels + (h - 1 - y) * w;
+                        memcpy(row_buf, r1, w * 4);
+                        memcpy(r1, r2, w * 4);
+                        memcpy(r2, row_buf, w * 4);
+                    }
+                    free(row_buf);
+                }
+                download_screenshot_js(temp_pixels, w, h);
+                free(temp_pixels);
+            }
+            ctx.screenshot_requested = 0;
+        }
     }
 
     sg_end_pass();
     sg_commit();
+
+    if (ctx.screenshot_requested && !ctx.gpu_mode) {
+        int w = ctx.win_w;
+        int h = ctx.win_h;
+        uint32_t* temp_pixels = (uint32_t*)malloc(w * h * 4);
+        if (temp_pixels) {
+            memcpy(temp_pixels, ctx.pixels, w * h * 4);
+            download_screenshot_js(temp_pixels, w, h);
+            free(temp_pixels);
+        }
+        ctx.screenshot_requested = 0;
+    }
     update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.max_iterations, ctx.view.zoom, ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase, ctx.julia_c.re, ctx.julia_c.im);
 }
 
@@ -543,33 +578,7 @@ void wasm_toggle_gpu(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_request_screenshot(void) {
-    int w = ctx.win_w;
-    int h = ctx.win_h;
-    uint32_t* temp_pixels = (uint32_t*)malloc(w * h * 4);
-    if (!temp_pixels) return;
-
-    if (ctx.gpu_mode) {
-        /* Capture from WebGL framebuffer */
-        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, temp_pixels);
-        /* Flip vertically in-place: glReadPixels is bottom-up, canvas/PNG is top-down */
-        uint32_t* row_buf = (uint32_t*)malloc(w * 4);
-        if (row_buf) {
-            for (int y = 0; y < h / 2; y++) {
-                uint32_t* r1 = temp_pixels + y * w;
-                uint32_t* r2 = temp_pixels + (h - 1 - y) * w;
-                memcpy(row_buf, r1, w * 4);
-                memcpy(r1, r2, w * 4);
-                memcpy(r2, row_buf, w * 4);
-            }
-            free(row_buf);
-        }
-    } else {
-        /* Capture from CPU pixel buffer */
-        memcpy(temp_pixels, ctx.pixels, w * h * 4);
-    }
-
-    download_screenshot_js(temp_pixels, w, h);
-    free(temp_pixels);
+    ctx.screenshot_requested = 1;
 }
 
 #endif
