@@ -3,6 +3,7 @@ build/
 build-cpu/
 build-gpu/
 build-web/
+deploy/
 bin/
 obj/
 *.o
