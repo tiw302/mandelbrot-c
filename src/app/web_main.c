@@ -550,16 +550,18 @@ void wasm_request_screenshot(void) {
 
     if (ctx.gpu_mode) {
         /* Capture from WebGL framebuffer */
-        uint8_t* rgba = (uint8_t*)malloc(w * h * 4);
-        if (rgba) {
-            glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, rgba);
-            /* Flip vertically: glReadPixels is bottom-up, canvas/PNG is top-down */
-            for (int y = 0; y < h; y++) {
-                uint32_t* src_row = (uint32_t*)(rgba + (h - 1 - y) * w * 4);
-                uint32_t* dst_row = temp_pixels + y * w;
-                memcpy(dst_row, src_row, w * 4);
+        glReadPixels(0, 0, w, h, GL_RGBA, GL_UNSIGNED_BYTE, temp_pixels);
+        /* Flip vertically in-place: glReadPixels is bottom-up, canvas/PNG is top-down */
+        uint32_t* row_buf = (uint32_t*)malloc(w * 4);
+        if (row_buf) {
+            for (int y = 0; y < h / 2; y++) {
+                uint32_t* r1 = temp_pixels + y * w;
+                uint32_t* r2 = temp_pixels + (h - 1 - y) * w;
+                memcpy(row_buf, r1, w * 4);
+                memcpy(r1, r2, w * 4);
+                memcpy(r2, row_buf, w * 4);
             }
-            free(rgba);
+            free(row_buf);
         }
     } else {
         /* Capture from CPU pixel buffer */
