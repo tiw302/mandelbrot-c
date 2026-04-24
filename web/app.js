@@ -57,6 +57,11 @@ window.updateZoomBox = function(is_zooming, x, y, w, h) {
 window.downloadScreenshotData = function(ptr, w, h) {
     if (!ptr || w <= 0 || h <= 0) return;
     
+    if (!Module.HEAPU8) {
+        console.error("WASM Memory (HEAPU8) is not available. The engine might have crashed.");
+        return;
+    }
+    
     // Create a copy of the pixel data from WASM memory
     const data = new Uint8ClampedArray(Module.HEAPU8.buffer, ptr, w * h * 4);
     const pixels = new Uint8ClampedArray(data);
