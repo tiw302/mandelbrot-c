@@ -21,7 +21,13 @@ function toggleGpu() {
     document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
 }
 
-// wasm callbacks
+// global state for just-in-time URL generation
+let _currentState = {
+    julia_mode: false, iters: 500, zoom: 3.0,
+    center_re: -0.5, center_im: 0.0, palette_idx: 0,
+    julia_re: 0.0, julia_im: 0.0
+};
+
 window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im) {
     let engine = julia_mode ? "julia" : "mandelbrot";
     if (gpu_mode) engine += " (gpu)";
@@ -41,36 +47,31 @@ window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_
 
     debugInfo.textContent = html;
 
-    // throttled url update
-    updateURL(julia_mode, max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im);
+    // store state instead of updating URL constantly
+    _currentState = { julia_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
 };
 
-let _lastUrlUpdate = 0;
-let _urlInitialized = false;
-function updateURL(julia_mode, iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im) {
-    if (!_urlInitialized) return;
-    const now = Date.now();
-    if (now - _lastUrlUpdate < 500) return;
-    _lastUrlUpdate = now;
-
+function updateURL() {
+    const s = _currentState;
     const params = new URLSearchParams(window.location.search);
-    params.set('re', center_re.toFixed(14));
-    params.set('im', center_im.toFixed(14));
-    params.set('z', zoom.toExponential(6));
-    if (julia_mode) {
+    params.set('re', s.center_re.toFixed(14));
+    params.set('im', s.center_im.toFixed(14));
+    params.set('z', s.zoom.toExponential(6));
+    if (s.julia_mode) {
         params.set('j', '1');
-        params.set('jre', julia_re.toFixed(14));
-        params.set('jim', julia_im.toFixed(14));
+        params.set('jre', s.julia_re.toFixed(14));
+        params.set('jim', s.julia_im.toFixed(14));
     } else {
         params.delete('j');
         params.delete('jre');
         params.delete('jim');
     }
-    params.set('it', iters);
-    params.set('p', palette_idx);
+    params.set('it', s.iters);
+    params.set('p', s.palette_idx);
 
     const newUrl = window.location.pathname + '?' + params.toString();
     window.history.replaceState(null, '', newUrl);
+    return window.location.href;
 }
 
 function loadFromURL() {
@@ -93,20 +94,18 @@ function loadFromURL() {
         }
     }
     
-    // delay enabling updates to let the engine settle
-    setTimeout(() => {
-        _urlInitialized = true;
-    }, 500);
+    // no longer need to delay enabling updates since we update only on demand
 }
 
 function copyLink() {
     const btn = document.getElementById('copyBtn');
-    navigator.clipboard.writeText(window.location.href).then(() => {
+    const url = updateURL(); // generate and update address bar just-in-time
+    navigator.clipboard.writeText(url).then(() => {
         const oldText = btn.textContent;
         btn.textContent = 'copied!';
         setTimeout(() => btn.textContent = oldText, 2000);
     }).catch(err => {
-        alert("Link: " + window.location.href);
+        alert("Link: " + url);
     });
 }
 
