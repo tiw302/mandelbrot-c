@@ -42,13 +42,15 @@ canvas {
     background: rgba(34, 34, 34, 0.8);
     color: #eee;
     border: 1px solid #444;
-    padding: 6px 12px;
+    padding: 6px 8px;
     font-family: monospace;
     font-size: 12px;
     cursor: pointer;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
     border-radius: 2px;
+    min-width: 65px;
+    text-align: center;
 }
 
 #toolbar button:active { background: #555; }
