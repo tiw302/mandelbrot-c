@@ -115,9 +115,15 @@ void* render_thread(void* arg) {
             for (int i = 0; i < 4; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
-                /* v4.0.0 packing: r at bit 16, g at 8, b at 0 */
+#if defined(__EMSCRIPTEN__)
+                /* Web/WASM expects RGBA (Red at byte 0) */
+                data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
+                    (0xFF << 24) | (b << 16) | (g << 8) | r;
+#else
+                /* Desktop SDL ARGB8888 on Little Endian is BGRA (Blue at byte 0) */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
+#endif
             }
         }
 #elif defined(__wasm_simd128__)
@@ -136,9 +142,9 @@ void* render_thread(void* arg) {
             for (int i = 0; i < 2; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
-                /* v4.0.0 packing */
+                /* Web/WASM expects RGBA */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
-                    (0xFF << 24) | (r << 16) | (g << 8) | b;
+                    (0xFF << 24) | (b << 16) | (g << 8) | r;
             }
         }
 #endif
@@ -156,9 +162,13 @@ void* render_thread(void* arg) {
 
             uint8_t r, g, b;
             get_color(iterations, data->max_iterations, &r, &g, &b);
-            /* v4.0.0 packing */
+#if defined(__EMSCRIPTEN__)
+            data->pixels[y * (data->pitch / sizeof(uint32_t)) + x] =
+                (0xFF << 24) | (b << 16) | (g << 8) | r;
+#else
             data->pixels[y * (data->pitch / sizeof(uint32_t)) + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
+#endif
         }
     }
 
