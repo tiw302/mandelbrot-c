@@ -110,6 +110,7 @@ int main(int argc, char* argv[]) {
     int mouse_x = 0, mouse_y = 0;
     SDL_Rect zoom_rect = {0};
     Uint32 render_time = 0;
+    int screenshot_requested = 0;
 
     init_renderer(max_iterations, palette_idx);
     print_controls();
@@ -187,13 +188,7 @@ int main(int argc, char* argv[]) {
                         needs_redraw = 1;
 
                     } else if (event.key.keysym.sym == SDLK_s) {
-                        uint32_t* ss_pixels = malloc(win_w * win_h * 4);
-                        if (ss_pixels) {
-                            SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888,
-                                                 ss_pixels, win_w * 4);
-                            save_screenshot(ss_pixels, win_w, win_h);
-                            free(ss_pixels);
-                        }
+                        screenshot_requested = 1;
 
                     } else if (event.key.keysym.sym == SDLK_UP) {
                         int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
@@ -375,6 +370,16 @@ int main(int argc, char* argv[]) {
         SDL_SetRenderDrawColor(renderer, 0, 0, 0, 255);
         SDL_RenderClear(renderer);
         SDL_RenderCopy(renderer, texture, NULL, NULL);
+
+        if (screenshot_requested) {
+            uint32_t* ss_pixels = malloc(win_w * win_h * 4);
+            if (ss_pixels) {
+                SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss_pixels, win_w * 4);
+                save_screenshot(ss_pixels, win_w, win_h);
+                free(ss_pixels);
+            }
+            screenshot_requested = 0;
+        }
 
         if (is_zooming) {
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
