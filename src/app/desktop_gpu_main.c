@@ -45,8 +45,8 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
 typedef struct {
     float center_hi[2];
     float center_lo[2];
-    float zoom, iters, aspect;
     float julia_c[2];
+    float zoom, iters, aspect;
     float is_julia, palette;
 } params_t;
 
@@ -165,10 +165,10 @@ static void init(void) {
             .glsl_uniforms = {
                 {.glsl_name="u_center_hi", .type=SG_UNIFORMTYPE_FLOAT2},
                 {.glsl_name="u_center_lo", .type=SG_UNIFORMTYPE_FLOAT2},
+                {.glsl_name="u_julia_c",   .type=SG_UNIFORMTYPE_FLOAT2},
                 {.glsl_name="u_zoom",      .type=SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name="u_iters",     .type=SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name="u_aspect",    .type=SG_UNIFORMTYPE_FLOAT},
-                {.glsl_name="u_julia_c",   .type=SG_UNIFORMTYPE_FLOAT2},
                 {.glsl_name="u_is_julia",  .type=SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name="u_palette",   .type=SG_UNIFORMTYPE_FLOAT}}}});
     ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){
@@ -264,10 +264,10 @@ static void frame(void) {
                 .center_hi = {chi_re, chi_im},
                 .center_lo = {(float)(ctx.view.center_re - chi_re),
                               (float)(ctx.view.center_im - chi_im)},
+                .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
                 .zoom    = (float)ctx.view.zoom,
                 .iters   = (float)ctx.max_iterations,
                 .aspect  = (float)ctx.win_w / ctx.win_h,
-                .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
                 .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
                 .palette  = (float)ctx.palette_idx};
             sg_apply_uniforms(0, &SG_RANGE(p));

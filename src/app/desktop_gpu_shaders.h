@@ -15,8 +15,8 @@ static const char* dg_fs_cpu =
 static const char* dg_fs_gpu =
     "#version 330\n"
     "uniform vec2 u_center_hi; uniform vec2 u_center_lo;"
-    "uniform float u_zoom; uniform float u_iters; uniform float u_aspect;"
-    "uniform vec2 u_julia_c; uniform float u_is_julia; uniform float u_palette;"
+    "uniform vec2 u_julia_c; uniform float u_zoom; uniform float u_iters; uniform float u_aspect;"
+    "uniform float u_is_julia; uniform float u_palette;"
     "in vec2 uv; out vec4 color;\n"
 
     "vec3 lut_color(float fi, int pal) {\n"
