@@ -21,12 +21,6 @@ function toggleGpu() {
     document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
 }
 
-function toggleEmulation() {
-    if (Module._wasm_toggle_emulation) {
-        Module._wasm_toggle_emulation();
-    }
-}
-
 // global state for just-in-time URL generation
 let _currentState = {
     julia_mode: false, iters: 500, zoom: 3.0,
@@ -34,10 +28,9 @@ let _currentState = {
     julia_re: 0.0, julia_im: 0.0
 };
 
-window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, emulation_mode) {
+window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im) {
     let engine = julia_mode ? "julia" : "mandelbrot";
-    let precision = gpu_mode ? (emulation_mode ? " (64-bit)" : " (32-bit)") : " (64-bit)";
-    if (gpu_mode) engine += " (gpu)" + precision;
+    if (gpu_mode) engine += " (gpu)";
     else engine += " (cpu)";
 
     let tour_str = tour_phase !== 0 ? " | tour: on" : "";
@@ -53,12 +46,6 @@ window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_
     html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 6]}`;
 
     debugInfo.textContent = html;
-    
-    const emuBtn = document.getElementById('emuBtn');
-    if (emuBtn) {
-        emuBtn.textContent = emulation_mode ? 'precision ✓' : 'precision';
-        emuBtn.style.display = gpu_mode ? 'inline-block' : 'none';
-    }
 
     // store state instead of updating URL constantly
     _currentState = { julia_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
@@ -195,7 +182,6 @@ var Module = {
             if (key === 't') toggleTour();
             if (key === 'j') Module._wasm_toggle_julia();
             if (key === 'g') toggleGpu();
-            if (key === 'e') toggleEmulation();
             if (key === 's') downloadScreenshot();
             if (e.key === 'ArrowUp') Module._wasm_adjust_iterations(10);
             if (e.key === 'ArrowDown') Module._wasm_adjust_iterations(-10);
