@@ -61,6 +61,22 @@ window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_
 
     // store state instead of updating URL constantly
     _currentState = { julia_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
+
+    // sync UI buttons from C's authoritative state (handles keyboard shortcuts too)
+    const gpuNow = !!gpu_mode;
+    const precNow = !!high_precision;
+    if (_gpuMode !== gpuNow) {
+        _gpuMode = gpuNow;
+        document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu \u2713' : 'cpu';
+        document.getElementById('precisionBtn').style.display = _gpuMode ? '' : 'none';
+    }
+    if (_highPrecision !== precNow) {
+        _highPrecision = precNow;
+        document.getElementById('precisionBtn').textContent = _highPrecision ? '64-bit \u2713' : '32-bit';
+    }
+    // fix #4: show/hide E=64-bit hint based on GPU mode
+    const helpE = document.getElementById('help-e-hint');
+    if (helpE) helpE.style.display = _gpuMode ? '' : 'none';
 };
 
 function updateURL() {

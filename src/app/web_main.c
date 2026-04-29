@@ -404,8 +404,10 @@ static void event(const sapp_event* ev) {
             ctx.gpu_mode = !ctx.gpu_mode;
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_E) {
-            ctx.high_precision_mode = !ctx.high_precision_mode;
-            ctx.needs_redraw = 1;
+            if (ctx.gpu_mode) { /* precision is GPU-only */
+                ctx.high_precision_mode = !ctx.high_precision_mode;
+                ctx.needs_redraw = 1;
+            }
         } else if (ev->key_code == SAPP_KEYCODE_R) {
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
             ctx.needs_redraw = 1;
