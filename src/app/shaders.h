@@ -26,6 +26,7 @@ static const char* fs_cpu_src =
 static const char* fs_gpu_src =
     "#version 300 es\n"
     "precision highp float;\n"
+    "precision highp int;\n"
     "uniform vec2 u_center_hi;\n"
     "uniform vec2 u_center_lo;\n"
     "uniform vec2 u_julia_c;\n"
@@ -48,6 +49,7 @@ static const char* fs_gpu_src =
     "}\n"
 
     /* ds_mul: bit-manipulation Veltkamp split — immune to FMA fusion */
+    /* floatBitsToInt/intBitsToFloat require highp int (declared above)  */
     "vec2 ds_mul(vec2 dsa, vec2 dsb) {\n"
     "    float p   = dsa.x * dsb.x;\n"
     "    float ahi = intBitsToFloat(floatBitsToInt(dsa.x) & 0xFFFFF000);\n"
