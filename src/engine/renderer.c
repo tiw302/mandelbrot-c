@@ -116,11 +116,11 @@ void* render_thread(void* arg) {
                 uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-                /* Web/WASM expects RGBA (Red at byte 0) */
+                /* web/wasm expects rgba (red at byte 0) */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-                /* Desktop SDL ARGB8888 on Little Endian is BGRA (Blue at byte 0) */
+                /* desktop sdl argb8888 on little endian is bgra (blue at byte 0) */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
@@ -142,7 +142,7 @@ void* render_thread(void* arg) {
             for (int i = 0; i < 2; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], data->max_iterations, &r, &g, &b);
-                /* Web/WASM expects RGBA */
+                /* web/wasm expects rgba */
                 data->pixels[y * (data->pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (b << 16) | (g << 8) | r;
             }
