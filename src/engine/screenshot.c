@@ -12,13 +12,13 @@ void save_screenshot(uint32_t* pixels, int width, int height) {
     struct tm* t = localtime(&now);
     strftime(filename, sizeof(filename), "mandelbrot_%Y%m%d_%H%M%S.png", t);
 
-    /* Allocate temp buffer for RGBA conversion */
+    /* allocate temp buffer for rgba conversion */
     uint32_t* rgba_pixels = (uint32_t*)malloc(width * height * 4);
     if (!rgba_pixels) return;
 
     for (int i = 0; i < width * height; i++) {
         uint32_t p = pixels[i];
-        /* Swap Red (bit 16-23) and Blue (bit 0-7) */
+        /* swap red (bit 16-23) and blue (bit 0-7) */
         uint8_t b = (p >> 0) & 0xFF;
         uint8_t g = (p >> 8) & 0xFF;
         uint8_t r = (p >> 16) & 0xFF;
