@@ -71,14 +71,13 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
 typedef struct {
     float center_hi[2]; /* high bits of double */
     float center_lo[2]; /* low bits for precision */
-    float julia_c[2];   /* move up for 8-byte alignment */
+    float julia_c[2];
     float zoom;
     float iters;
     float aspect;
     float is_julia;
     float palette;
     float high_precision;
-    float padding; /* pad to 48 bytes (multiple of 16) */
 } params_t;
 
 typedef struct {
