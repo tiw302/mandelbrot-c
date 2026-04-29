@@ -32,22 +32,22 @@
 
 EM_JS(void, update_debug_info_js,
       (int gpu_mode, int julia_mode, int max_iters, double zoom, double center_re, double center_im,
-       int palette_idx, int tour_phase, double julia_re, double julia_im),
+       int palette_idx, int tour_phase, double julia_re, double julia_im, int high_precision),
       {
-          if (typeof updateDebugInfo == = 'function') {
+          if (typeof updateDebugInfo === 'function') {
               updateDebugInfo(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im,
-                              palette_idx, tour_phase, julia_re, julia_im);
+                              palette_idx, tour_phase, julia_re, julia_im, high_precision);
           }
       });
 
 EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
-    if (typeof updateZoomBox == = 'function') {
+    if (typeof updateZoomBox === 'function') {
         updateZoomBox(is_zooming, x, y, w, h);
     }
 });
 
 EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
-    if (typeof downloadScreenshotData == = 'function') {
+    if (typeof downloadScreenshotData === 'function') {
         downloadScreenshotData(ptr, w, h, HEAPU8);
     }
 });
@@ -77,6 +77,7 @@ typedef struct {
     float aspect;
     float is_julia;
     float palette;
+    float high_precision;
     float padding; /* pad to 48 bytes (multiple of 16) */
 } params_t;
 
@@ -95,7 +96,7 @@ typedef struct {
     int history_count;
 
     TourState m_tour;
-    int julia_mode, gpu_mode;
+    int julia_mode, gpu_mode, high_precision_mode;
     complex_t julia_c;
     int max_iterations, palette_idx;
     int needs_redraw;
@@ -179,7 +180,7 @@ static void init(void) {
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_padding", .type = SG_UNIFORMTYPE_FLOAT}}}});
+                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
 
     ctx.pip_gpu = sg_make_pipeline(
         &(sg_pipeline_desc){.shader = shd_gpu,
@@ -266,7 +267,8 @@ static void frame(void) {
                                .iters = (float)ctx.max_iterations,
                                .aspect = (float)ctx.win_w / ctx.win_h,
                                .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
-                               .palette = (float)ctx.palette_idx};
+                               .palette = (float)ctx.palette_idx,
+                               .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f};
             sg_apply_uniforms(0, &SG_RANGE(params));
         }
         sg_draw(0, 6, 1);
@@ -312,7 +314,7 @@ static void frame(void) {
     }
     update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.max_iterations, ctx.view.zoom,
                          ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase,
-                         ctx.julia_c.re, ctx.julia_c.im);
+                         ctx.julia_c.re, ctx.julia_c.im, ctx.high_precision_mode);
 }
 
 static void event(const sapp_event* ev) {
@@ -401,6 +403,9 @@ static void event(const sapp_event* ev) {
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         if (ev->key_code == SAPP_KEYCODE_G) {
             ctx.gpu_mode = !ctx.gpu_mode;
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_E) {
+            ctx.high_precision_mode = !ctx.high_precision_mode;
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_R) {
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
@@ -619,6 +624,12 @@ void wasm_toggle_gpu(void) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_request_screenshot(void) {
     ctx.screenshot_requested = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_precision(void) {
+    ctx.high_precision_mode = !ctx.high_precision_mode;
+    ctx.needs_redraw = 1;
 }
 
 #endif
