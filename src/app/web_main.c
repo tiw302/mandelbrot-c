@@ -27,23 +27,27 @@
 #include "tour.h"
 
 #if defined(__EMSCRIPTEN__)
-#include <emscripten.h>
 #include <GLES3/gl3.h>
+#include <emscripten.h>
 
-EM_JS(void, update_debug_info_js, (int gpu_mode, int julia_mode, int max_iters, double zoom, double center_re, double center_im, int palette_idx, int tour_phase, double julia_re, double julia_im), {
-    if (typeof updateDebugInfo === 'function') {
-        updateDebugInfo(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im);
-    }
-});
+EM_JS(void, update_debug_info_js,
+      (int gpu_mode, int julia_mode, int max_iters, double zoom, double center_re, double center_im,
+       int palette_idx, int tour_phase, double julia_re, double julia_im),
+      {
+          if (typeof updateDebugInfo == = 'function') {
+              updateDebugInfo(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im,
+                              palette_idx, tour_phase, julia_re, julia_im);
+          }
+      });
 
 EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
-    if (typeof updateZoomBox === 'function') {
+    if (typeof updateZoomBox == = 'function') {
         updateZoomBox(is_zooming, x, y, w, h);
     }
 });
 
 EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
-    if (typeof downloadScreenshotData === 'function') {
+    if (typeof downloadScreenshotData == = 'function') {
         downloadScreenshotData(ptr, w, h, HEAPU8);
     }
 });
@@ -254,16 +258,15 @@ static void frame(void) {
             /* uniform setup */
             float chi_re = (float)ctx.view.center_re;
             float chi_im = (float)ctx.view.center_im;
-            params_t params = {
-                .center_hi = {chi_re, chi_im},
-                .center_lo = {(float)(ctx.view.center_re - chi_re),
-                              (float)(ctx.view.center_im - chi_im)},
-                .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
-                .zoom = (float)ctx.view.zoom,
-                .iters = (float)ctx.max_iterations,
-                .aspect = (float)ctx.win_w / ctx.win_h,
-                .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
-                .palette = (float)ctx.palette_idx};
+            params_t params = {.center_hi = {chi_re, chi_im},
+                               .center_lo = {(float)(ctx.view.center_re - chi_re),
+                                             (float)(ctx.view.center_im - chi_im)},
+                               .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
+                               .zoom = (float)ctx.view.zoom,
+                               .iters = (float)ctx.max_iterations,
+                               .aspect = (float)ctx.win_w / ctx.win_h,
+                               .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
+                               .palette = (float)ctx.palette_idx};
             sg_apply_uniforms(0, &SG_RANGE(params));
         }
         sg_draw(0, 6, 1);
@@ -307,7 +310,9 @@ static void frame(void) {
         }
         ctx.screenshot_requested = 0;
     }
-    update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.max_iterations, ctx.view.zoom, ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase, ctx.julia_c.re, ctx.julia_c.im);
+    update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.max_iterations, ctx.view.zoom,
+                         ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase,
+                         ctx.julia_c.re, ctx.julia_c.im);
 }
 
 static void event(const sapp_event* ev) {
@@ -329,7 +334,8 @@ static void event(const sapp_event* ev) {
             ctx.is_panning = 0;
         } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
             if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
-                if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
+                if (ctx.history_count < MAX_HISTORY_SIZE)
+                    ctx.history[ctx.history_count++] = ctx.view;
                 double aspect = (double)ctx.win_w / ctx.win_h;
                 double re_pp = (ctx.view.zoom * aspect) / ctx.win_w;
                 double im_pp = ctx.view.zoom / ctx.win_h;
@@ -353,7 +359,8 @@ static void event(const sapp_event* ev) {
         ctx.mouse_y = (int)ev->mouse_y;
         if (ctx.is_panning) {
             double aspect = (double)ctx.win_w / ctx.win_h;
-            ctx.view.center_re -= (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
+            ctx.view.center_re -=
+                (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
             /* y-up grab model: dragging down (delta_y > 0) moves image down
              * which means center_im must increase so the grabbed point follows */
             ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
@@ -368,10 +375,11 @@ static void event(const sapp_event* ev) {
             update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
         } else if (ctx.julia_mode && ctx.m_tour.phase == TOUR_IDLE) {
             /* y-up: top of screen = high im */
-            ctx.julia_c.re = ctx.view.center_re +
-                ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * ((double)ctx.win_w / ctx.win_h);
-            ctx.julia_c.im = ctx.view.center_im +
-                (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
+            ctx.julia_c.re = ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) *
+                                                      ctx.view.zoom *
+                                                      ((double)ctx.win_w / ctx.win_h);
+            ctx.julia_c.im =
+                ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
@@ -381,11 +389,12 @@ static void event(const sapp_event* ev) {
             double aspect = (double)ctx.win_w / ctx.win_h;
             /* y-up: top = high im; scroll zoom at cursor using y-up mapping */
             double mouse_re = ctx.view.center_re +
-                ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
-            double mouse_im = ctx.view.center_im +
-                (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
+                              ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+            double mouse_im =
+                ctx.view.center_im + (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.view.zoom *= zoom_factor;
-            ctx.view.center_re = mouse_re - ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+            ctx.view.center_re =
+                mouse_re - ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
             ctx.view.center_im = mouse_im - (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
@@ -517,14 +526,14 @@ void wasm_cancel_zoom(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_down(float x, float y, int button) {
-    if (button == 0) { // left
+    if (button == 0) {  // left
         ctx.is_zooming = 1;
         ctx.zoom_rect.x = (int)x;
         ctx.zoom_rect.y = (int)y;
         ctx.zoom_rect.w = 0;
         ctx.zoom_rect.h = 0;
         update_zoom_box_js(1, ctx.zoom_rect.x, ctx.zoom_rect.y, 0, 0);
-    } else if (button == 1) { // right (panning)
+    } else if (button == 1) {  // right (panning)
         ctx.is_panning = 1;
         ctx.last_mouse_x = (int)x;
         ctx.last_mouse_y = (int)y;
@@ -553,8 +562,9 @@ void wasm_mouse_move(float x, float y) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_up(float x, float y, int button) {
-    (void)x; (void)y;
-    if (button == 0) { // left
+    (void)x;
+    (void)y;
+    if (button == 0) {  // left
         if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
             if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
             double aspect = (double)ctx.win_w / ctx.win_h;
@@ -573,7 +583,7 @@ void wasm_mouse_up(float x, float y, int button) {
         }
         ctx.is_zooming = 0;
         update_zoom_box_js(0, 0, 0, 0, 0);
-    } else if (button == 1) { // right
+    } else if (button == 1) {  // right
         ctx.is_panning = 0;
     }
 }
