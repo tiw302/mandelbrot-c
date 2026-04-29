@@ -111,7 +111,7 @@ static void init(void) {
     stm_setup();
     sgl_setup(&(sgl_desc_t){.logger.func = slog_func});
 
-    /* create a blending pipeline for sgl UI elements */
+    /* create a blending pipeline for sgl ui elements */
     ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
         .colors[0].blend = {
             .enabled = true,
