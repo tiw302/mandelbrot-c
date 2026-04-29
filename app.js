@@ -28,9 +28,9 @@ let _currentState = {
     julia_re: 0.0, julia_im: 0.0
 };
 
-window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im) {
+window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision) {
     let engine = julia_mode ? "julia" : "mandelbrot";
-    if (gpu_mode) engine += " (gpu)";
+    if (gpu_mode) engine += high_precision ? " (gpu 64-bit)" : " (gpu 32-bit)";
     else engine += " (cpu)";
 
     let tour_str = tour_phase !== 0 ? " | tour: on" : "";
@@ -182,6 +182,9 @@ var Module = {
             if (key === 't') toggleTour();
             if (key === 'j') Module._wasm_toggle_julia();
             if (key === 'g') toggleGpu();
+            if (key === 'e') {
+                if (Module._wasm_toggle_precision) Module._wasm_toggle_precision();
+            }
             if (key === 's') downloadScreenshot();
             if (e.key === 'ArrowUp') Module._wasm_adjust_iterations(10);
             if (e.key === 'ArrowDown') Module._wasm_adjust_iterations(-10);
