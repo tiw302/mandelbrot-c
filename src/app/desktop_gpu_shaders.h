@@ -21,7 +21,7 @@ static const char* dg_fs_gpu =
 
     "vec3 lut_color(float fi, int pal) {\n"
     "  float i = fi; vec3 a,b;\n"
-    "  if (pal==0) {\n" /* sine wave: Swapped phases (4,2,0) for Mint */
+    "  if (pal==0) {\n" /* sine wave: swapped phases (4,2,0) for mint */
     "    a=vec3(sin(0.1*i+4.0)*127.+128., sin(0.1*i+2.0)*127.+128., sin(0.1*i+0.0)*127.+128.)/255.;\n"
     "    b=vec3(sin(0.1*(i+1.0)+4.0)*127.+128., sin(0.1*(i+1.0)+2.0)*127.+128., sin(0.1*(i+1.0)+0.0)*127.+128.)/255.;\n"
     "  } else if (pal==1) {\n"
