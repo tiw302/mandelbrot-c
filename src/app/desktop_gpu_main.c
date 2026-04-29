@@ -473,8 +473,10 @@ static void event(const sapp_event* ev) {
             ctx.gpu_mode = !ctx.gpu_mode;
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_E) {
-            ctx.high_precision_mode = !ctx.high_precision_mode;
-            ctx.needs_redraw = 1;
+            if (ctx.gpu_mode) {
+                ctx.high_precision_mode = !ctx.high_precision_mode;
+                ctx.needs_redraw = 1;
+            }
         } else if (ev->key_code == SAPP_KEYCODE_P) {
             ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
             init_renderer(ctx.max_iterations, ctx.palette_idx);
