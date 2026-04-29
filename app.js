@@ -21,6 +21,15 @@ function toggleGpu() {
     document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
 }
 
+let _highPrecision = false;
+function togglePrecision() {
+    if (Module._wasm_toggle_precision) {
+        Module._wasm_toggle_precision();
+        _highPrecision = !_highPrecision;
+        document.getElementById('precisionBtn').textContent = _highPrecision ? '64-bit ✓' : '32-bit';
+    }
+}
+
 // global state for just-in-time URL generation
 let _currentState = {
     julia_mode: false, iters: 500, zoom: 3.0,
@@ -182,9 +191,7 @@ var Module = {
             if (key === 't') toggleTour();
             if (key === 'j') Module._wasm_toggle_julia();
             if (key === 'g') toggleGpu();
-            if (key === 'e') {
-                if (Module._wasm_toggle_precision) Module._wasm_toggle_precision();
-            }
+            if (key === 'e') togglePrecision();
             if (key === 's') downloadScreenshot();
             if (e.key === 'ArrowUp') Module._wasm_adjust_iterations(10);
             if (e.key === 'ArrowDown') Module._wasm_adjust_iterations(-10);
