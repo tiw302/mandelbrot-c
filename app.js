@@ -19,10 +19,13 @@ function toggleGpu() {
     Module._wasm_toggle_gpu();
     _gpuMode = !_gpuMode;
     document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
+    // precision is GPU-only — hide button when in CPU mode
+    document.getElementById('precisionBtn').style.display = _gpuMode ? '' : 'none';
 }
 
 let _highPrecision = false;
 function togglePrecision() {
+    if (!_gpuMode) return; // precision only applies to GPU mode
     if (Module._wasm_toggle_precision) {
         Module._wasm_toggle_precision();
         _highPrecision = !_highPrecision;
