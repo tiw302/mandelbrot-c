@@ -374,7 +374,8 @@ int main(int argc, char* argv[]) {
         if (screenshot_requested) {
             uint32_t* ss_pixels = malloc(win_w * win_h * 4);
             if (ss_pixels) {
-                SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss_pixels, win_w * 4);
+                SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss_pixels,
+                                     win_w * 4);
                 save_screenshot(ss_pixels, win_w, win_h);
                 free(ss_pixels);
             }
@@ -392,7 +393,8 @@ int main(int argc, char* argv[]) {
             int x = 15;
             int y = 12;
             int line_h = FONT_SIZE + 4;
-            int num_lines = 3 + (m_tour.phase != TOUR_IDLE ? 1 : 0) + (j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
+            int num_lines =
+                3 + (m_tour.phase != TOUR_IDLE ? 1 : 0) + (j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
 
             SDL_Rect bg = {5, 5, 600, num_lines * line_h + 12};
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
@@ -402,21 +404,21 @@ int main(int argc, char* argv[]) {
             /* line 1: engine | mode | threads | render */
             int num_threads = get_actual_thread_count();
             snprintf(buf, sizeof(buf), "cpu | %s | threads: %d | render: %u ms",
-                     julia_mode ? "julia" : "mandelbrot",
-                     num_threads, render_time);
+                     julia_mode ? "julia" : "mandelbrot", num_threads, render_time);
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
             if (julia_mode) {
                 snprintf(buf, sizeof(buf), "c: (%.14f, %.14f)", julia_c.re, julia_c.im);
             } else {
-                snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", view.center_re, view.center_im);
+                snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", view.center_re,
+                         view.center_im);
             }
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
-            snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
-                     view.zoom, max_iterations, PALETTE_NAMES[palette_idx % PALETTE_COUNT]);
+            snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s", view.zoom,
+                     max_iterations, PALETTE_NAMES[palette_idx % PALETTE_COUNT]);
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
@@ -473,7 +475,8 @@ static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text
 }
 
 static TTF_Font* load_font(void) {
-    const char* paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL};
+    const char* paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2,
+                           FONT_PATH_3,     FONT_PATH_4, NULL};
     for (int i = 0; paths[i] && paths[i][0]; i++) {
         TTF_Font* f = TTF_OpenFont(paths[i], FONT_SIZE);
         if (f) return f;
