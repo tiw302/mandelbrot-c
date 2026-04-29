@@ -7,8 +7,8 @@
 #define FONTSTASH_IMPLEMENTATION
 #define SOKOL_FONTSTASH_IMPL
 
-#include "config.h"
 #include "color.h"
+#include "config.h"
 #include "julia.h"
 #include "mandelbrot.h"
 #include "renderer.h"
@@ -24,21 +24,25 @@
 #include "sokol/sokol_fontstash.h"
 // clang-format on
 
-#include "desktop_gpu_shaders.h"
-#include "tour.h"
-
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
+#include "desktop_gpu_shaders.h"
+#include "tour.h"
+
 #define JULIA_ZOOM 4.0
 
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
-                      const char* message_or_null, uint32_t line_nr,
-                      const char* filename_or_null, void* user_data) {
-    (void)tag; (void)log_level; (void)log_item_id;
-    (void)line_nr; (void)filename_or_null; (void)user_data;
+                      const char* message_or_null, uint32_t line_nr, const char* filename_or_null,
+                      void* user_data) {
+    (void)tag;
+    (void)log_level;
+    (void)log_item_id;
+    (void)line_nr;
+    (void)filename_or_null;
+    (void)user_data;
     if (message_or_null) printf("[sokol][%d] %s\n", log_level, message_or_null);
 }
 
@@ -50,7 +54,10 @@ typedef struct {
     float is_julia, palette;
 } params_t;
 
-typedef struct { ViewState mandelbrot_view; int active; } JuliaSession;
+typedef struct {
+    ViewState mandelbrot_view;
+    int active;
+} JuliaSession;
 
 typedef struct {
     sg_pipeline pip_cpu, pip_gpu;
@@ -77,7 +84,9 @@ typedef struct {
     int is_panning, is_zooming;
     int last_mouse_x, last_mouse_y;
     int mouse_x, mouse_y;
-    struct { int x, y, w, h; } zoom_rect;
+    struct {
+        int x, y, w, h;
+    } zoom_rect;
     uint32_t render_time_ms;
 
     sgl_pipeline pip_blend;
@@ -92,15 +101,17 @@ static void rebuild_texture(void) {
     if (ctx.img.id) sg_destroy_image(ctx.img);
     free(ctx.pixels);
     ctx.pixels = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
-    ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w, .height = ctx.win_h,
-        .pixel_format = SG_PIXELFORMAT_RGBA8, .usage = {.dynamic_update = true}});
+    ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w,
+                                             .height = ctx.win_h,
+                                             .pixel_format = SG_PIXELFORMAT_RGBA8,
+                                             .usage = {.dynamic_update = true}});
     ctx.img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.img});
     ctx.bind.views[0] = ctx.img_view;
 }
 
 static double mouse_re(void) {
-    return ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) *
-           ctx.view.zoom * ((double)ctx.win_w / ctx.win_h);
+    return ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom *
+                                    ((double)ctx.win_w / ctx.win_h);
 }
 static double mouse_im(void) {
     return ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
@@ -112,17 +123,17 @@ static void init(void) {
     sgl_setup(&(sgl_desc_t){.logger.func = slog_func});
 
     /* create a blending pipeline for sgl ui elements */
-    ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
-        .colors[0].blend = {
-            .enabled = true,
-            .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
-            .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-        }
-    });
+    ctx.pip_blend = sgl_make_pipeline(
+        &(sg_pipeline_desc){.colors[0].blend = {
+                                .enabled = true,
+                                .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
+                                .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+                            }});
 
     /* fontstash setup */
-    ctx.fons = sfons_create(&(sfons_desc_t){ .width = 512, .height = 512 });
-    const char* font_paths[] = { FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2, FONT_PATH_3, FONT_PATH_4, NULL };
+    ctx.fons = sfons_create(&(sfons_desc_t){.width = 512, .height = 512});
+    const char* font_paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2,
+                                FONT_PATH_3,     FONT_PATH_4, NULL};
     ctx.font_id = FONS_INVALID;
     for (int i = 0; font_paths[i] && font_paths[i][0]; i++) {
         ctx.font_id = fonsAddFont(ctx.fons, "sans", font_paths[i]);
@@ -132,60 +143,65 @@ static void init(void) {
     ctx.win_w = sapp_width();
     ctx.win_h = sapp_height();
 
-    float verts[] = {-1,1,0,0, 1,1,1,0, 1,-1,1,1, -1,-1,0,1};
+    float verts[] = {-1, 1, 0, 0, 1, 1, 1, 0, 1, -1, 1, 1, -1, -1, 0, 1};
     ctx.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){.data = SG_RANGE(verts)});
-    uint16_t idx[] = {0,1,2, 0,2,3};
+    uint16_t idx[] = {0, 1, 2, 0, 2, 3};
     ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .usage = {.index_buffer=true,.immutable=true}, .data = SG_RANGE(idx)});
+        .usage = {.index_buffer = true, .immutable = true}, .data = SG_RANGE(idx)});
 
-    ctx.smp = sg_make_sampler(&(sg_sampler_desc){
-        .min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR});
+    ctx.smp = sg_make_sampler(
+        &(sg_sampler_desc){.min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR});
     ctx.bind.samplers[0] = ctx.smp;
     rebuild_texture();
 
-    sg_shader shd_cpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
-        .vertex_func.source = dg_vs, .fragment_func.source = dg_fs_cpu,
-        .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
-        .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
-        .texture_sampler_pairs[0] = {.stage=SG_SHADERSTAGE_FRAGMENT,
-            .view_slot=0, .sampler_slot=0, .glsl_name="tex"}});
-    ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = shd_cpu,
-        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
-        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
-        .index_type = SG_INDEXTYPE_UINT16});
+    sg_shader shd_cpu = sg_make_shader(
+        &(sg_shader_desc){.attrs[0].glsl_name = "pos",
+                          .attrs[1].glsl_name = "uv_in",
+                          .vertex_func.source = dg_vs,
+                          .fragment_func.source = dg_fs_cpu,
+                          .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
+                          .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
+                          .texture_sampler_pairs[0] = {.stage = SG_SHADERSTAGE_FRAGMENT,
+                                                       .view_slot = 0,
+                                                       .sampler_slot = 0,
+                                                       .glsl_name = "tex"}});
+    ctx.pip_cpu =
+        sg_make_pipeline(&(sg_pipeline_desc){.shader = shd_cpu,
+                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .index_type = SG_INDEXTYPE_UINT16});
 
     sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos", .attrs[1].glsl_name = "uv_in",
-        .vertex_func.source = dg_vs, .fragment_func.source = dg_fs_gpu,
+        .attrs[0].glsl_name = "pos",
+        .attrs[1].glsl_name = "uv_in",
+        .vertex_func.source = dg_vs,
+        .fragment_func.source = dg_fs_gpu,
         .uniform_blocks[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT,
             .size = sizeof(params_t),
-            .glsl_uniforms = {
-                {.glsl_name="u_center_hi", .type=SG_UNIFORMTYPE_FLOAT2},
-                {.glsl_name="u_center_lo", .type=SG_UNIFORMTYPE_FLOAT2},
-                {.glsl_name="u_julia_c",   .type=SG_UNIFORMTYPE_FLOAT2},
-                {.glsl_name="u_zoom",      .type=SG_UNIFORMTYPE_FLOAT},
-                {.glsl_name="u_iters",     .type=SG_UNIFORMTYPE_FLOAT},
-                {.glsl_name="u_aspect",    .type=SG_UNIFORMTYPE_FLOAT},
-                {.glsl_name="u_is_julia",  .type=SG_UNIFORMTYPE_FLOAT},
-                {.glsl_name="u_palette",   .type=SG_UNIFORMTYPE_FLOAT}}}});
-    ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){
-        .shader = shd_gpu,
-        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
-        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
-        .index_type = SG_INDEXTYPE_UINT16});
+            .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT}}}});
+    ctx.pip_gpu =
+        sg_make_pipeline(&(sg_pipeline_desc){.shader = shd_gpu,
+                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .index_type = SG_INDEXTYPE_UINT16});
 
     ctx.pass_action = (sg_pass_action){
-        .colors[0] = {.load_action=SG_LOADACTION_CLEAR, .clear_value={0,0,0,1}}};
+        .colors[0] = {.load_action = SG_LOADACTION_CLEAR, .clear_value = {0, 0, 0, 1}}};
 
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
     ctx.julia_c = (complex_t){-0.7, 0.27};
     ctx.max_iterations = DEFAULT_ITERATIONS;
     ctx.gpu_mode = 1;
-    ctx.m_tour = (TourState){TOUR_IDLE, 0,0,0,0,0,0,0,-1};
-    ctx.j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0,0,0,0,0,-1};
+    ctx.m_tour = (TourState){TOUR_IDLE, 0, 0, 0, 0, 0, 0, 0, -1};
+    ctx.j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0, 0, 0, 0, 0, -1};
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 
@@ -218,14 +234,15 @@ static void frame(void) {
         double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
         uint32_t t0 = (uint32_t)stm_ms(stm_now());
         if (ctx.julia_mode)
-            render_julia_threaded(ctx.pixels, ctx.win_w*4, ctx.win_w, ctx.win_h,
-                                  rmin, rmax, im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+            render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                  im_top, im_bot, ctx.julia_c, ctx.max_iterations);
         else
-            render_mandelbrot_threaded(ctx.pixels, ctx.win_w*4, ctx.win_w, ctx.win_h,
-                                       rmin, rmax, im_top, im_bot, ctx.max_iterations);
+            render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                       im_top, im_bot, ctx.max_iterations);
         ctx.render_time_ms = (uint32_t)stm_ms(stm_now()) - t0;
         sg_update_image(ctx.img, &(sg_image_data){
-            .mip_levels[0] = {.ptr=ctx.pixels, .size=(size_t)ctx.win_w*ctx.win_h*4}});
+                                     .mip_levels[0] = {.ptr = ctx.pixels,
+                                                       .size = (size_t)ctx.win_w * ctx.win_h * 4}});
         ctx.needs_redraw = 0;
     }
 
@@ -233,8 +250,6 @@ static void frame(void) {
     sgl_defaults();
     sgl_matrix_mode_projection();
     sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
-
-
 
     /* yellow zoom box */
     if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
@@ -244,15 +259,19 @@ static void frame(void) {
         float y2 = (float)(ctx.zoom_rect.y + ctx.zoom_rect.h);
         sgl_begin_lines();
         sgl_c3b(255, 255, 0);
-        sgl_v2f(x1, y1); sgl_v2f(x2, y1);
-        sgl_v2f(x2, y1); sgl_v2f(x2, y2);
-        sgl_v2f(x2, y2); sgl_v2f(x1, y2);
-        sgl_v2f(x1, y2); sgl_v2f(x1, y1);
+        sgl_v2f(x1, y1);
+        sgl_v2f(x2, y1);
+        sgl_v2f(x2, y1);
+        sgl_v2f(x2, y2);
+        sgl_v2f(x2, y2);
+        sgl_v2f(x1, y2);
+        sgl_v2f(x1, y2);
+        sgl_v2f(x1, y1);
         sgl_end();
     }
     sgl_load_default_pipeline();
 
-    sg_begin_pass(&(sg_pass){.action=ctx.pass_action, .swapchain=sglue_swapchain()});
+    sg_begin_pass(&(sg_pass){.action = ctx.pass_action, .swapchain = sglue_swapchain()});
     sg_pipeline cur = ctx.gpu_mode ? ctx.pip_gpu : ctx.pip_cpu;
     if (sg_query_pipeline_state(cur) == SG_RESOURCESTATE_VALID) {
         sg_apply_pipeline(cur);
@@ -260,16 +279,15 @@ static void frame(void) {
         if (ctx.gpu_mode) {
             float chi_re = (float)ctx.view.center_re;
             float chi_im = (float)ctx.view.center_im;
-            params_t p = {
-                .center_hi = {chi_re, chi_im},
-                .center_lo = {(float)(ctx.view.center_re - chi_re),
-                              (float)(ctx.view.center_im - chi_im)},
-                .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
-                .zoom    = (float)ctx.view.zoom,
-                .iters   = (float)ctx.max_iterations,
-                .aspect  = (float)ctx.win_w / ctx.win_h,
-                .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
-                .palette  = (float)ctx.palette_idx};
+            params_t p = {.center_hi = {chi_re, chi_im},
+                          .center_lo = {(float)(ctx.view.center_re - chi_re),
+                                        (float)(ctx.view.center_im - chi_im)},
+                          .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
+                          .zoom = (float)ctx.view.zoom,
+                          .iters = (float)ctx.max_iterations,
+                          .aspect = (float)ctx.win_w / ctx.win_h,
+                          .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
+                          .palette = (float)ctx.palette_idx};
             sg_apply_uniforms(0, &SG_RANGE(p));
         }
         sg_draw(0, 6, 1);
@@ -277,7 +295,8 @@ static void frame(void) {
 
     /* debug info background with blending */
     sgl_load_pipeline(ctx.pip_blend);
-    int num_lines = 3 + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
+    int num_lines =
+        3 + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
     float visual_font_size = FONT_SIZE * 1.25f;
     float lh = visual_font_size + 4.0f;
     float bg_w = 600.0f;
@@ -299,33 +318,39 @@ static void frame(void) {
         fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
         float x = 15.0f, y = 12.0f;
         char buf[256];
-        
+
         snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",
-            ctx.gpu_mode ? "gpu" : "cpu", ctx.julia_mode ? "julia" : "mandelbrot",
-            get_actual_thread_count(), ctx.render_time_ms);
-        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
-        
+                 ctx.gpu_mode ? "gpu" : "cpu", ctx.julia_mode ? "julia" : "mandelbrot",
+                 get_actual_thread_count(), ctx.render_time_ms);
+        fonsDrawText(ctx.fons, x, y, buf, NULL);
+        y += lh;
+
         if (ctx.julia_mode) {
             snprintf(buf, sizeof(buf), "c: (%.14f, %.14f)", ctx.julia_c.re, ctx.julia_c.im);
         } else {
-            snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", ctx.view.center_re, ctx.view.center_im);
+            snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", ctx.view.center_re,
+                     ctx.view.center_im);
         }
-        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        fonsDrawText(ctx.fons, x, y, buf, NULL);
+        y += lh;
 
-        snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s",
-            ctx.view.zoom, ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx % PALETTE_COUNT]);
-        fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+        snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s", ctx.view.zoom,
+                 ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx % PALETTE_COUNT]);
+        fonsDrawText(ctx.fons, x, y, buf, NULL);
+        y += lh;
 
         if (ctx.m_tour.phase != TOUR_IDLE) {
             snprintf(buf, sizeof(buf), "auto-zoom [%s] target #%d",
-                get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour) + 1);
-            fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+                     get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour) + 1);
+            fonsDrawText(ctx.fons, x, y, buf, NULL);
+            y += lh;
         }
         if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
             snprintf(buf, sizeof(buf), "auto-c [%s] #%d (%.4f, %.4f)",
-                ctx.j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
-                get_julia_tour_target_idx(&ctx.j_tour) + 1, ctx.julia_c.re, ctx.julia_c.im);
-            fonsDrawText(ctx.fons, x, y, buf, NULL); y += lh;
+                     ctx.j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
+                     get_julia_tour_target_idx(&ctx.j_tour) + 1, ctx.julia_c.re, ctx.julia_c.im);
+            fonsDrawText(ctx.fons, x, y, buf, NULL);
+            y += lh;
         }
         sfons_flush(ctx.fons);
     }
@@ -391,7 +416,8 @@ static void event(const sapp_event* ev) {
         ctx.mouse_y = (int)ev->mouse_y;
         if (ctx.is_panning) {
             double aspect = (double)ctx.win_w / ctx.win_h;
-            ctx.view.center_re -= (ev->mouse_x - ctx.last_mouse_x) * ctx.view.zoom * aspect / ctx.win_w;
+            ctx.view.center_re -=
+                (ev->mouse_x - ctx.last_mouse_x) * ctx.view.zoom * aspect / ctx.win_w;
             ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
             ctx.last_mouse_x = (int)ev->mouse_x;
             ctx.last_mouse_y = (int)ev->mouse_y;
@@ -400,22 +426,22 @@ static void event(const sapp_event* ev) {
             ctx.zoom_rect.w = (int)ev->mouse_x - ctx.zoom_rect.x;
             ctx.zoom_rect.h = (int)ev->mouse_y - ctx.zoom_rect.y;
         } else if (ctx.julia_mode && ctx.j_tour.phase == JULIA_TOUR_IDLE) {
-            ctx.julia_c.re = ctx.view.center_re +
-                ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom *
-                ((double)ctx.win_w / ctx.win_h);
-            ctx.julia_c.im = ctx.view.center_im +
-                (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
+            ctx.julia_c.re = ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) *
+                                                      ctx.view.zoom *
+                                                      ((double)ctx.win_w / ctx.win_h);
+            ctx.julia_c.im =
+                ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
         if (ev->scroll_y != 0.0f) {
-            if (ctx.history_count < MAX_HISTORY_SIZE)
-                ctx.history[ctx.history_count++] = ctx.view;
+            if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
             double factor = ev->scroll_y > 0 ? 0.9 : 1.1;
             double mre = mouse_re(), mim = mouse_im();
             ctx.view.zoom *= factor;
             double aspect = (double)ctx.win_w / ctx.win_h;
-            ctx.view.center_re = mre - ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
+            ctx.view.center_re =
+                mre - ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
             ctx.view.center_im = mim - (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
@@ -425,7 +451,8 @@ static void event(const sapp_event* ev) {
         if (ev->key_code == SAPP_KEYCODE_ESCAPE || ev->key_code == SAPP_KEYCODE_Q) {
             sapp_quit();
         } else if (ev->key_code == SAPP_KEYCODE_Z && mod_ctrl) {
-            if (ctx.m_tour.phase == TOUR_IDLE && ctx.j_tour.phase == JULIA_TOUR_IDLE && ctx.history_count > 0)
+            if (ctx.m_tour.phase == TOUR_IDLE && ctx.j_tour.phase == JULIA_TOUR_IDLE &&
+                ctx.history_count > 0)
                 ctx.view = ctx.history[--ctx.history_count];
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_R) {
@@ -474,9 +501,11 @@ static void event(const sapp_event* ev) {
                 double im_top = ctx.view.center_im + ctx.view.zoom / 2;
                 double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
                 if (ctx.julia_mode)
-                    render_julia_threaded(buf, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+                    render_julia_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                          im_top, im_bot, ctx.julia_c, ctx.max_iterations);
                 else
-                    render_mandelbrot_threaded(buf, ctx.win_w*4, ctx.win_w, ctx.win_h, rmin, rmax, im_top, im_bot, ctx.max_iterations);
+                    render_mandelbrot_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                               im_top, im_bot, ctx.max_iterations);
                 save_screenshot(buf, ctx.win_w, ctx.win_h);
                 free(buf);
             }
@@ -533,14 +562,14 @@ static void cleanup(void) {
 }
 
 sapp_desc sokol_main(int argc, char* argv[]) {
-    (void)argc; (void)argv;
-    return (sapp_desc){
-        .init_cb = init,
-        .frame_cb = frame,
-        .cleanup_cb = cleanup,
-        .event_cb = event,
-        .width = WINDOW_WIDTH,
-        .height = WINDOW_HEIGHT,
-        .window_title = "Mandelbrot GPU Explorer",
-        .high_dpi = false};
+    (void)argc;
+    (void)argv;
+    return (sapp_desc){.init_cb = init,
+                       .frame_cb = frame,
+                       .cleanup_cb = cleanup,
+                       .event_cb = event,
+                       .width = WINDOW_WIDTH,
+                       .height = WINDOW_HEIGHT,
+                       .window_title = "Mandelbrot GPU Explorer",
+                       .high_dpi = false};
 }
