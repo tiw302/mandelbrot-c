@@ -51,7 +51,7 @@ typedef struct {
     float center_lo[2];
     float julia_c[2];
     float zoom, iters, aspect;
-    float is_julia, palette;
+    float is_julia, palette, high_precision;
 } params_t;
 
 typedef struct {
@@ -75,7 +75,7 @@ typedef struct {
 
     TourState m_tour;
     JuliaTourState j_tour;
-    int julia_mode, gpu_mode;
+    int julia_mode, gpu_mode, high_precision_mode;
     complex_t julia_c;
     JuliaSession julia_session;
 
@@ -186,7 +186,8 @@ static void init(void) {
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT}}}});
+                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
     ctx.pip_gpu =
         sg_make_pipeline(&(sg_pipeline_desc){.shader = shd_gpu,
                                              .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
@@ -211,7 +212,8 @@ static void init(void) {
     puts("  up/down     : iterations      shift+up/dn: x100");
     puts("  p           : cycle palette   r          : reset");
     puts("  j           : julia mode      t          : tour");
-    puts("  s           : screenshot      q / esc    : quit");
+    puts("  e           : toggle 64-bit   s          : screenshot");
+    puts("  q / esc     : quit");
 }
 
 static void frame(void) {
@@ -287,7 +289,8 @@ static void frame(void) {
                           .iters = (float)ctx.max_iterations,
                           .aspect = (float)ctx.win_w / ctx.win_h,
                           .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
-                          .palette = (float)ctx.palette_idx};
+                          .palette = (float)ctx.palette_idx,
+                          .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f};
             sg_apply_uniforms(0, &SG_RANGE(p));
         }
         sg_draw(0, 6, 1);
@@ -320,7 +323,7 @@ static void frame(void) {
         char buf[256];
 
         snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",
-                 ctx.gpu_mode ? "gpu" : "cpu", ctx.julia_mode ? "julia" : "mandelbrot",
+                 ctx.gpu_mode ? (ctx.high_precision_mode ? "gpu (64-bit)" : "gpu (32-bit)") : "cpu", ctx.julia_mode ? "julia" : "mandelbrot",
                  get_actual_thread_count(), ctx.render_time_ms);
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
@@ -468,6 +471,9 @@ static void event(const sapp_event* ev) {
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_G) {
             ctx.gpu_mode = !ctx.gpu_mode;
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_E) {
+            ctx.high_precision_mode = !ctx.high_precision_mode;
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_P) {
             ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
