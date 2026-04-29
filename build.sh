@@ -3,11 +3,21 @@
 build_cpu() {
     cmake -S . -B build-cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
     cmake --build build-cpu
+    echo ""
+    echo "=========================================="
+    echo " build complete! to run cpu engine:"
+    echo "   ./build-cpu/mandelbrot-cpu"
+    echo "=========================================="
 }
 
 build_gpu() {
     cmake -S . -B build-gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
     cmake --build build-gpu
+    echo ""
+    echo "=========================================="
+    echo " build complete! to run gpu engine:"
+    echo "   ./build-gpu/mandelbrot-gpu"
+    echo "=========================================="
 }
 
 build_web() {
@@ -26,6 +36,12 @@ build_web() {
     cp build-web/index.wasm deploy/
     if [ -d "assets" ]; then cp -r assets deploy/; fi
     echo "web: build and deployment package ready in 'deploy/' folder."
+    echo ""
+    echo "=========================================="
+    echo " build complete! to run web engine:"
+    echo "   python3 -m http.server 8080 -d deploy/"
+    echo "   then open http://localhost:8080"
+    echo "=========================================="
 }
 
 build_all() {
