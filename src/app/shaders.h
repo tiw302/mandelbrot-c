@@ -40,23 +40,23 @@ static const char* fs_gpu_src =
     "vec3 lut_color(float fi, int pal) {\n"
     "    float i = fi;\n"
     "    vec3 a, b;\n"
-    "    if (pal == 0) {\n"  /* sine wave: Swapped phases (4,2,0) to match CPU Mint appearance */
+    "    if (pal == 0) {\n"  /* sine wave: swapped phases (4,2,0) to match cpu mint appearance */
     "        a = vec3(sin(0.1*i+4.0)*127.0+128.0, sin(0.1*i+2.0)*127.0+128.0, sin(0.1*i+0.0)*127.0+128.0) / 255.0;\n"
     "        b = vec3(sin(0.1*(i+1.0)+4.0)*127.0+128.0, sin(0.1*(i+1.0)+2.0)*127.0+128.0, sin(0.1*(i+1.0)+0.0)*127.0+128.0) / 255.0;\n"
     "    } else if (pal == 1) {\n"  /* grayscale */
     "        float v = mod(i, 256.0) / 255.0;\n"
     "        float v2 = mod(i+1.0, 256.0) / 255.0;\n"
     "        a = vec3(v); b = vec3(v2);\n"
-    "    } else if (pal == 2) {\n"  /* fire (swapped to match CPU) */
+    "    } else if (pal == 2) {\n"  /* fire (swapped to match cpu) */
     "        a = vec3(min(255.0,i*1.0), min(255.0,i*2.0), min(255.0,i*4.0)) / 255.0;\n"
     "        b = vec3(min(255.0,(i+1.0)*1.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*4.0)) / 255.0;\n"
-    "    } else if (pal == 3) {\n"  /* electric (swapped to match CPU) */
+    "    } else if (pal == 3) {\n"  /* electric (swapped to match cpu) */
     "        a = vec3(min(255.0,i*8.0), min(255.0,i*4.0), min(255.0,i*1.0)) / 255.0;\n"
     "        b = vec3(min(255.0,(i+1.0)*8.0), min(255.0,(i+1.0)*4.0), min(255.0,(i+1.0)*1.0)) / 255.0;\n"
-    "    } else if (pal == 4) {\n"  /* ocean (swapped to match CPU) */
+    "    } else if (pal == 4) {\n"  /* ocean (swapped to match cpu) */
     "        a = vec3(min(255.0,i*5.0), min(255.0,i*2.0), min(255.0,i*0.5)) / 255.0;\n"
     "        b = vec3(min(255.0,(i+1.0)*5.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*0.5)) / 255.0;\n"
-    "    } else {\n"  /* inferno (swapped to match CPU) */
+    "    } else {\n"  /* inferno (swapped to match cpu) */
     "        a = vec3(min(255.0,i*0.5), min(255.0,i*2.0), min(255.0,i*8.0)) / 255.0;\n"
     "        b = vec3(min(255.0,(i+1.0)*0.5), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*8.0)) / 255.0;\n"
     "    }\n"
