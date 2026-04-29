@@ -399,7 +399,7 @@ int main(int argc, char* argv[]) {
             SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
             SDL_RenderFillRect(renderer, &bg);
 
-            /* Line 1: Engine | Mode | Threads | Render */
+            /* line 1: engine | mode | threads | render */
             int num_threads = get_actual_thread_count();
             snprintf(buf, sizeof(buf), "cpu | %s | threads: %d | render: %u ms",
                      julia_mode ? "julia" : "mandelbrot",
