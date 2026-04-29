@@ -1,15 +1,10 @@
 #include "color.h"
+
 #include <math.h>
 #include <stdlib.h>
 
-const char* PALETTE_NAMES[PALETTE_COUNT] = {
-    "Sine Wave",
-    "Grayscale",
-    "Fire",
-    "Electric",
-    "Ocean",
-    "Inferno"
-};
+const char* PALETTE_NAMES[PALETTE_COUNT] = {"Sine Wave", "Grayscale", "Fire",
+                                            "Electric",  "Ocean",     "Inferno"};
 
 static int current_palette = 0;
 
@@ -43,20 +38,36 @@ void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, ui
             r2 = g2 = b2 = fmod(fi + 1.0, 256.0);
             break;
         case 2: /* fire */
-            r1 = fmin(255.0, fi * 1.0); g1 = fmin(255.0, fi * 2.0); b1 = fmin(255.0, fi * 4.0);
-            r2 = fmin(255.0, (fi+1.0) * 1.0); g2 = fmin(255.0, (fi+1.0) * 2.0); b2 = fmin(255.0, (fi+1.0) * 4.0);
+            r1 = fmin(255.0, fi * 1.0);
+            g1 = fmin(255.0, fi * 2.0);
+            b1 = fmin(255.0, fi * 4.0);
+            r2 = fmin(255.0, (fi + 1.0) * 1.0);
+            g2 = fmin(255.0, (fi + 1.0) * 2.0);
+            b2 = fmin(255.0, (fi + 1.0) * 4.0);
             break;
         case 3: /* electric */
-            r1 = fmin(255.0, fi * 8.0); g1 = fmin(255.0, fi * 4.0); b1 = fmin(255.0, fi * 1.0);
-            r2 = fmin(255.0, (fi+1.0) * 8.0); g2 = fmin(255.0, (fi+1.0) * 4.0); b2 = fmin(255.0, (fi+1.0) * 1.0);
+            r1 = fmin(255.0, fi * 8.0);
+            g1 = fmin(255.0, fi * 4.0);
+            b1 = fmin(255.0, fi * 1.0);
+            r2 = fmin(255.0, (fi + 1.0) * 8.0);
+            g2 = fmin(255.0, (fi + 1.0) * 4.0);
+            b2 = fmin(255.0, (fi + 1.0) * 1.0);
             break;
         case 4: /* ocean */
-            r1 = fmin(255.0, fi * 5.0); g1 = fmin(255.0, fi * 2.0); b1 = fmin(255.0, fi * 0.5);
-            r2 = fmin(255.0, (fi+1.0) * 5.0); g2 = fmin(255.0, (fi+1.0) * 2.0); b2 = fmin(255.0, (fi+1.0) * 0.5);
+            r1 = fmin(255.0, fi * 5.0);
+            g1 = fmin(255.0, fi * 2.0);
+            b1 = fmin(255.0, fi * 0.5);
+            r2 = fmin(255.0, (fi + 1.0) * 5.0);
+            g2 = fmin(255.0, (fi + 1.0) * 2.0);
+            b2 = fmin(255.0, (fi + 1.0) * 0.5);
             break;
         case 5: /* inferno */
-            r1 = fmin(255.0, fi * 0.5); g1 = fmin(255.0, fi * 2.0); b1 = fmin(255.0, fi * 8.0);
-            r2 = fmin(255.0, (fi+1.0) * 0.5); g2 = fmin(255.0, (fi+1.0) * 2.0); b2 = fmin(255.0, (fi+1.0) * 8.0);
+            r1 = fmin(255.0, fi * 0.5);
+            g1 = fmin(255.0, fi * 2.0);
+            b1 = fmin(255.0, fi * 8.0);
+            r2 = fmin(255.0, (fi + 1.0) * 0.5);
+            g2 = fmin(255.0, (fi + 1.0) * 2.0);
+            b2 = fmin(255.0, (fi + 1.0) * 8.0);
             break;
         default:
             r1 = g1 = b1 = r2 = g2 = b2 = 0;
