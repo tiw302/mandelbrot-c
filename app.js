@@ -40,7 +40,7 @@ let _currentState = {
     julia_re: 0.0, julia_im: 0.0
 };
 
-window.updateDebugInfo = function(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision) {
+window.updateDebugInfo = function (gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision) {
     let engine = julia_mode ? "julia" : "mandelbrot";
     if (gpu_mode) engine += high_precision ? " (gpu 64-bit)" : " (gpu 32-bit)";
     else engine += " (cpu)";
@@ -121,7 +121,7 @@ function loadFromURL() {
             Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
         }
     }
-    
+
     // no longer need to delay enabling updates since we update only on demand
 }
 
@@ -137,7 +137,7 @@ function copyLink() {
     });
 }
 
-window.updateZoomBox = function(is_zooming, x, y, w, h) {
+window.updateZoomBox = function (is_zooming, x, y, w, h) {
     if (is_zooming) {
         zoomBox.style.display = 'block';
         zoomBox.style.left = x + 'px';
@@ -149,29 +149,36 @@ window.updateZoomBox = function(is_zooming, x, y, w, h) {
     }
 };
 
-window.downloadScreenshotData = function(ptr, w, h, heap) {
+window.downloadScreenshotData = function (ptr, w, h, heap) {
     if (!ptr || w <= 0 || h <= 0) return;
-    
+
     const wasmHeap = heap || Module.HEAPU8;
     if (!wasmHeap) {
         console.error("WASM Memory is not available.");
         return;
     }
-    
+
     // copy pixels from wasm heap
     const data = new Uint8ClampedArray(wasmHeap.buffer, ptr, w * h * 4);
     const pixels = new Uint8ClampedArray(data);
     const imgData = new ImageData(pixels, w, h);
-    
+
     // generate png via temp canvas
     const tmpCanvas = document.createElement('canvas');
     tmpCanvas.width = w;
     tmpCanvas.height = h;
     const ctx2d = tmpCanvas.getContext('2d');
     ctx2d.putImageData(imgData, 0, 0);
-    
+
     const link = document.createElement('a');
-    link.download = `mandelbrot_${Date.now()}.png`;
+    const now = new Date();
+    const ts = now.getFullYear().toString() +
+        String(now.getMonth() + 1).padStart(2, '0') +
+        String(now.getDate()).padStart(2, '0') + '_' +
+        String(now.getHours()).padStart(2, '0') +
+        String(now.getMinutes()).padStart(2, '0') +
+        String(now.getSeconds()).padStart(2, '0');
+    link.download = `mandelbrot_${ts}.png`;
     link.href = tmpCanvas.toDataURL('image/png');
     link.click();
 };
@@ -193,7 +200,7 @@ function downloadScreenshot() {
 // emscripten config
 var Module = {
     preRun: [],
-    postRun: [function() {
+    postRun: [function () {
         loadFromURL();
         syncSize();
         window.addEventListener('resize', () => {
