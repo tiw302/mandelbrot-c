@@ -1,3 +1,5 @@
+'use strict';
+
 const loadingScreen = document.getElementById('loading-screen');
 const statusText = document.getElementById('status');
 const canvas = document.getElementById('canvas');
@@ -287,8 +289,8 @@ var Module = {
         }
     },
     totalDependencies: 0,
-    monitorRunDependencies: (left) => {
-        this.totalDependencies = Math.max(this.totalDependencies, left);
+    monitorRunDependencies: function(left) {
+        this.totalDependencies = Math.max(this.totalDependencies || 0, left);
         Module.setStatus(left ? `loading dependencies (${this.totalDependencies - left}/${this.totalDependencies})...` : '');
     }
 };
@@ -305,3 +307,4 @@ if (!gl) {
     statusText.textContent = "error: webgl 2.0 not supported.";
     statusText.style.color = "#ff5555";
 }
+tempCanvas.remove();
