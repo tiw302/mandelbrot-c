@@ -1,17 +1,23 @@
-#include "mandelbrot.h"
+#include "core_math.h"
 
 #include <immintrin.h>
 #include <math.h>
 #include <stdint.h>
 
 double mandelbrot_check(complex_t c, int max_iterations) {
+    /* early rejection for the main cardioid and period-2 bulb.
+     * points in these regions are guaranteed to be in the set (infinite iterations).
+     * skipping them saves massive amounts of cpu cycles in the dark center. */
     double cr_minus_025 = c.re - 0.25;
     double im_sq = c.im * c.im;
     double q = cr_minus_025 * cr_minus_025 + im_sq;
+    
+    // main cardioid check
     if (q * (q + cr_minus_025) <= 0.25 * im_sq) {
         return (double)max_iterations;
     }
 
+    // period-2 bulb check
     double cr_plus_1 = c.re + 1.0;
     if (cr_plus_1 * cr_plus_1 + im_sq <= 0.0625) {
         return (double)max_iterations;
@@ -21,11 +27,16 @@ double mandelbrot_check(complex_t c, int max_iterations) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
+    /* core iterative loop: z = z^2 + c
+     * using x^2 and y^2 saves one multiplication per iteration. */
     while (iterations < max_iterations) {
         double zre2 = z.re * z.re;
         double zim2 = z.im * z.im;
 
         if (zre2 + zim2 > escape_radius_sq) {
+            /* smooth (fractional) coloring formula:
+             * removes banding by interpolating the exact escape point
+             * continuously rather than in discrete integer steps. */
             return (double)iterations + 2.0 - log2(log(zre2 + zim2));
         }
 
@@ -38,6 +49,9 @@ double mandelbrot_check(complex_t c, int max_iterations) {
 }
 
 #ifdef __AVX2__
+/* avx2 vectorized path:
+ * processes 4 pixels simultaneously. employs a parallel bitmask
+ * to track which pixels have escaped, stopping only when all 4 are done. */
 void mandelbrot_check_avx2(const double* re, const double* im, int max_iterations,
                            double* results) {
     __m256d cre = _mm256_loadu_pd(re);
@@ -99,6 +113,8 @@ void mandelbrot_check_avx2(const double* re, const double* im, int max_iteration
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
+/* wasm simd128 vectorized path:
+ * processes 2 pixels simultaneously for high performance in modern browsers. */
 void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_iterations,
                                    double* results) {
     v128_t cre = wasm_v128_load(re);
@@ -156,5 +172,39 @@ void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_i
             results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
         }
     }
+}
+#endif
+
+#ifdef USE_SIMD_F128
+/* high-precision 128-bit path (double-double):
+ * utilizes simd intrinsics for single-pixel precision enhancement.
+ * used for deep zooming (beyond 10^14) where standard 64-bit float degrades. */
+double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
+    simd_f128 zre = simd_f128_from_double(0.0);
+    simd_f128 zim = simd_f128_from_double(0.0);
+    int iterations = 0;
+    const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
+    
+    simd_f128 two = simd_f128_from_double(2.0);
+
+    while (iterations < max_iterations) {
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
+        simd_f128 mag_sq_128 = simd_f128_add(zre2, zim2);
+        
+        double mag_hi, mag_lo;
+        simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
+        
+        if (mag_hi > escape_radius_sq) {
+            return (double)iterations + 2.0 - log2(log(mag_hi));
+        }
+        
+        simd_f128 zre_zim = simd_f128_mul(zre, zim);
+        zim = simd_f128_add(simd_f128_mul(two, zre_zim), cim);
+        zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
+        
+        iterations++;
+    }
+    return (double)max_iterations;
 }
 #endif
