@@ -4,19 +4,33 @@ project(MandelbrotC C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# Options to enable/disable engines
-option(BUILD_CPU "Build CPU-Engine (Desktop)" OFF)
-option(BUILD_GPU "Build GPU-Engine (Desktop)" OFF)
-option(BUILD_WEB "Build Web-Engine (WASM)" OFF)
+# --- build options ---
+option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
+option(BUILD_CPU_128 "Build CPU-Engine 128-bit (Desktop)" OFF)
+option(BUILD_GPU     "Build GPU-Engine (Desktop)"       OFF)
+option(BUILD_WEB     "Build Web-Engine (WASM)"          OFF)
 
-# Include paths
-# This should make headers like fontstash.h accessible from third_party/fons/
-include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons)
+# architecture tuning — set USE_NATIVE_ARCH=ON if your target machine
+# matches the build machine. falls back to avx2+fma when OFF. if the
+# target cpu lacks avx2, set ARCH_GENERIC=ON for a safe scalar build.
+option(USE_NATIVE_ARCH "Use -march=native for host-optimal codegen" OFF)
+option(ARCH_GENERIC    "Disable all SIMD for maximum portability"   OFF)
 
-# Common core math
+if(ARCH_GENERIC)
+    set(ARCH_FLAGS "")
+elseif(USE_NATIVE_ARCH)
+    set(ARCH_FLAGS -march=native)
+else()
+    set(ARCH_FLAGS -mavx2 -mfma)
+endif()
+
+# include paths
+include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128)
+
+# common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/color.c)
 
-# Helper for system libs
+# helper for system libs
 macro(find_system_libs target)
     if(UNIX AND NOT APPLE)
         target_link_libraries(${target} PRIVATE X11 Xi Xcursor GL dl pthread m)
@@ -29,25 +43,32 @@ endmacro()
 
 # --- 1. CPU Engine ---
 if(BUILD_CPU)
-    # Ensure web_main.c is NOT included here. Added desktop_cpu_main.c for CPU.
     add_executable(mandelbrot-cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_cpu_main.c)
     target_compile_definitions(mandelbrot-cpu PRIVATE SOKOL_GLCORE)
-    target_compile_options(mandelbrot-cpu PRIVATE -mavx2 -mfma -pthread)
+    target_compile_options(mandelbrot-cpu PRIVATE ${ARCH_FLAGS} -pthread)
     find_system_libs(mandelbrot-cpu)
     target_link_libraries(mandelbrot-cpu PRIVATE SDL2 SDL2_ttf m)
+endif()
+
+# --- 1.5. CPU Engine (128-bit) ---
+if(BUILD_CPU_128)
+    add_executable(mandelbrot-cpu-128 ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_cpu_main.c)
+    target_compile_definitions(mandelbrot-cpu-128 PRIVATE SOKOL_GLCORE USE_SIMD_F128)
+    target_compile_options(mandelbrot-cpu-128 PRIVATE ${ARCH_FLAGS} -pthread)
+    find_system_libs(mandelbrot-cpu-128)
+    target_link_libraries(mandelbrot-cpu-128 PRIVATE SDL2 SDL2_ttf m)
 endif()
 
 # --- 2. GPU Engine ---
 if(BUILD_GPU)
     add_executable(mandelbrot-gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_gpu_main.c)
     target_compile_definitions(mandelbrot-gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
-    target_compile_options(mandelbrot-gpu PRIVATE -mavx2 -mfma -pthread)
+    target_compile_options(mandelbrot-gpu PRIVATE ${ARCH_FLAGS} -pthread)
     find_system_libs(mandelbrot-gpu)
 endif()
 
 # --- 3. Web Engine ---
 if(BUILD_WEB)
-    # Ensure only web-specific sources are included here. Headers are handled by include_directories and #include directives.
     add_executable(mandelbrot-web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/app/web_main.c)
     target_compile_definitions(mandelbrot-web PRIVATE SOKOL_GLES3)
     target_compile_options(mandelbrot-web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
