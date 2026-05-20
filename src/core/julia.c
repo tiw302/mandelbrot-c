@@ -1,9 +1,13 @@
-#include "julia.h"
+#include "core_math.h"
 
+#include <immintrin.h>
 #include <math.h>
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
+/* wasm simd128 vectorized julia path:
+ * calculates julia set iterations for 2 pixels concurrently.
+ * the c parameter is constant across all pixels for julia sets. */
 void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, int max_iterations,
                               double* results) {
     v128_t cre = wasm_f64x2_splat(c.re);
@@ -52,6 +56,9 @@ void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, i
 }
 #endif
 
+/* scalar julia path:
+ * unlike mandelbrot, julia sets use the pixel coordinate as the initial z,
+ * and keep the complex parameter c completely constant for the whole fractal. */
 double julia_check(complex_t z, complex_t c, int max_iterations) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
@@ -74,6 +81,8 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
 }
 
 #ifdef __AVX2__
+/* avx2 vectorized julia path:
+ * processes 4 pixels simultaneously for maximum desktop cpu throughput. */
 void julia_check_avx2(const double* re, const double* im, complex_t c, int max_iterations,
                       double* results) {
     __m256d cre = _mm256_set1_pd(c.re);
@@ -119,5 +128,39 @@ void julia_check_avx2(const double* re, const double* im, complex_t c, int max_i
             results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
         }
     }
+}
+#endif
+
+#ifdef USE_SIMD_F128
+/* high-precision 128-bit julia path:
+ * prevents pixelation for extreme deep zooms in julia mode. */
+double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 cim, int max_iterations) {
+    int iterations = 0;
+    const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
+    
+    simd_f128 two = simd_f128_from_double(2.0);
+
+    while (iterations < max_iterations) {
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
+        
+        simd_f128 next_re = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
+        simd_f128 next_im = simd_f128_add(simd_f128_mul(two, simd_f128_mul(zre, zim)), cim);
+        
+        zre = next_re;
+        zim = next_im;
+        
+        simd_f128 mag_sq_128 = simd_f128_add(simd_f128_mul(zre, zre), simd_f128_mul(zim, zim));
+        double mag_hi, mag_lo;
+        simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
+        
+        if (mag_hi > escape_radius_sq) {
+            return (double)iterations + 2.0 - log2(log(mag_hi));
+        }
+        
+        iterations++;
+    }
+    
+    return (double)max_iterations;
 }
 #endif
