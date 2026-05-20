@@ -95,6 +95,39 @@ int get_actual_thread_count(void)  { return actual_thread_count; }
 
 /* row processing — called from worker threads (and directly on wasm) */
 static void process_rows(void) {
+#ifdef USE_SIMD_F128
+    simd_f128 re_min = simd_f128_from_double(pool.re_min);
+    simd_f128 im_min = simd_f128_from_double(pool.im_min);
+    simd_f128 re_factor = simd_f128_from_double((pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0);
+    simd_f128 im_factor = simd_f128_from_double((pool.window_height > 0) ? (pool.im_max - pool.im_min) / pool.window_height : 0.0);
+    
+    simd_f128 julia_cre = simd_f128_from_double(pool.julia_c.re);
+    simd_f128 julia_cim = simd_f128_from_double(pool.julia_c.im);
+
+    int y;
+    while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
+        if (pool.shutdown) break;
+        simd_f128 y_128 = simd_f128_from_double((double)y);
+        simd_f128 y_im = simd_f128_add(im_min, simd_f128_mul(y_128, im_factor));
+
+        for (int x = 0; x < pool.window_width; x++) {
+            simd_f128 x_128 = simd_f128_from_double((double)x);
+            simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
+
+            double iterations = (pool.mode == RENDER_JULIA)
+                ? julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations)
+                : mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
+
+            uint8_t r, g, b;
+            get_color(iterations, pool.max_iterations, &r, &g, &b);
+#if defined(__EMSCRIPTEN__)
+            pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] = (0xFF << 24) | (b << 16) | (g << 8) | r;
+#else
+            pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
+#endif
+        }
+    }
+#else
     double re_factor = (pool.window_width  > 0)
                      ? (pool.re_max - pool.re_min) / pool.window_width  : 0.0;
     double im_factor = (pool.window_height > 0)
@@ -102,6 +135,7 @@ static void process_rows(void) {
 
     int y;
     while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
+        if (pool.shutdown) break;
         int x = 0;
 
 #ifdef __AVX2__
@@ -181,6 +215,7 @@ static void process_rows(void) {
 #endif
         }
     }
+#endif
 }
 
 /* persistent worker thread — parks between frames, wakes on broadcast */
