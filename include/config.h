@@ -7,9 +7,9 @@
 #define DEFAULT_ITERATIONS 500
 #define MAX_ITERATIONS_LIMIT 10000
 
-#define ESCAPE_RADIUS 10
+#define ESCAPE_RADIUS 10.0
 
-#define DEFAULT_THREAD_COUNT 4
+#define DEFAULT_THREAD_COUNT 0   /* 0 = auto-detect from cpu cores */
 
 #define DEBUG_INFO 1
 #define FONT_SIZE 16
