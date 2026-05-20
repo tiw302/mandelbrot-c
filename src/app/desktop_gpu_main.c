@@ -46,20 +46,30 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
     if (message_or_null) printf("[sokol][%d] %s\n", log_level, message_or_null);
 }
 
+/* gpu shader uniform block.
+ * fields are ordered to match the glsl layout exactly — 
+ * changing the order here will silently break rendering. */
 typedef struct {
     float center_hi[2];
     float center_lo[2];
-    float julia_c[2];
+    float julia_c_hi[2];
+    float julia_c_lo[2];
     float zoom, iters, aspect;
     float is_julia, palette, high_precision;
 } params_t;
 
+/* saved mandelbrot view when entering julia mode.
+ * restored automatically when the user exits back to mandelbrot. */
 typedef struct {
     ViewState mandelbrot_view;
     int active;
 } JuliaSession;
 
+/* application-wide state.
+ * holds gpu pipelines, texture handle, view coordinates, input state,
+ * tour controllers, and the fontstash context for debug text overlay. */
 typedef struct {
+    /* sokol gfx objects */
     sg_pipeline pip_cpu, pip_gpu;
     sg_bindings bind;
     sg_pass_action pass_action;
@@ -69,18 +79,23 @@ typedef struct {
     uint32_t* pixels;
     int win_w, win_h;
 
+    /* navigation state */
     ViewState view;
     ViewState history[MAX_HISTORY_SIZE];
     int history_count;
 
+    /* mode controllers */
     TourState m_tour;
     JuliaTourState j_tour;
     int julia_mode, gpu_mode, high_precision_mode;
     complex_t julia_c;
     JuliaSession julia_session;
 
+    /* rendering parameters */
     int max_iterations, palette_idx;
     int needs_redraw;
+
+    /* mouse interaction */
     int is_panning, is_zooming;
     int last_mouse_x, last_mouse_y;
     int mouse_x, mouse_y;
@@ -89,6 +104,7 @@ typedef struct {
     } zoom_rect;
     uint32_t render_time_ms;
 
+    /* debug text overlay */
     sgl_pipeline pip_blend;
     FONScontext* fons;
     int font_id;
@@ -96,6 +112,7 @@ typedef struct {
 
 static GlobalCtx ctx;
 
+/* rebuild the cpu-rendered texture after a window resize */
 static void rebuild_texture(void) {
     if (ctx.img.id) sg_destroy_view(ctx.img_view);
     if (ctx.img.id) sg_destroy_image(ctx.img);
@@ -109,6 +126,7 @@ static void rebuild_texture(void) {
     ctx.bind.views[0] = ctx.img_view;
 }
 
+/* map mouse position to complex plane coordinates */
 static double mouse_re(void) {
     return ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom *
                                     ((double)ctx.win_w / ctx.win_h);
@@ -181,7 +199,8 @@ static void init(void) {
             .size = sizeof(params_t),
             .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
                               {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
                               {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
@@ -228,6 +247,7 @@ static void frame(void) {
         ctx.needs_redraw = 1;
     }
 
+    /* cpu fallback: render into pixel buffer and upload to gpu texture */
     if (!ctx.gpu_mode && ctx.needs_redraw) {
         double aspect = (double)ctx.win_w / ctx.win_h;
         double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2;
@@ -278,13 +298,18 @@ static void frame(void) {
     if (sg_query_pipeline_state(cur) == SG_RESOURCESTATE_VALID) {
         sg_apply_pipeline(cur);
         sg_apply_bindings(&ctx.bind);
+        /* gpu path: send uniforms and let the shader compute fractal per-pixel */
         if (ctx.gpu_mode) {
             float chi_re = (float)ctx.view.center_re;
             float chi_im = (float)ctx.view.center_im;
+            float jc_re = (float)ctx.julia_c.re;
+            float jc_im = (float)ctx.julia_c.im;
             params_t p = {.center_hi = {chi_re, chi_im},
                           .center_lo = {(float)(ctx.view.center_re - chi_re),
                                         (float)(ctx.view.center_im - chi_im)},
-                          .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
+                          .julia_c_hi = {jc_re, jc_im},
+                          .julia_c_lo = {(float)(ctx.julia_c.re - jc_re),
+                                         (float)(ctx.julia_c.im - jc_im)},
                           .zoom = (float)ctx.view.zoom,
                           .iters = (float)ctx.max_iterations,
                           .aspect = (float)ctx.win_w / ctx.win_h,
@@ -370,6 +395,7 @@ static void event(const sapp_event* ev) {
         rebuild_texture();
         ctx.needs_redraw = 1;
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
+        /* stop any active tour on user interaction */
         if (ctx.m_tour.phase != TOUR_IDLE) {
             stop_tour(&ctx.m_tour);
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
@@ -382,10 +408,12 @@ static void event(const sapp_event* ev) {
             sapp_set_window_title("Julia Explorer");
             ctx.needs_redraw = 1;
         }
+        /* right-click: pan mode */
         if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
             ctx.is_panning = 1;
             ctx.last_mouse_x = (int)ev->mouse_x;
             ctx.last_mouse_y = (int)ev->mouse_y;
+        /* left-click: zoom selection rectangle */
         } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
             ctx.is_zooming = 1;
             ctx.zoom_rect.x = (int)ev->mouse_x;
@@ -428,6 +456,7 @@ static void event(const sapp_event* ev) {
         } else if (ctx.is_zooming) {
             ctx.zoom_rect.w = (int)ev->mouse_x - ctx.zoom_rect.x;
             ctx.zoom_rect.h = (int)ev->mouse_y - ctx.zoom_rect.y;
+        /* interactive julia: move mouse to change c parameter in real-time */
         } else if (ctx.julia_mode && ctx.j_tour.phase == JULIA_TOUR_IDLE) {
             ctx.julia_c.re = ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) *
                                                       ctx.view.zoom *
@@ -436,6 +465,7 @@ static void event(const sapp_event* ev) {
                 ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
+    /* scroll wheel: zoom at cursor position */
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
         if (ev->scroll_y != 0.0f) {
             if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
@@ -448,6 +478,7 @@ static void event(const sapp_event* ev) {
             ctx.view.center_im = mim - (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
+    /* keyboard shortcuts */
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         int mod_ctrl = ev->modifiers & SAPP_MODIFIER_CTRL;
         int mod_shift = ev->modifiers & SAPP_MODIFIER_SHIFT;
