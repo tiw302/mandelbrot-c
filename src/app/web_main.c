@@ -173,7 +173,8 @@ static void init(void) {
             .size = sizeof(params_t),
             .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
                               {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
                               {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
@@ -205,7 +206,7 @@ static void init(void) {
 #if defined(FORCE_GPU_MODE)
     ctx.gpu_mode = 1;
 #else
-    ctx.gpu_mode = 1;
+    ctx.gpu_mode = 0;
 #endif
 
     init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
