@@ -38,7 +38,7 @@ static const char* dg_fs_cpu =
  *
  * uniforms:
  *   u_center_hi / u_center_lo  — hi-lo split of the double-precision view center
- *   u_julia_c                  — julia set c parameter (used when u_is_julia > 0.5)
+ *   u_julia_c_hi/u_julia_c_lo  — hi-lo split of the julia set c parameter (used when u_is_julia > 0.5)
  *   u_zoom                     — zoom level (complex plane units per screen height)
  *   u_iters                    — maximum iteration count
  *   u_aspect                   — window aspect ratio (width / height)
@@ -49,7 +49,7 @@ static const char* dg_fs_cpu =
 static const char* dg_fs_gpu =
     "#version 400\n"
     "uniform vec2 u_center_hi; uniform vec2 u_center_lo;"
-    "uniform vec2 u_julia_c; uniform float u_zoom; uniform float u_iters; uniform float u_aspect;"
+    "uniform vec2 u_julia_c_hi; uniform vec2 u_julia_c_lo; uniform float u_zoom; uniform float u_iters; uniform float u_aspect;"
     "uniform float u_is_julia; uniform float u_palette; uniform float u_high_precision;"
     "in vec2 uv; out vec4 color;\n"
 
@@ -131,8 +131,8 @@ static const char* dg_fs_gpu =
     "    vec2 cy = vec2(u_center_hi.y, u_center_lo.y);\n"
     "    vec2 px = ds_add(ds_mul(ds_mul(uv_dx, zoom_a), aspect_a), cx);\n"
     "    vec2 py = ds_add(ds_mul(uv_dy, zoom_a), cy);\n"
-    "    vec2 c_val_x = (u_is_julia > 0.5) ? vec2(u_julia_c.x, 0.0) : px;\n"
-    "    vec2 c_val_y = (u_is_julia > 0.5) ? vec2(u_julia_c.y, 0.0) : py;\n"
+    "    vec2 c_val_x = (u_is_julia > 0.5) ? vec2(u_julia_c_hi.x, u_julia_c_lo.x) : px;\n"
+    "    vec2 c_val_y = (u_is_julia > 0.5) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
     "    vec2 zx = (u_is_julia > 0.5) ? px : vec2(0.0);\n"
     "    vec2 zy = (u_is_julia > 0.5) ? py : vec2(0.0);\n"
     "    for (i=0; i<2000; i++) {\n"
@@ -150,7 +150,7 @@ static const char* dg_fs_gpu =
     "  } else {\n"
     "    vec2 center = u_center_hi + u_center_lo;\n"
     "    vec2 p = vec2((uv.x-0.5)*u_zoom*u_aspect+center.x, (0.5-uv.y)*u_zoom+center.y);\n"
-    "    vec2 c_val = (u_is_julia>0.5) ? u_julia_c : p;\n"
+    "    vec2 c_val = (u_is_julia>0.5) ? (u_julia_c_hi + u_julia_c_lo) : p;\n"
     "    vec2 z = (u_is_julia>0.5) ? p : vec2(0.0);\n"
     /* cardioid and period-2 bulb rejection (mandelbrot only).
      * matches the checks in mandelbrot.c — points confirmed inside the main
