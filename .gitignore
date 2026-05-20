@@ -1,22 +1,24 @@
-# Build artifacts & Cache
-build/
-build-cpu/
-build-gpu/
-build-web/
+# build artifacts & cache
+build*/
 deploy/
 bin/
 obj/
 *.o
 *.obj
+CMakeCache.txt
+CMakeFiles/
+Makefile
+cmake_install.cmake
+compile_commands.json
 
-# Libraries
+# libraries
 *.a
 *.lib
 *.so
 *.dll
 *.dylib
 
-# Executables
+# executables
 mandelbrot
 mandelbrot.exe
 mandelbrot-desktop
@@ -27,19 +29,30 @@ web/index.js
 !web/app.js
 !web/coi-serviceworker.js
 
-# Debugging
+# debugging
 *.dSYM/
 *.suo
 *.pdb
 *.idb
-.vscode/
+
+# IDEs
 .idea/
 
-# OS specific
+# editor-specific files (vscode)
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+.cache/
+.clangd/
+
+# os specific
 .DS_Store
 Thumbs.db
 
-# Editor-specific files (Vim/Neovim)
+# editor-specific files (neovim)
 [._]*.s[a-v][a-z]
 [._]*.sw[a-p]
 [._]s[a-rt-v][a-z]
@@ -51,12 +64,11 @@ undo/
 .netrwhist
 *~
 
-# Screenshots & Assets
+# screenshots & assets
 *.png
 !assets/**/*.png
 screenshot_*.tga
 *.tga
 
-# Temporary Scripts
-fix_*.py
+# temporary scripts
 tests/test_math
