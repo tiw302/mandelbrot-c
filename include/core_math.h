@@ -1,3 +1,9 @@
+/* core_math.h — umbrella header for all fractal math kernels.
+ *
+ * provides the shared complex_t type, then pulls in mandelbrot and julia
+ * headers so callers only need a single #include. the 128-bit simd_f128
+ * type is conditionally included when building the high-precision engine. */
+
 #ifndef CORE_MATH_H
 #define CORE_MATH_H
 
@@ -11,32 +17,21 @@
 #include <immintrin.h>
 #endif
 
+/* shared complex number type used by all math kernels */
 typedef struct {
     double re;
     double im;
 } complex_t;
 
-double mandelbrot_check(complex_t c, int max_iterations);
-
-#ifdef __AVX2__
-void mandelbrot_check_avx2(const double* re, const double* im, int max_iterations, double* results);
+/* 128-bit double-double type for extreme zoom precision.
+ * only available when building with -DUSE_SIMD_F128. */
+#ifdef USE_SIMD_F128
+#define SIMD_F128_IMPLEMENTATION
+#include "simd_f128.h"
 #endif
 
-#ifdef __wasm_simd128__
-void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_iterations,
-                                   double* results);
-#endif
-
-double julia_check(complex_t z, complex_t c, int max_iterations);
-
-#ifdef __AVX2__
-void julia_check_avx2(const double* re, const double* im, complex_t c, int max_iterations,
-                      double* results);
-#endif
-
-#ifdef __wasm_simd128__
-void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, int max_iterations,
-                              double* results);
-#endif
+/* pull in individual kernel headers — they depend on complex_t above */
+#include "mandelbrot.h"
+#include "julia.h"
 
 #endif
