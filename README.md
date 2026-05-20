@@ -123,7 +123,7 @@ The codebase strictly adheres to a modular architecture to ensure Separation of 
 
 ### WebAssembly Subsystem
 
-The WASM implementation utilizes `SharedArrayBuffer` to enable real multi-threading in the browser. The built-in `server.py` is configured to handle the required COOP/COEP security headers for local development.
+The WASM implementation utilizes `SharedArrayBuffer` to enable real multi-threading in the browser. The built-in `scripts/server.py` is configured to handle the required COOP/COEP security headers for local development.
 
 ---
 
@@ -268,7 +268,7 @@ cmake --build build-web
 
 The web build requires specific HTTP security headers (`COOP`/`COEP`) to enable `SharedArrayBuffer`. Use the included server script:
 ```bash
-python3 server.py
+python3 scripts/server.py
 ```
 Then open `http://localhost:8081` in your browser.
 
@@ -281,7 +281,7 @@ Optional arguments:
 
 ```bash
 # Example: serve the deploy/ folder on port 9000
-python3 server.py --dir deploy --port 9000
+python3 scripts/server.py --dir deploy --port 9000
 ```
 
 ---
