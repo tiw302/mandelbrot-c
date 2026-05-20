@@ -13,7 +13,7 @@ void save_screenshot(uint32_t* pixels, int width, int height) {
     strftime(filename, sizeof(filename), "mandelbrot_%Y%m%d_%H%M%S.png", t);
 
     /* allocate temp buffer for rgba conversion */
-    uint32_t* rgba_pixels = (uint32_t*)malloc(width * height * 4);
+    uint32_t* rgba_pixels = (uint32_t*)malloc((size_t)width * height * 4);
     if (!rgba_pixels) return;
 
     for (int i = 0; i < width * height; i++) {
