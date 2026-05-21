@@ -2,7 +2,7 @@ CC = gcc
 CFLAGS = -O3 -Wall -Wextra -I../src/core -I../include -I../third_party/simd-f128
 LDFLAGS = -lm
 
-SRC = test_math.c ../src/core/mandelbrot.c ../src/core/julia.c
+SRC = test_math.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c
 OBJ = $(SRC:.c=.o)
 TARGET = test_math
 
@@ -19,7 +19,7 @@ $(TARGET): $(SRC)
 	$(CC) $(CFLAGS) $(SRC) -o $(TARGET) $(LDFLAGS)
 
 # build with 128-bit support for testing high-precision kernels
-test_f128: test_math.c ../src/core/mandelbrot.c ../src/core/julia.c
+test_f128: test_math.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c
 	$(CC) $(CFLAGS) -DUSE_SIMD_F128 -mavx2 -mfma $^ -o test_math_f128 $(LDFLAGS)
 	./test_math_f128
 
