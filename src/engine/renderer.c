@@ -9,8 +9,7 @@
 #include <string.h>
 
 #include "config.h"
-#include "julia.h"
-#include "mandelbrot.h"
+#include "core_math.h"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -114,9 +113,11 @@ static void process_rows(void) {
             simd_f128 x_128 = simd_f128_from_double((double)x);
             simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
 
-            double iterations = (pool.mode == RENDER_JULIA)
-                ? julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations)
-                : mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
+            double iterations;
+            if (pool.mode == RENDER_JULIA)
+                iterations = julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
+            else
+                iterations = mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
 
             uint8_t r, g, b;
             get_color(iterations, pool.max_iterations, &r, &g, &b);
@@ -154,6 +155,8 @@ static void process_rows(void) {
 
                 if (pool.mode == RENDER_JULIA)
                     julia_check_avx2(res_re, res_im, pool.julia_c, pool.max_iterations, iterations);
+                else if (pool.mode == RENDER_BURNING_SHIP)
+                    burning_ship_check_avx2(res_re, res_im, pool.max_iterations, iterations);
                 else
                     mandelbrot_check_avx2(res_re, res_im, pool.max_iterations, iterations);
 
@@ -182,6 +185,9 @@ static void process_rows(void) {
             if (pool.mode == RENDER_JULIA)
                 julia_check_wasm_simd128(res_re, res_im, pool.julia_c,
                                          pool.max_iterations, iterations);
+            else if (pool.mode == RENDER_BURNING_SHIP)
+                burning_ship_check_wasm_simd128(res_re, res_im,
+                                                pool.max_iterations, iterations);
             else
                 mandelbrot_check_wasm_simd128(res_re, res_im,
                                               pool.max_iterations, iterations);
@@ -200,9 +206,13 @@ static void process_rows(void) {
         for (; x < pool.window_width; x++) {
             complex_t point = { pool.re_min + (double)x * re_factor,
                                 pool.im_min + (double)y * im_factor };
-            double iterations = (pool.mode == RENDER_JULIA)
-                ? julia_check(point, pool.julia_c, pool.max_iterations)
-                : mandelbrot_check(point, pool.max_iterations);
+            double iterations;
+            if (pool.mode == RENDER_JULIA)
+                iterations = julia_check(point, pool.julia_c, pool.max_iterations);
+            else if (pool.mode == RENDER_BURNING_SHIP)
+                iterations = burning_ship_check(point, pool.max_iterations);
+            else
+                iterations = mandelbrot_check(point, pool.max_iterations);
 
             uint8_t r, g, b;
             get_color(iterations, pool.max_iterations, &r, &g, &b);
@@ -340,6 +350,14 @@ void render_julia_threaded(uint32_t* pixels, int pitch, int window_width, int wi
                            complex_t julia_c, int max_iterations) {
     dispatch(pixels, pitch, window_width, window_height,
              re_min, re_max, im_min, im_max, RENDER_JULIA, julia_c, max_iterations);
+}
+
+void render_burning_ship_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
+                                   double re_min, double re_max, double im_min, double im_max,
+                                   int max_iterations) {
+    complex_t dummy = {0};
+    dispatch(pixels, pitch, window_width, window_height,
+             re_min, re_max, im_min, im_max, RENDER_BURNING_SHIP, dummy, max_iterations);
 }
 
 /* legacy symbol — kept so existing call sites in main files compile unchanged */
