@@ -27,11 +27,12 @@ typedef struct {
  * only available when building with -DUSE_SIMD_F128. */
 #ifdef USE_SIMD_F128
 #define SIMD_F128_IMPLEMENTATION
-#include "simd_f128.h"
+#include "../third_party/simd_f128/simd_f128.h"
 #endif
 
 /* pull in individual kernel headers — they depend on complex_t above */
 #include "mandelbrot.h"
 #include "julia.h"
+#include "burning_ship.h"
 
 #endif
