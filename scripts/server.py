@@ -32,7 +32,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             
         if DIRECTORY == "web" or DIRECTORY == ".":
             if clean_path.startswith("/index.js") or clean_path.startswith("/index.wasm"):
-                return os.path.abspath(os.path.join("build-web", clean_path.lstrip("/")))
+                return os.path.abspath(os.path.join("build_web", clean_path.lstrip("/")))
             elif clean_path.startswith("/assets/"):
                 return os.path.abspath(os.path.join(".", clean_path.lstrip("/")))
             elif clean_path == "/index.html" or clean_path == "/coi-serviceworker.js" or clean_path == "/style.css" or clean_path == "/app.js":
