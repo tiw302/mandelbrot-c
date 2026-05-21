@@ -29,6 +29,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #include "desktop_gpu_shaders.h"
 #include "tour.h"
@@ -228,6 +229,9 @@ static void init(void) {
     ctx.j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0, 0, 0, 0, 0, -1};
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
+
+    /* seed rng for random tour target selection */
+    srand((unsigned)time(NULL));
 
     puts("mandelbrot explorer");
     puts("  left drag   : zoom selection  right drag : pan");
@@ -556,6 +560,8 @@ static void event(const sapp_event* ev) {
                 else
                     render_mandelbrot_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                                im_top, im_bot, ctx.max_iterations);
+                /* note: cpu renderer writes pixels in platform-native argb8888 order.
+                 * save_screenshot() expects this format and swaps r↔b for png output. */
                 save_screenshot(buf, ctx.win_w, ctx.win_h);
                 free(buf);
             }
