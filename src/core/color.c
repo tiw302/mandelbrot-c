@@ -9,7 +9,11 @@ const char* PALETTE_NAMES[PALETTE_COUNT] = {"Sine Wave", "Grayscale", "Fire",
 
 static int current_palette = 0;
 
+/* init_color_palette — set the active palette.
+ * max_iterations is accepted for forward compatibility (e.g. precomputed
+ * lookup tables) but currently unused. */
 void init_color_palette(int max_iterations, int palette_idx) {
+    (void)max_iterations;
     current_palette = palette_idx;
 }
 
@@ -108,7 +112,10 @@ void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, ui
             break;
     }
 
-    *r = (uint8_t)(r1 + frac * (r2 - r1));
-    *g = (uint8_t)(g1 + frac * (g2 - g1));
-    *b = (uint8_t)(b1 + frac * (b2 - b1));
+    /* clamp to [0, 255] before casting — polynomial palettes (viridis, plasma)
+     * can produce slightly out-of-range values at boundary t values,
+     * and casting a negative or >255 double to uint8_t is undefined behavior. */
+    *r = (uint8_t)fmin(255.0, fmax(0.0, r1 + frac * (r2 - r1)));
+    *g = (uint8_t)fmin(255.0, fmax(0.0, g1 + frac * (g2 - g1)));
+    *b = (uint8_t)fmin(255.0, fmax(0.0, b1 + frac * (b2 - b1)));
 }
