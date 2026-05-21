@@ -34,33 +34,55 @@ static const char* fs_gpu_src =
     "uniform float u_zoom;\n"
     "uniform float u_iters;\n"
     "uniform float u_aspect;\n"
-    "uniform float u_is_julia;\n"
+    "uniform float u_fractal_type;\n"
     "uniform float u_palette;\n"
     "uniform float u_high_precision;\n"
+    "uniform float u_zero;\n"
     "in vec2 uv;\n"
     "out vec4 frag_color;\n"
 
-    /* ds_add: Knuth TwoSum — only +/- so no FMA risk */
+    /* ---------------------------------------------------------------
+     * Optimization barrier for GLSL ES 3.0 (WebGL2).
+     *
+     * GLSL ES 3.0 has no 'precise' qualifier. The compiler is free to
+     * algebraically simplify (a+b)-a → b, destroying the rounding-
+     * error that TwoSum/Dekker arithmetic relies on.
+     *
+     * u_zero is a uniform always set to 0.0 from the CPU side.
+     * x + u_zero == x exactly (IEEE 754), but the compiler CANNOT
+     * know u_zero's value at compile time, so it MUST emit an actual
+     * ADD instruction — preventing algebraic folding.
+     * --------------------------------------------------------------- */
+    "float B(float x) { return x + u_zero; }\n"
+    "\n"
+    /* ds_add: Knuth TwoSum algorithm (DSFUN90).
+     * B() barriers prevent the compiler from folding (a+b)-a → b. */
     "vec2 ds_add(vec2 dsa, vec2 dsb) {\n"
     "    float t1 = dsa.x + dsb.x;\n"
-    "    float e  = t1 - dsa.x;\n"
-    "    float t2 = ((dsb.x - e) + (dsa.x - (t1 - e))) + dsa.y + dsb.y;\n"
-    "    float t3 = t1 + t2;\n"
-    "    return vec2(t3, t2 - (t3 - t1));\n"
+    "    float e  = B(t1) - dsa.x;\n"
+    "    float t2 = ((dsb.x - e) + (dsa.x - (B(t1) - e))) + dsa.y + dsb.y;\n"
+    "    float hi = t1 + t2;\n"
+    "    return vec2(hi, t2 - (B(hi) - t1));\n"
     "}\n"
-
-    /* ds_mul: bit-manipulation Veltkamp split — immune to FMA fusion */
-    /* floatBitsToInt/intBitsToFloat require highp int (declared above)  */
+    "\n"
+    /* ds_mul: Dekker multiplication (DSFUN90 / Veltkamp split).
+     * Split constant = 4097 = 2^12+1, correct for 24-bit float mantissa.
+     * B() on c11/t1/hi prevents compiler from expanding a*b symbolically. */
     "vec2 ds_mul(vec2 dsa, vec2 dsb) {\n"
-    "    float p   = dsa.x * dsb.x;\n"
-    "    float ahi = intBitsToFloat(floatBitsToInt(dsa.x) & 0xFFFFF000);\n"
-    "    float alo = dsa.x - ahi;\n"
-    "    float bhi = intBitsToFloat(floatBitsToInt(dsb.x) & 0xFFFFF000);\n"
-    "    float blo = dsb.x - bhi;\n"
-    "    float err = ((ahi*bhi - p) + ahi*blo + alo*bhi) + alo*blo;\n"
-    "    err += dsa.x * dsb.y + dsa.y * dsb.x;\n"
-    "    float t = p + err;\n"
-    "    return vec2(t, err - (t - p));\n"
+    "    float cona = dsa.x * 4097.0;\n"
+    "    float conb = dsb.x * 4097.0;\n"
+    "    float a1 = cona - (B(cona) - dsa.x);\n"
+    "    float b1 = conb - (B(conb) - dsb.x);\n"
+    "    float a2 = dsa.x - a1;\n"
+    "    float b2 = dsb.x - b1;\n"
+    "    float c11 = dsa.x * dsb.x;\n"
+    "    float c21 = a2*b2 + (a2*b1 + (a1*b2 + (a1*b1 - B(c11))));\n"
+    "    float c2  = dsa.x * dsb.y + dsa.y * dsb.x;\n"
+    "    float t1  = c11 + c2;\n"
+    "    float e   = B(t1) - c11;\n"
+    "    float t2  = dsa.y * dsb.y + ((c2 - e) + (c11 - (B(t1) - e))) + c21;\n"
+    "    float hi  = t1 + t2;\n"
+    "    return vec2(hi, t2 - (B(hi) - t1));\n"
     "}\n"
 
     "vec3 lut_color(float fi, int pal) {\n"
@@ -87,10 +109,21 @@ static const char* fs_gpu_src =
     "        a = vec3(min(255.0,i*5.0), min(255.0,i*2.0), min(255.0,i*0.5)) / 255.0;\n"
     "        b = vec3(min(255.0,(i+1.0)*5.0), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*0.5)) / "
     "255.0;\n"
-    "    } else {\n" /* inferno (swapped to match cpu) */
+    "    } else if (pal == 5) {\n" /* inferno */
     "        a = vec3(min(255.0,i*0.5), min(255.0,i*2.0), min(255.0,i*8.0)) / 255.0;\n"
-    "        b = vec3(min(255.0,(i+1.0)*0.5), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*8.0)) / "
-    "255.0;\n"
+    "        b = vec3(min(255.0,(i+1.0)*0.5), min(255.0,(i+1.0)*2.0), min(255.0,(i+1.0)*8.0)) / 255.0;\n"
+    "    } else if (pal == 6) {\n" /* viridis */
+    "        float t1 = fract(i/256.0); float t2 = fract((i+1.0)/256.0);\n"
+    "        a = vec3(0.267+t1*(0.993*t1-0.260), 0.004+t1*(1.490-t1*0.494), 0.329+t1*(1.268*t1*t1-0.680*t1-0.259));\n"
+    "        b = vec3(0.267+t2*(0.993*t2-0.260), 0.004+t2*(1.490-t2*0.494), 0.329+t2*(1.268*t2*t2-0.680*t2-0.259));\n"
+    "    } else if (pal == 7) {\n" /* plasma */
+    "        float t1 = fract(i/256.0); float t2 = fract((i+1.0)/256.0);\n"
+    "        a = vec3(0.050+t1*(2.735-t1*1.785), max(0.0,t1*(1.580*t1-0.580)), max(0.0,0.530+t1*(0.750-t1*1.280)));\n"
+    "        b = vec3(0.050+t2*(2.735-t2*1.785), max(0.0,t2*(1.580*t2-0.580)), max(0.0,0.530+t2*(0.750-t2*1.280)));\n"
+    "    } else {\n" /* twilight */
+    "        float t1 = fract(i/128.0); float t2 = fract((i+1.0)/128.0);\n"
+    "        a = vec3(0.5+0.5*sin(6.283*t1), 0.3+0.2*sin(6.283*t1+2.094), 0.5+0.5*sin(6.283*t1+4.189));\n"
+    "        b = vec3(0.5+0.5*sin(6.283*t2), 0.3+0.2*sin(6.283*t2+2.094), 0.5+0.5*sin(6.283*t2+4.189));\n"
     "    }\n"
     "    return mix(a, b, fract(fi));\n"
     "}\n"
@@ -107,11 +140,11 @@ static const char* fs_gpu_src =
     "        vec2 cy = vec2(u_center_hi.y, u_center_lo.y);\n"
     "        vec2 px = ds_add(ds_mul(ds_mul(uv_dx, zoom_a), aspect_a), cx);\n"
     "        vec2 py = ds_add(ds_mul(uv_dy, zoom_a), cy);\n"
-    "        vec2 c_val_x = (u_is_julia > 0.5) ? vec2(u_julia_c_hi.x, u_julia_c_lo.x) : px;\n"
-    "        vec2 c_val_y = (u_is_julia > 0.5) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
-    "        vec2 zx = (u_is_julia > 0.5) ? px : vec2(0.0);\n"
-    "        vec2 zy = (u_is_julia > 0.5) ? py : vec2(0.0);\n"
-    "        if (u_is_julia < 0.5) {\n"
+    "        vec2 c_val_x = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.x, u_julia_c_lo.x) : px;\n"
+    "        vec2 c_val_y = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
+    "        vec2 zx = (u_fractal_type == 1.0) ? px : vec2(0.0);\n"
+    "        vec2 zy = (u_fractal_type == 1.0) ? py : vec2(0.0);\n"
+    "        if (u_fractal_type < 0.5) {\n"
     "            float cr = px.x - 0.25, ci2 = py.x * py.x, q = cr*cr + ci2;\n"
     "            if (q * (q + cr) <= 0.25 * ci2) { i = m; }\n"
     "            else { float cr1 = px.x + 1.0; if (cr1*cr1 + ci2 <= 0.0625) i = m; }\n"
@@ -122,18 +155,26 @@ static const char* fs_gpu_src =
     "            vec2 y2 = ds_mul(zy, zy);\n"
     "            mag_sq = x2.x + y2.x;\n"
     "            if (mag_sq > 100.0) break;\n"
-    "            vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
-    "            vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
-    "            zx = zx_new; zy = zy_new;\n"
+    "            if (u_fractal_type > 1.5) {\n"
+    "                vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;\n"
+    "                vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;\n"
+    "                vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), c_val_y);\n"
+    "                vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
+    "                zx = zx_new; zy = zy_new;\n"
+    "            } else {\n"
+    "                vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
+    "                vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
+    "                zx = zx_new; zy = zy_new;\n"
+    "            }\n"
     "        }\n"
     "    } else {\n"
     "        vec2 center = u_center_hi + u_center_lo;\n"
     "        vec2 p = vec2((uv.x - 0.5) * u_zoom * u_aspect + center.x,\n"
     "                      (0.5 - uv.y) * u_zoom + center.y);\n"
-    "        vec2 c_val = (u_is_julia > 0.5) ? (u_julia_c_hi + u_julia_c_lo) : p;\n"
-    "        vec2 z = (u_is_julia > 0.5) ? p : vec2(0.0);\n"
+    "        vec2 c_val = (u_fractal_type == 1.0) ? (u_julia_c_hi + u_julia_c_lo) : p;\n"
+    "        vec2 z = (u_fractal_type == 1.0) ? p : vec2(0.0);\n"
     "        float escape_sq = 100.0;\n"
-    "        if (u_is_julia < 0.5) {\n"
+    "        if (u_fractal_type < 0.5) {\n"
     "            float cr = p.x - 0.25, ci2 = p.y * p.y, q = cr*cr + ci2;\n"
     "            if (q * (q + cr) <= 0.25 * ci2) { i = m; }\n"
     "            else { float cr1 = p.x + 1.0; if (cr1*cr1 + ci2 <= 0.0625) i = m; }\n"
@@ -143,7 +184,11 @@ static const char* fs_gpu_src =
     "            float x2 = z.x * z.x, y2 = z.y * z.y;\n"
     "            mag_sq = x2 + y2;\n"
     "            if (mag_sq > escape_sq) break;\n"
-    "            z = vec2(x2 - y2 + c_val.x, 2.0 * z.x * z.y + c_val.y);\n"
+    "            if (u_fractal_type > 1.5) {\n"
+    "                z = vec2(x2 - y2 + c_val.x, 2.0 * abs(z.x) * abs(z.y) + c_val.y);\n"
+    "            } else {\n"
+    "                z = vec2(x2 - y2 + c_val.x, 2.0 * z.x * z.y + c_val.y);\n"
+    "            }\n"
     "        }\n"
     "    }\n"
     "    if (i >= m) {\n"
