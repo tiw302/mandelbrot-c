@@ -6,7 +6,7 @@ const canvas = document.getElementById('canvas');
 const debugInfo = document.getElementById('debug-info');
 const zoomBox = document.getElementById('zoom-box');
 
-const PALETTES = ["sine wave", "grayscale", "fire", "electric", "ocean", "inferno"];
+const PALETTES = ["sine wave", "grayscale", "fire", "electric", "ocean", "inferno", "viridis", "plasma", "twilight"];
 let _gpuMode = true;
 let _tourActive = false;
 let _juliaMode = false;
@@ -57,7 +57,7 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, max_iters, zoom, center
         html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
     }
 
-    html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 6]}`;
+    html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 9]}`;
 
     debugInfo.textContent = html;
 
