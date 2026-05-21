@@ -28,7 +28,7 @@ endif()
 include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128)
 
 # common core math
-set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/color.c)
+set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/burning_ship.c src/core/color.c)
 
 # helper for system libs
 macro(find_system_libs target)
@@ -43,7 +43,7 @@ endmacro()
 
 # --- 1. CPU Engine ---
 if(BUILD_CPU)
-    add_executable(mandelbrot-cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_cpu_main.c)
+    add_executable(mandelbrot-cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_cpu_main.c)
     target_compile_definitions(mandelbrot-cpu PRIVATE SOKOL_GLCORE)
     target_compile_options(mandelbrot-cpu PRIVATE ${ARCH_FLAGS} -pthread)
     find_system_libs(mandelbrot-cpu)
@@ -52,7 +52,7 @@ endif()
 
 # --- 1.5. CPU Engine (128-bit) ---
 if(BUILD_CPU_128)
-    add_executable(mandelbrot-cpu-128 ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_cpu_main.c)
+    add_executable(mandelbrot-cpu-128 ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_cpu_main.c)
     target_compile_definitions(mandelbrot-cpu-128 PRIVATE SOKOL_GLCORE USE_SIMD_F128)
     target_compile_options(mandelbrot-cpu-128 PRIVATE ${ARCH_FLAGS} -pthread)
     find_system_libs(mandelbrot-cpu-128)
@@ -61,7 +61,7 @@ endif()
 
 # --- 2. GPU Engine ---
 if(BUILD_GPU)
-    add_executable(mandelbrot-gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/app/desktop_gpu_main.c)
+    add_executable(mandelbrot-gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_gpu_main.c)
     target_compile_definitions(mandelbrot-gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
     target_compile_options(mandelbrot-gpu PRIVATE ${ARCH_FLAGS} -pthread)
     find_system_libs(mandelbrot-gpu)
@@ -69,7 +69,7 @@ endif()
 
 # --- 3. Web Engine ---
 if(BUILD_WEB)
-    add_executable(mandelbrot-web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/app/web_main.c)
+    add_executable(mandelbrot-web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/app/web_main.c)
     target_compile_definitions(mandelbrot-web PRIVATE SOKOL_GLES3)
     target_compile_options(mandelbrot-web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
     target_link_options(mandelbrot-web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824" "-pthread")
