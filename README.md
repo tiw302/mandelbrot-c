@@ -249,18 +249,18 @@ Pass a target directly to skip the menu:
 
 ```bash
 # Desktop — CPU engine
-cmake -S . -B build-cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build-cpu
-./build-cpu/mandelbrot-cpu
+cmake -S . -B build_cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build_cpu
+./build_cpu/mandelbrot_cpu
 
 # Desktop — GPU engine
-cmake -S . -B build-gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
-cmake --build build-gpu
-./build-gpu/mandelbrot-gpu
+cmake -S . -B build_gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
+cmake --build build_gpu
+./build_gpu/mandelbrot_gpu
 
 # Web (WASM)
-emcmake cmake -S . -B build-web -DBUILD_WEB=ON
-cmake --build build-web
+emcmake cmake -S . -B build_web -DBUILD_WEB=ON
+cmake --build build_web
 # Output is automatically copied to the deploy/ folder
 ```
 
