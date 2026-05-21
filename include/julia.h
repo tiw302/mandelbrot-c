@@ -7,6 +7,9 @@
 #ifndef JULIA_H
 #define JULIA_H
 
+/* note: julia.h → mandelbrot.h → core_math.h → julia.h is circular,
+ * but include guards make this safe — complex_t is always defined before
+ * this header's declarations are processed. */
 #include "mandelbrot.h"
 
 /* scalar path */
