@@ -3,7 +3,7 @@
 
 #include <stdint.h>
 
-#define PALETTE_COUNT 6
+#define PALETTE_COUNT 9
 
 extern const char* PALETTE_NAMES[PALETTE_COUNT];
 
