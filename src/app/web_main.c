@@ -31,11 +31,11 @@
 #include <emscripten.h>
 
 EM_JS(void, update_debug_info_js,
-      (int gpu_mode, int julia_mode, int max_iters, double zoom, double center_re, double center_im,
+      (int gpu_mode, int julia_mode, int burning_ship_mode, int max_iters, double zoom, double center_re, double center_im,
        int palette_idx, int tour_phase, double julia_re, double julia_im, int high_precision),
       {
           if (typeof updateDebugInfo === 'function') {
-              updateDebugInfo(gpu_mode, julia_mode, max_iters, zoom, center_re, center_im,
+              updateDebugInfo(gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im,
                               palette_idx, tour_phase, julia_re, julia_im, high_precision);
           }
       });
@@ -92,6 +92,8 @@ typedef struct {
     uint32_t* pixels;
     int win_w, win_h;
 
+#define JULIA_ZOOM 4.0
+
     ViewState view;
     ViewState history[MAX_HISTORY_SIZE];
     int history_count;
@@ -99,6 +101,7 @@ typedef struct {
     TourState m_tour;
     int julia_mode, burning_ship_mode, gpu_mode, high_precision_mode;
     complex_t julia_c;
+    int julia_c_locked;
     int max_iterations, palette_idx;
     int needs_redraw;
     int screenshot_requested;
@@ -108,6 +111,10 @@ typedef struct {
     struct {
         int x, y, w, h;
     } zoom_rect;
+    struct {
+        int active;
+        ViewState mandelbrot_view;
+    } julia_session;
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -319,7 +326,7 @@ static void frame(void) {
         }
         ctx.screenshot_requested = 0;
     }
-    update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.max_iterations, ctx.view.zoom,
+    update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.burning_ship_mode, ctx.max_iterations, ctx.view.zoom,
                          ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase,
                          ctx.julia_c.re, ctx.julia_c.im, ctx.high_precision_mode);
 }
@@ -382,7 +389,7 @@ static void event(const sapp_event* ev) {
             int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
             int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
             update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
-        } else if (ctx.julia_mode && ctx.m_tour.phase == TOUR_IDLE) {
+        } else if (ctx.julia_mode && !ctx.julia_c_locked && ctx.m_tour.phase == TOUR_IDLE) {
             /* y-up: top of screen = high im */
             ctx.julia_c.re = ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) *
                                                       ctx.view.zoom *
@@ -485,7 +492,7 @@ void wasm_set_state(int julia_mode, double jre, double jim, int iters, int palet
     ctx.julia_c.re = jre;
     ctx.julia_c.im = jim;
     if (iters > 0) ctx.max_iterations = iters;
-    if (palette >= 0) ctx.palette_idx = palette % 6;
+    if (palette >= 0) ctx.palette_idx = palette % PALETTE_COUNT;
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
@@ -516,8 +523,44 @@ void wasm_next_palette(void) {
 }
 
 EMSCRIPTEN_KEEPALIVE
+void wasm_set_palette(int idx) {
+    if (idx >= 0 && idx < 9) {
+        ctx.palette_idx = idx;
+        init_renderer(ctx.max_iterations, ctx.palette_idx);
+        ctx.needs_redraw = 1;
+    }
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_julia_lock(void) {
+    ctx.julia_c_locked = !ctx.julia_c_locked;
+    ctx.needs_redraw = 1;
+}
+
+EMSCRIPTEN_KEEPALIVE
+int wasm_is_julia_locked(void) {
+    return ctx.julia_c_locked;
+}
+
+EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia(void) {
-    ctx.julia_mode = !ctx.julia_mode;
+    ctx.m_tour.phase = TOUR_IDLE;
+    if (!ctx.julia_mode) {
+        ctx.julia_session.mandelbrot_view = ctx.view;
+        ctx.julia_session.active = 1;
+        if (ctx.julia_c.re == 0.0 && ctx.julia_c.im == 0.0) {
+            ctx.julia_c = (complex_t){-0.8, 0.156};
+        }
+        ctx.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
+        ctx.julia_mode = 1;
+        ctx.history_count = 0;
+    } else {
+        if (ctx.julia_session.active) {
+            ctx.view = ctx.julia_session.mandelbrot_view;
+        }
+        ctx.julia_mode = 0;
+        ctx.history_count = 0;
+    }
     ctx.burning_ship_mode = 0;
     ctx.needs_redraw = 1;
 }
@@ -526,6 +569,10 @@ EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_burning_ship(void) {
     ctx.burning_ship_mode = !ctx.burning_ship_mode;
     ctx.julia_mode = 0;
+    ctx.julia_session.active = 0;
+    ctx.m_tour.phase = TOUR_IDLE;
+    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    ctx.history_count = 0;
     ctx.needs_redraw = 1;
 }
 
@@ -540,6 +587,8 @@ void wasm_adjust_iterations(int diff) {
     ctx.needs_redraw = 1;
 }
 
+/* no-op — sokol_app handles canvas resize via SAPP_EVENTTYPE_RESIZED.
+ * kept as an exported symbol so existing js callers don't break. */
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_resolution(int w, int h) {
     (void)w;
