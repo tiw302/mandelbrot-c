@@ -26,19 +26,29 @@ canvas {
     outline: none;
 }
 
-#toolbar {
+/* ui overlay wrapper */
+#ui-overlay {
     position: fixed;
     top: env(safe-area-inset-top, 0); 
     left: 0; right: 0;
+    display: flex;
+    flex-direction: column;
+    z-index: 10;
+    pointer-events: none;
+}
+
+#toolbar {
     display: flex;
     flex-wrap: wrap;
     gap: 4px;
     padding: 8px;
     background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
-    z-index: 10;
+    pointer-events: auto;
+    width: 100%;
 }
 
 #toolbar button {
+    flex-shrink: 0;
     background: rgba(34, 34, 34, 0.8);
     color: #eee;
     border: 1px solid #444;
@@ -51,18 +61,25 @@ canvas {
     border-radius: 2px;
     min-width: 65px;
     text-align: center;
+    /* subtle animations */
+    transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
-#toolbar button:active { background: #555; }
+#toolbar button:hover {
+    background: rgba(68, 68, 68, 0.9);
+    border-color: #666;
+    color: #fff;
+}
 
-@media (max-width: 600px) {
-    #toolbar button { padding: 12px 16px; font-size: 13px; }
+#toolbar button:active {
+    background: rgba(85, 85, 85, 0.9);
+    transform: scale(0.95);
 }
 
 #debug-info {
-    position: fixed;
-    top: 50px;
-    left: 10px;
+    margin-top: 6px;
+    margin-left: 10px;
+    align-self: flex-start;
     background: rgba(0, 0, 0, 0.7);
     color: #ffffff;
     padding: 8px 12px;
@@ -71,16 +88,19 @@ canvas {
     line-height: 1.4;
     white-space: pre;
     pointer-events: none;
-    z-index: 10;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
 }
 
 @media (max-width: 600px) {
     #debug-info {
+        position: fixed;
         top: auto;
         bottom: 35px; /* above the info bar */
         left: 5px;
+        align-self: auto;
+        margin-top: 0;
+        margin-left: 0;
         font-size: 11px;
         padding: 6px 10px;
         line-height: 1.3;
@@ -147,3 +167,111 @@ canvas {
 }
 
 @keyframes spin { to { transform: rotate(360deg); } }
+
+/* console log terminal inside loading screen */
+#loading-log {
+    width: 85%;
+    max-width: 500px;
+    height: 140px;
+    margin-top: 20px;
+    background: rgba(10, 10, 10, 0.9);
+    border: 1px solid #333;
+    font-family: monospace;
+    font-size: 11px;
+    color: #ffffff;
+    padding: 8px 12px;
+    overflow-y: auto;
+    text-align: left;
+    white-space: pre-wrap;
+    border-radius: 3px;
+    box-shadow: inset 0 0 10px rgba(0, 0, 0, 0.5);
+    line-height: 1.4;
+}
+
+/* retro settings panel overlay */
+#settings-panel {
+    position: fixed;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%) scale(0.9);
+    background: rgba(20, 20, 20, 0.95);
+    color: #ccc;
+    border: 2px solid #555;
+    padding: 16px;
+    font-family: monospace;
+    z-index: 100;
+    width: 320px;
+    border-radius: 4px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
+    /* popup transitions */
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+}
+
+#settings-panel.active {
+    opacity: 1;
+    pointer-events: auto;
+    transform: translate(-50%, -50%) scale(1);
+}
+
+.settings-title {
+    font-weight: bold;
+    text-align: center;
+    border-bottom: 1px dashed #555;
+    padding-bottom: 6px;
+    text-transform: uppercase;
+    color: #eee;
+}
+
+.settings-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 13px;
+}
+
+#settings-panel button, #settings-panel select, #settings-panel input {
+    background: rgba(45, 45, 45, 0.8);
+    color: #eee;
+    border: 1px solid #555;
+    padding: 4px 8px;
+    font-family: monospace;
+    font-size: 12px;
+    border-radius: 2px;
+    outline: none;
+}
+
+#settings-panel button, #settings-panel select {
+    cursor: pointer;
+    transition: background-color 0.15s ease, transform 0.1s ease;
+}
+
+#settings-panel button:hover, #settings-panel select:hover {
+    background: rgba(68, 68, 68, 0.9);
+}
+
+#settings-panel button:active {
+    background: rgba(85, 85, 85, 0.9);
+    transform: scale(0.95);
+}
+
+#settings-panel input {
+    background: rgba(10, 10, 10, 0.8);
+    border: 1px solid #555;
+    padding: 3px 6px;
+    color: #fff;
+}
+
+#settings-panel input:focus {
+    border-color: #888;
+}
+
+.settings-close {
+    margin-top: 8px;
+    align-self: center;
+    width: 80px;
+}
