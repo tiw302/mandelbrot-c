@@ -42,15 +42,15 @@ static const char* dg_fs_cpu =
  *   u_zoom                     — zoom level (complex plane units per screen height)
  *   u_iters                    — maximum iteration count
  *   u_aspect                   — window aspect ratio (width / height)
- *   u_is_julia                 — 0.0 = mandelbrot mode, 1.0 = julia mode
- *   u_palette                  — palette index 0-5 (matches PALETTE_NAMES in color.c)
+ *   u_fractal_type             — 0.0 = mandelbrot, 1.0 = julia, 2.0 = burning ship
+ *   u_palette                  — palette index 0-8 (matches PALETTE_NAMES in color.c)
  *   u_high_precision           — 0.0 = standard 32-bit, 1.0 = dekker double-single
  */
 static const char* dg_fs_gpu =
     "#version 400\n"
     "uniform vec2 u_center_hi; uniform vec2 u_center_lo;"
     "uniform vec2 u_julia_c_hi; uniform vec2 u_julia_c_lo; uniform float u_zoom; uniform float u_iters; uniform float u_aspect;"
-    "uniform float u_is_julia; uniform float u_palette; uniform float u_high_precision;"
+    "uniform float u_fractal_type; uniform float u_palette; uniform float u_high_precision;"
     "in vec2 uv; out vec4 color;\n"
 
     /* dekker double-single addition (knuth twosum algorithm).
@@ -107,9 +107,21 @@ static const char* dg_fs_gpu =
     "  } else if (pal==4) {\n" /* ocean: coefficients r*5, g*2, b*0.5 */
     "    a=vec3(min(255.,i*5.),min(255.,i*2.),min(255.,i*.5))/255.;\n"
     "    b=vec3(min(255.,(i+1.)*5.),min(255.,(i+1.)*2.),min(255.,(i+1.)*.5))/255.;\n"
-    "  } else {\n" /* inferno: coefficients r*0.5, g*2, b*8 */
+    "  } else if (pal==5) {\n" /* inferno */
     "    a=vec3(min(255.,i*.5),min(255.,i*2.),min(255.,i*8.))/255.;\n"
     "    b=vec3(min(255.,(i+1.)*.5),min(255.,(i+1.)*2.),min(255.,(i+1.)*8.))/255.;\n"
+    "  } else if (pal==6) {\n" /* viridis */
+    "    float t1 = fract(i/256.); float t2 = fract((i+1.)/256.);\n"
+    "    a=vec3(0.267+t1*(0.993*t1-0.260), 0.004+t1*(1.490-t1*0.494), 0.329+t1*(1.268*t1*t1-0.680*t1-0.259));\n"
+    "    b=vec3(0.267+t2*(0.993*t2-0.260), 0.004+t2*(1.490-t2*0.494), 0.329+t2*(1.268*t2*t2-0.680*t2-0.259));\n"
+    "  } else if (pal==7) {\n" /* plasma */
+    "    float t1 = fract(i/256.); float t2 = fract((i+1.)/256.);\n"
+    "    a=vec3(0.050+t1*(2.735-t1*1.785), max(0.,t1*(1.580*t1-0.580)), max(0.,0.530+t1*(0.750-t1*1.280)));\n"
+    "    b=vec3(0.050+t2*(2.735-t2*1.785), max(0.,t2*(1.580*t2-0.580)), max(0.,0.530+t2*(0.750-t2*1.280)));\n"
+    "  } else {\n" /* twilight */
+    "    float t1 = fract(i/128.); float t2 = fract((i+1.)/128.);\n"
+    "    a=vec3(0.5+0.5*sin(6.283*t1), 0.3+0.2*sin(6.283*t1+2.094), 0.5+0.5*sin(6.283*t1+4.189));\n"
+    "    b=vec3(0.5+0.5*sin(6.283*t2), 0.3+0.2*sin(6.283*t2+2.094), 0.5+0.5*sin(6.283*t2+4.189));\n"
     "  }\n"
     "  return mix(a, b, fract(fi));\n"
     "}\n"
@@ -131,32 +143,40 @@ static const char* dg_fs_gpu =
     "    vec2 cy = vec2(u_center_hi.y, u_center_lo.y);\n"
     "    vec2 px = ds_add(ds_mul(ds_mul(uv_dx, zoom_a), aspect_a), cx);\n"
     "    vec2 py = ds_add(ds_mul(uv_dy, zoom_a), cy);\n"
-    "    vec2 c_val_x = (u_is_julia > 0.5) ? vec2(u_julia_c_hi.x, u_julia_c_lo.x) : px;\n"
-    "    vec2 c_val_y = (u_is_julia > 0.5) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
-    "    vec2 zx = (u_is_julia > 0.5) ? px : vec2(0.0);\n"
-    "    vec2 zy = (u_is_julia > 0.5) ? py : vec2(0.0);\n"
+    "    vec2 c_val_x = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.x, u_julia_c_lo.x) : px;\n"
+    "    vec2 c_val_y = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
+    "    vec2 zx = (u_fractal_type == 1.0) ? px : vec2(0.0);\n"
+    "    vec2 zy = (u_fractal_type == 1.0) ? py : vec2(0.0);\n"
     "    for (i=0; i<2000; i++) {\n"
     "      if (i>=m) break;\n"
     "      vec2 x2 = ds_mul(zx, zx);\n"
     "      vec2 y2 = ds_mul(zy, zy);\n"
     "      mag2 = x2.x + y2.x;\n"
     "      if (mag2 > 100.0) break;\n" /* escape radius = 10, so escape_sq = 100 */
-    "      vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
-    "      vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
-    "      zx = zx_new; zy = zy_new;\n"
+    "      if (u_fractal_type > 1.5) {\n"
+    "        vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;\n"
+    "        vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;\n"
+    "        vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), c_val_y);\n"
+    "        vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
+    "        zx = zx_new; zy = zy_new;\n"
+    "      } else {\n"
+    "        vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
+    "        vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
+    "        zx = zx_new; zy = zy_new;\n"
+    "      }\n"
     "    }\n"
 
     /* standard 32-bit path — fast for low zoom levels where float precision is sufficient. */
     "  } else {\n"
     "    vec2 center = u_center_hi + u_center_lo;\n"
     "    vec2 p = vec2((uv.x-0.5)*u_zoom*u_aspect+center.x, (0.5-uv.y)*u_zoom+center.y);\n"
-    "    vec2 c_val = (u_is_julia>0.5) ? (u_julia_c_hi + u_julia_c_lo) : p;\n"
-    "    vec2 z = (u_is_julia>0.5) ? p : vec2(0.0);\n"
+    "    vec2 c_val = (u_fractal_type == 1.0) ? (u_julia_c_hi + u_julia_c_lo) : p;\n"
+    "    vec2 z = (u_fractal_type == 1.0) ? p : vec2(0.0);\n"
     /* cardioid and period-2 bulb rejection (mandelbrot only).
      * matches the checks in mandelbrot.c — points confirmed inside the main
      * set skip the iteration loop entirely, saving significant gpu cycles
      * in the dense black regions of the fractal. */
-    "    if (u_is_julia < 0.5) {\n"
+    "    if (u_fractal_type < 0.5) {\n"
     "      float cr = p.x - 0.25, ci2 = p.y*p.y;\n"
     "      float q = cr*cr + ci2;\n"
     "      if (q*(q+cr) <= 0.25*ci2) { i = m; }\n"         /* main cardioid */
@@ -167,7 +187,11 @@ static const char* dg_fs_gpu =
     "      float x2=z.x*z.x, y2=z.y*z.y;\n"
     "      mag2 = x2+y2;\n"
     "      if (mag2 > 100.0) break;\n" /* escape radius = 10, so escape_sq = 100 */
-    "      z = vec2(x2-y2+c_val.x, 2.0*z.x*z.y+c_val.y);\n"
+    "      if (u_fractal_type > 1.5) {\n"
+    "        z = vec2(x2-y2+c_val.x, 2.0*abs(z.x)*abs(z.y)+c_val.y);\n"
+    "      } else {\n"
+    "        z = vec2(x2-y2+c_val.x, 2.0*z.x*z.y+c_val.y);\n"
+    "      }\n"
     "    }\n"
     "  }\n"
 

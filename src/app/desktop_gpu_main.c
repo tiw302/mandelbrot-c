@@ -7,6 +7,7 @@
 #define FONTSTASH_IMPLEMENTATION
 #define SOKOL_FONTSTASH_IMPL
 
+#include "bookmark.h"
 #include "color.h"
 #include "config.h"
 #include "julia.h"
@@ -55,7 +56,7 @@ typedef struct {
     float julia_c_hi[2];
     float julia_c_lo[2];
     float zoom, iters, aspect;
-    float is_julia, palette, high_precision;
+    float fractal_type, palette, high_precision;
 } params_t;
 
 /* saved mandelbrot view when entering julia mode.
@@ -87,12 +88,15 @@ typedef struct {
     /* mode controllers */
     TourState m_tour;
     JuliaTourState j_tour;
-    int julia_mode, gpu_mode, high_precision_mode;
+    int julia_mode, gpu_mode, high_precision_mode, burning_ship_mode;
     complex_t julia_c;
     JuliaSession julia_session;
 
     /* rendering parameters */
     int max_iterations, palette_idx;
+
+    /* bookmark tracking */
+    int current_bookmark_idx;
     int needs_redraw;
 
     /* mouse interaction */
@@ -204,7 +208,7 @@ static void init(void) {
                               {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
     ctx.pip_gpu =
@@ -258,6 +262,9 @@ static void frame(void) {
         if (ctx.julia_mode)
             render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                   im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+        else if (ctx.burning_ship_mode)
+            render_burning_ship_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                          im_top, im_bot, ctx.max_iterations);
         else
             render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                        im_top, im_bot, ctx.max_iterations);
@@ -313,7 +320,7 @@ static void frame(void) {
                           .zoom = (float)ctx.view.zoom,
                           .iters = (float)ctx.max_iterations,
                           .aspect = (float)ctx.win_w / ctx.win_h,
-                          .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
+                          .fractal_type = ctx.julia_mode ? 1.0f : (ctx.burning_ship_mode ? 2.0f : 0.0f),
                           .palette = (float)ctx.palette_idx,
                           .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f};
             sg_apply_uniforms(0, &SG_RANGE(p));
@@ -348,7 +355,8 @@ static void frame(void) {
         char buf[256];
 
         snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",
-                 ctx.gpu_mode ? (ctx.high_precision_mode ? "gpu (64-bit)" : "gpu (32-bit)") : "cpu", ctx.julia_mode ? "julia" : "mandelbrot",
+                 ctx.gpu_mode ? (ctx.high_precision_mode ? "gpu (64-bit)" : "gpu (32-bit)") : "cpu",
+                 ctx.julia_mode ? "julia" : (ctx.burning_ship_mode ? "burning ship" : "mandelbrot"),
                  get_actual_thread_count(), ctx.render_time_ms);
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
@@ -542,6 +550,9 @@ static void event(const sapp_event* ev) {
                 if (ctx.julia_mode)
                     render_julia_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                           im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+                else if (ctx.burning_ship_mode)
+                    render_burning_ship_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                                 im_top, im_bot, ctx.max_iterations);
                 else
                     render_mandelbrot_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                                im_top, im_bot, ctx.max_iterations);
@@ -587,6 +598,49 @@ static void event(const sapp_event* ev) {
                 ctx.max_iterations -= step;
                 init_renderer(ctx.max_iterations, ctx.palette_idx);
                 ctx.needs_redraw = 1;
+            }
+        } else if (ev->key_code == SAPP_KEYCODE_B) {
+            /* toggle burning ship fractal */
+            ctx.burning_ship_mode = !ctx.burning_ship_mode;
+            ctx.julia_mode = 0;
+            ctx.julia_session.active = 0;
+            ctx.m_tour.phase = TOUR_IDLE;
+            ctx.j_tour.phase = JULIA_TOUR_IDLE;
+            ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+            ctx.history_count = 0;
+            sapp_set_window_title(ctx.burning_ship_mode ? "Burning Ship Explorer" : "Mandelbrot GPU Explorer");
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_M) {
+            Bookmark b = {
+                .center_re = ctx.view.center_re,
+                .center_im = ctx.view.center_im,
+                .zoom = ctx.view.zoom,
+                .max_iterations = ctx.max_iterations,
+                .fractal_type = ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0),
+                .julia_c = ctx.julia_c
+            };
+            save_bookmark(&b);
+            printf("Bookmark saved!\n");
+        } else if (ev->key_code == SAPP_KEYCODE_L) {
+            Bookmark b;
+            int count = get_bookmark_count();
+            if (count > 0) {
+                if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
+                ctx.current_bookmark_idx = (ctx.current_bookmark_idx + 1) % count;
+                if (load_bookmark(ctx.current_bookmark_idx, &b)) {
+                    ctx.view.center_re = b.center_re;
+                    ctx.view.center_im = b.center_im;
+                    ctx.view.zoom = b.zoom;
+                    ctx.max_iterations = b.max_iterations;
+                    ctx.julia_mode = (b.fractal_type == 1);
+                    ctx.burning_ship_mode = (b.fractal_type == 2);
+                    ctx.julia_c = b.julia_c;
+                    ctx.m_tour.phase = TOUR_IDLE;
+                    ctx.j_tour.phase = JULIA_TOUR_IDLE;
+                    init_renderer(ctx.max_iterations, ctx.palette_idx);
+                    ctx.needs_redraw = 1;
+                    printf("Loaded bookmark %d/%d\n", ctx.current_bookmark_idx + 1, count);
+                }
             }
         }
     }
