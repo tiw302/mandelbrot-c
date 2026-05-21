@@ -9,11 +9,7 @@
 
 #include "config.h"
 
-/* forward declaration — complex_t is defined in core_math.h */
-#ifndef CORE_MATH_H
-typedef struct { double re; double im; } complex_t;
-#endif
-
+#include "core_math.h"
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
