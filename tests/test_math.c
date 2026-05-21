@@ -155,6 +155,27 @@ void test_f128_julia_vs_scalar(void) {
 
     TEST_END();
 }
+
+void test_f128_burning_ship_vs_scalar(void) {
+    TEST_START("128-bit burning ship vs scalar consistency");
+
+    double test_re[] = {0.0, -1.0, 2.0, -0.45, 0.5};
+    double test_im[] = {0.0, 0.0, 2.0, -0.63, 0.5};
+    int max_iters = 200;
+
+    for (int i = 0; i < 5; i++) {
+        complex_t c = {test_re[i], test_im[i]};
+        double scalar = burning_ship_check(c, max_iters);
+
+        simd_f128 cre = simd_f128_from_double(test_re[i]);
+        simd_f128 cim = simd_f128_from_double(test_im[i]);
+        double f128 = burning_ship_check_f128(cre, cim, max_iters);
+
+        EXPECT(approx_eq(scalar, f128));
+    }
+
+    TEST_END();
+}
 #endif
 
 int main(void) {
@@ -173,6 +194,7 @@ int main(void) {
 #ifdef USE_SIMD_F128
     test_f128_vs_scalar();
     test_f128_julia_vs_scalar();
+    test_f128_burning_ship_vs_scalar();
 #else
     printf("skipped 128-bit tests (not compiled with -DUSE_SIMD_F128)\n");
 #endif
