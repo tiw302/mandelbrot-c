@@ -71,13 +71,15 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
 typedef struct {
     float center_hi[2]; /* high bits of double */
     float center_lo[2]; /* low bits for precision */
-    float julia_c[2];
+    float julia_c_hi[2];
+    float julia_c_lo[2];
     float zoom;
     float iters;
     float aspect;
-    float is_julia;
+    float fractal_type;
     float palette;
     float high_precision;
+    float zero;            /* optimization barrier: always 0.0 */
 } params_t;
 
 typedef struct {
@@ -95,7 +97,7 @@ typedef struct {
     int history_count;
 
     TourState m_tour;
-    int julia_mode, gpu_mode, high_precision_mode;
+    int julia_mode, burning_ship_mode, gpu_mode, high_precision_mode;
     complex_t julia_c;
     int max_iterations, palette_idx;
     int needs_redraw;
@@ -178,9 +180,10 @@ static void init(void) {
                               {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_is_julia", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
                               {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
+                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_zero", .type = SG_UNIFORMTYPE_FLOAT}}}});
 
     ctx.pip_gpu = sg_make_pipeline(
         &(sg_pipeline_desc){.shader = shd_gpu,
@@ -203,11 +206,7 @@ static void init(void) {
     }
     ctx.needs_redraw = 1;
 
-#if defined(FORCE_GPU_MODE)
     ctx.gpu_mode = 1;
-#else
-    ctx.gpu_mode = 0;
-#endif
 
     init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
     ctx.palette_idx = DEFAULT_PALETTE;
@@ -238,6 +237,9 @@ static void frame(void) {
         if (ctx.julia_mode) {
             render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                   im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+        } else if (ctx.burning_ship_mode) {
+            render_burning_ship_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                         im_top, im_bot, ctx.max_iterations);
         } else {
             render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                        im_top, im_bot, ctx.max_iterations);
@@ -259,16 +261,21 @@ static void frame(void) {
             /* uniform setup */
             float chi_re = (float)ctx.view.center_re;
             float chi_im = (float)ctx.view.center_im;
+            float jhi_re = (float)ctx.julia_c.re;
+            float jhi_im = (float)ctx.julia_c.im;
             params_t params = {.center_hi = {chi_re, chi_im},
                                .center_lo = {(float)(ctx.view.center_re - chi_re),
                                              (float)(ctx.view.center_im - chi_im)},
-                               .julia_c = {(float)ctx.julia_c.re, (float)ctx.julia_c.im},
+                               .julia_c_hi = {jhi_re, jhi_im},
+                               .julia_c_lo = {(float)(ctx.julia_c.re - jhi_re),
+                                              (float)(ctx.julia_c.im - jhi_im)},
                                .zoom = (float)ctx.view.zoom,
                                .iters = (float)ctx.max_iterations,
                                .aspect = (float)ctx.win_w / ctx.win_h,
-                               .is_julia = ctx.julia_mode ? 1.0f : 0.0f,
+                               .fractal_type = ctx.julia_mode ? 1.0f : (ctx.burning_ship_mode ? 2.0f : 0.0f),
                                .palette = (float)ctx.palette_idx,
-                               .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f};
+                               .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f,
+                               .zero = 0.0f};
             sg_apply_uniforms(0, &SG_RANGE(params));
         }
         sg_draw(0, 6, 1);
@@ -422,6 +429,11 @@ static void event(const sapp_event* ev) {
             if (ctx.max_iterations < 10) ctx.max_iterations = 10;
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_B) {
+            ctx.burning_ship_mode = !ctx.burning_ship_mode;
+            ctx.julia_mode = 0;
+            ctx.m_tour.phase = TOUR_IDLE;
+            ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_RESIZED) {
         ctx.win_w = (int)ev->framebuffer_width;
@@ -498,7 +510,7 @@ void wasm_toggle_tour(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
-    ctx.palette_idx = (ctx.palette_idx + 1) % 6;
+    ctx.palette_idx = (ctx.palette_idx + 1) % 9;
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
@@ -506,8 +518,18 @@ void wasm_next_palette(void) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia(void) {
     ctx.julia_mode = !ctx.julia_mode;
+    ctx.burning_ship_mode = 0;
     ctx.needs_redraw = 1;
 }
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_toggle_burning_ship(void) {
+    ctx.burning_ship_mode = !ctx.burning_ship_mode;
+    ctx.julia_mode = 0;
+    ctx.needs_redraw = 1;
+}
+
+
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_adjust_iterations(int diff) {
