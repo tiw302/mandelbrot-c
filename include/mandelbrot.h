@@ -7,9 +7,12 @@
 #ifndef MANDELBROT_H
 #define MANDELBROT_H
 
+/* note: mandelbrot.h ↔ core_math.h have a circular include, but the
+ * include guards make this safe — core_math.h defines complex_t first,
+ * then pulls in this header. direct includers can use either entry point. */
 #include "config.h"
-
 #include "core_math.h"
+
 #ifdef __EMSCRIPTEN__
 #include <emscripten.h>
 #endif
