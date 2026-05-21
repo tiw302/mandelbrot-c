@@ -147,6 +147,10 @@ static const char* dg_fs_gpu =
     "    vec2 c_val_y = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
     "    vec2 zx = (u_fractal_type == 1.0) ? px : vec2(0.0);\n"
     "    vec2 zy = (u_fractal_type == 1.0) ? py : vec2(0.0);\n"
+    /* gpu loop cap: glsl requires a compile-time constant loop bound on many
+     * drivers. 2000 is a safe limit for broad gpu compatibility. if u_iters
+     * exceeds this the shader will silently stop early — for deeper iteration
+     * counts switch to cpu mode. */
     "    for (i=0; i<2000; i++) {\n"
     "      if (i>=m) break;\n"
     "      vec2 x2 = ds_mul(zx, zx);\n"
@@ -182,6 +186,7 @@ static const char* dg_fs_gpu =
     "      if (q*(q+cr) <= 0.25*ci2) { i = m; }\n"         /* main cardioid */
     "      else { float cr1 = p.x+1.0; if (cr1*cr1+ci2 <= 0.0625) i = m; }\n" /* period-2 bulb */
     "    }\n"
+    /* same cap applies to the standard 32-bit path */
     "    for (; i<2000; i++) {\n"
     "      if (i>=m) break;\n"
     "      float x2=z.x*z.x, y2=z.y*z.y;\n"
