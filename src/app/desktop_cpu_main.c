@@ -420,7 +420,7 @@ int main(int argc, char* argv[]) {
         SDL_RenderCopy(renderer, texture, NULL, NULL);
 
         if (screenshot_requested) {
-            uint32_t* ss_pixels = malloc(win_w * win_h * 4);
+            uint32_t* ss_pixels = malloc((size_t)win_w * win_h * 4);
             if (ss_pixels) {
                 SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss_pixels,
                                      win_w * 4);
@@ -539,5 +539,7 @@ static void print_controls(void) {
     puts("  up/down     : iterations      shift+up/dn: x100");
     puts("  p           : cycle palette   r          : reset");
     puts("  j           : julia mode      t          : tour");
-    puts("  s           : screenshot      q / esc    : quit");
+    puts("  b           : burning ship    s          : screenshot");
+    puts("  m           : save bookmark   l          : load bookmark");
+    puts("  q / esc     : quit");
 }
