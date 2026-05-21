@@ -18,9 +18,24 @@ void save_bookmark(const Bookmark* b) {
     if (size == 0) {
         fprintf(f, "[\n");
     } else {
-        /* overwrite the closing bracket with a comma */
-        fseek(f, -2, SEEK_END);
-        fprintf(f, ",\n");
+        /* scan backwards for the closing ']' — handles crlf line endings
+         * and any trailing whitespace after manual edits. */
+        long pos = size;
+        int found = 0;
+        while (pos > 0) {
+            fseek(f, --pos, SEEK_SET);
+            int ch = fgetc(f);
+            if (ch == ']') {
+                fseek(f, pos, SEEK_SET);
+                fprintf(f, ",\n");
+                found = 1;
+                break;
+            }
+        }
+        if (!found) {
+            fclose(f);
+            return;
+        }
     }
 
     fprintf(f, "  {\n");
@@ -81,7 +96,15 @@ int load_bookmark(int index, Bookmark* b) {
     return 0;
 }
 
+/* lightweight counter — avoids deserializing all bookmarks onto the stack
+ * just to return a count. scans for closing braces which delimit objects. */
 int get_bookmark_count(void) {
-    Bookmark bookmarks[MAX_BOOKMARKS];
-    return scan_bookmarks(bookmarks, MAX_BOOKMARKS);
+    FILE* f = fopen(BOOKMARKS_FILE, "r");
+    if (!f) return 0;
+    int count = 0;
+    char line[256];
+    while (fgets(line, sizeof(line), f))
+        if (strstr(line, "}")) count++;
+    fclose(f);
+    return count;
 }
