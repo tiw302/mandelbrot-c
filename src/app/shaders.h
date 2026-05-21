@@ -149,6 +149,8 @@ static const char* fs_gpu_src =
     "            if (q * (q + cr) <= 0.25 * ci2) { i = m; }\n"
     "            else { float cr1 = px.x + 1.0; if (cr1*cr1 + ci2 <= 0.0625) i = m; }\n"
     "        }\n"
+    /* gpu loop cap: glsl needs a compile-time constant bound on many drivers.
+     * 2000 is safe for broad compatibility. for deeper counts use cpu mode. */
     "        for (i = i; i < 2000; i++) {\n"
     "            if (i >= m) break;\n"
     "            vec2 x2 = ds_mul(zx, zx);\n"
@@ -179,6 +181,7 @@ static const char* fs_gpu_src =
     "            if (q * (q + cr) <= 0.25 * ci2) { i = m; }\n"
     "            else { float cr1 = p.x + 1.0; if (cr1*cr1 + ci2 <= 0.0625) i = m; }\n"
     "        }\n"
+    /* same cap applies to the standard 32-bit path */
     "        for (i = i; i < 2000; i++) {\n"
     "            if (i >= m) break;\n"
     "            float x2 = z.x * z.x, y2 = z.y * z.y;\n"
