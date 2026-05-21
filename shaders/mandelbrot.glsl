@@ -1,3 +1,12 @@
+/* REFERENCE ONLY — this file is NOT compiled or loaded at runtime.
+ * the actual shaders are inlined in:
+ *   src/app/shaders.h             (web / gles3)
+ *   src/app/desktop_gpu_shaders.h (desktop / glcore)
+ *
+ * this file is kept as a readable reference for the sokol shader cross-compiler
+ * (sokol-shdc) format. it may be out of date — always check the inline versions
+ * for the authoritative implementation. */
+
 @vs vs
 in vec4 position;
 in vec2 texcoord0;
