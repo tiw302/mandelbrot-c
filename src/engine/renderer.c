@@ -116,6 +116,8 @@ static void process_rows(void) {
             double iterations;
             if (pool.mode == RENDER_JULIA)
                 iterations = julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
+            else if (pool.mode == RENDER_BURNING_SHIP)
+                iterations = burning_ship_check_f128(x_re, y_im, pool.max_iterations);
             else
                 iterations = mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
 
