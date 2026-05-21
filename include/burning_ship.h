@@ -8,9 +8,13 @@
 #ifndef BURNING_SHIP_H
 #define BURNING_SHIP_H
 
+/* note: burning_ship.h ↔ core_math.h have a circular include, but the
+ * include guards make this safe — complex_t is always defined before
+ * this header's declarations are processed. */
 #include "config.h"
-
 #include "core_math.h"
+
+
 /* scalar path */
 double burning_ship_check(complex_t c, int max_iterations);
 
@@ -24,6 +28,11 @@ void burning_ship_check_avx2(const double* re, const double* im, int max_iterati
 #ifdef __wasm_simd128__
 void burning_ship_check_wasm_simd128(const double* re, const double* im, int max_iterations,
                                       double* results);
+#endif
+
+/* high-precision 128-bit path (double-double) */
+#ifdef USE_SIMD_F128
+double burning_ship_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations);
 #endif
 
 #endif
