@@ -22,7 +22,7 @@ def kill_port_owner(port):
 
 class Handler(http.server.SimpleHTTPRequestHandler):
     def __init__(self, *args, **kwargs):
-        super().__init__(*args, directory=".", **kwargs)
+        super().__init__(*args, directory=DIRECTORY, **kwargs)
 
     def translate_path(self, path):
         # strip query parameters for routing logic
@@ -30,12 +30,13 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         if clean_path == "/" or clean_path == "":
             clean_path = "/index.html"
             
-        if clean_path.startswith("/index.js") or clean_path.startswith("/index.wasm"):
-            return os.path.abspath(os.path.join("build-web", clean_path.lstrip("/")))
-        elif clean_path.startswith("/assets/"):
-            return os.path.abspath(os.path.join(".", clean_path.lstrip("/")))
-        elif clean_path == "/index.html" or clean_path == "/coi-serviceworker.js" or clean_path == "/style.css" or clean_path == "/app.js":
-            return os.path.abspath(os.path.join("web", clean_path.lstrip("/")))
+        if DIRECTORY == "web" or DIRECTORY == ".":
+            if clean_path.startswith("/index.js") or clean_path.startswith("/index.wasm"):
+                return os.path.abspath(os.path.join("build-web", clean_path.lstrip("/")))
+            elif clean_path.startswith("/assets/"):
+                return os.path.abspath(os.path.join(".", clean_path.lstrip("/")))
+            elif clean_path == "/index.html" or clean_path == "/coi-serviceworker.js" or clean_path == "/style.css" or clean_path == "/app.js":
+                return os.path.abspath(os.path.join("web", clean_path.lstrip("/")))
             
         return super().translate_path(path)
 

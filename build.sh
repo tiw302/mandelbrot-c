@@ -49,7 +49,7 @@ build_web() {
     echo ""
     echo "========================================================================"
     echo " build complete! to run web engine:"
-    echo "   python3 -m http.server 8080 -d deploy/"
+    echo "   python3 scripts/server.py --dir deploy --port 8080"
     echo "   then open http://localhost:8080"
     echo "========================================================================"
 }
