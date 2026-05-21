@@ -1,7 +1,9 @@
 #include "core_math.h"
 #include "burning_ship.h"
 
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
 #include <math.h>
 #include <stdint.h>
 
@@ -20,7 +22,7 @@ double burning_ship_check(complex_t c, int max_iterations) {
 
         if (zre2 + zim2 > escape_radius_sq) {
             /* smooth coloring — same formula as mandelbrot */
-            return (double)iterations + 2.0 - log2(log(zre2 + zim2));
+            return (double)iterations + 2.0 - log2(log(fmax(1.0, zre2 + zim2)));
         }
 
         /* the key difference: take absolute values before squaring */
@@ -88,7 +90,7 @@ void burning_ship_check_avx2(const double* re, const double* im, int max_iterati
         if (!res_escaped[i] || res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
         }
     }
 }
@@ -119,6 +121,9 @@ void burning_ship_check_wasm_simd128(const double* re, const double* im, int max
         v128_t mag_sq = wasm_f64x2_add(zre2, zim2);
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
+
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * arguments are intentionally swapped vs the avx2 path. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -144,8 +149,61 @@ void burning_ship_check_wasm_simd128(const double* re, const double* im, int max
         if (!res_escaped[i] || res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
         }
     }
+}
+#endif
+
+#ifdef USE_SIMD_F128
+static inline simd_f128 f128_abs(simd_f128 x) {
+    double hi, lo;
+    simd_f128_extract(x, &hi, &lo);
+    if (hi < 0.0) {
+#if defined(SIMD_F128_USE_AVX2) || defined(SIMD_F128_USE_SSE2)
+        return _mm_xor_pd(x, _mm_set1_pd(-0.0));
+#elif defined(SIMD_F128_USE_WASM)
+        v128_t neg_mask = wasm_i64x2_const(0x8000000000000000ULL, 0x8000000000000000ULL);
+        return wasm_v128_xor(x, neg_mask);
+#elif defined(SIMD_F128_USE_NEON)
+        return vnegq_f64(x);
+#else
+        simd_f128 res = {-hi, -lo};
+        return res;
+#endif
+    }
+    return x;
+}
+
+double burning_ship_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
+    simd_f128 zre = simd_f128_from_double(0.0);
+    simd_f128 zim = simd_f128_from_double(0.0);
+    int iterations = 0;
+    const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
+    
+    simd_f128 two = simd_f128_from_double(2.0);
+
+    while (iterations < max_iterations) {
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
+        simd_f128 mag_sq_128 = simd_f128_add(zre2, zim2);
+        
+        double mag_hi, mag_lo;
+        simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
+        
+        if (mag_hi > escape_radius_sq) {
+            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
+        }
+        
+        simd_f128 abs_re = f128_abs(zre);
+        simd_f128 abs_im = f128_abs(zim);
+        
+        simd_f128 zre_zim = simd_f128_mul(abs_re, abs_im);
+        zim = simd_f128_add(simd_f128_mul(two, zre_zim), cim);
+        zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
+        
+        iterations++;
+    }
+    return (double)max_iterations;
 }
 #endif
