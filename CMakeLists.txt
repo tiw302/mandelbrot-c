@@ -25,7 +25,7 @@ else()
 endif()
 
 # include paths
-include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128)
+include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd_f128)
 
 # common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/burning_ship.c src/core/color.c)
@@ -43,35 +43,35 @@ endmacro()
 
 # --- 1. CPU Engine ---
 if(BUILD_CPU)
-    add_executable(mandelbrot-cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_cpu_main.c)
-    target_compile_definitions(mandelbrot-cpu PRIVATE SOKOL_GLCORE)
-    target_compile_options(mandelbrot-cpu PRIVATE ${ARCH_FLAGS} -pthread)
-    find_system_libs(mandelbrot-cpu)
-    target_link_libraries(mandelbrot-cpu PRIVATE SDL2 SDL2_ttf m)
+    add_executable(mandelbrot_cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_cpu_main.c)
+    target_compile_definitions(mandelbrot_cpu PRIVATE SOKOL_GLCORE)
+    target_compile_options(mandelbrot_cpu PRIVATE ${ARCH_FLAGS} -pthread)
+    find_system_libs(mandelbrot_cpu)
+    target_link_libraries(mandelbrot_cpu PRIVATE SDL2 SDL2_ttf m)
 endif()
 
 # --- 1.5. CPU Engine (128-bit) ---
 if(BUILD_CPU_128)
-    add_executable(mandelbrot-cpu-128 ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_cpu_main.c)
-    target_compile_definitions(mandelbrot-cpu-128 PRIVATE SOKOL_GLCORE USE_SIMD_F128)
-    target_compile_options(mandelbrot-cpu-128 PRIVATE ${ARCH_FLAGS} -pthread)
-    find_system_libs(mandelbrot-cpu-128)
-    target_link_libraries(mandelbrot-cpu-128 PRIVATE SDL2 SDL2_ttf m)
+    add_executable(mandelbrot_cpu_128 ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_cpu_main.c)
+    target_compile_definitions(mandelbrot_cpu_128 PRIVATE SOKOL_GLCORE USE_SIMD_F128)
+    target_compile_options(mandelbrot_cpu_128 PRIVATE ${ARCH_FLAGS} -pthread)
+    find_system_libs(mandelbrot_cpu_128)
+    target_link_libraries(mandelbrot_cpu_128 PRIVATE SDL2 SDL2_ttf m)
 endif()
 
 # --- 2. GPU Engine ---
 if(BUILD_GPU)
-    add_executable(mandelbrot-gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_gpu_main.c)
-    target_compile_definitions(mandelbrot-gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
-    target_compile_options(mandelbrot-gpu PRIVATE ${ARCH_FLAGS} -pthread)
-    find_system_libs(mandelbrot-gpu)
+    add_executable(mandelbrot_gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/app/desktop_gpu_main.c)
+    target_compile_definitions(mandelbrot_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
+    target_compile_options(mandelbrot_gpu PRIVATE ${ARCH_FLAGS} -pthread)
+    find_system_libs(mandelbrot_gpu)
 endif()
 
 # --- 3. Web Engine ---
 if(BUILD_WEB)
-    add_executable(mandelbrot-web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/app/web_main.c)
-    target_compile_definitions(mandelbrot-web PRIVATE SOKOL_GLES3)
-    target_compile_options(mandelbrot-web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
-    target_link_options(mandelbrot-web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824" "-pthread")
-    set_target_properties(mandelbrot-web PROPERTIES OUTPUT_NAME "index")
+    add_executable(mandelbrot_web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/app/web_main.c)
+    target_compile_definitions(mandelbrot_web PRIVATE SOKOL_GLES3)
+    target_compile_options(mandelbrot_web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
+    target_link_options(mandelbrot_web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824" "-pthread")
+    set_target_properties(mandelbrot_web PROPERTIES OUTPUT_NAME "index")
 endif()
