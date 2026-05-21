@@ -1,6 +1,8 @@
 #include "core_math.h"
 
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
 #include <math.h>
 
 #ifdef __wasm_simd128__
@@ -21,25 +23,27 @@ void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, i
     v128_t final_mag_sq = wasm_f64x2_splat(0.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (wasm_i64x2_all_true(wasm_v128_and(
-                escaped_mask, wasm_i64x2_make(0xFFFFFFFFFFFFFFFF, 0xFFFFFFFFFFFFFFFF))))
+        if (wasm_i64x2_all_true(escaped_mask))
             break;
 
         v128_t zre2 = wasm_f64x2_mul(zre, zre);
         v128_t zim2 = wasm_f64x2_mul(zim, zim);
-        v128_t next_re = wasm_f64x2_add(wasm_f64x2_sub(zre2, zim2), cre);
-        v128_t next_im =
-            wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(2.0), wasm_f64x2_mul(zre, zim)), cim);
-        zre = next_re;
-        zim = next_im;
+        v128_t mag_sq = wasm_f64x2_add(zre2, zim2);
 
-        v128_t mag_sq = wasm_f64x2_add(wasm_f64x2_mul(zre, zre), wasm_f64x2_mul(zim, zim));
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
+
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * arguments are intentionally swapped vs the avx2 path. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
         escaped_mask = wasm_v128_or(escaped_mask, mask);
         iters = wasm_f64x2_add(iters, wasm_v128_andnot(wasm_f64x2_splat(1.0), escaped_mask));
+
+        v128_t next_im =
+            wasm_f64x2_add(wasm_f64x2_mul(wasm_f64x2_splat(2.0), wasm_f64x2_mul(zre, zim)), cim);
+        zre = wasm_f64x2_add(wasm_f64x2_sub(zre2, zim2), cre);
+        zim = next_im;
     }
 
     double res_iters[2], res_mag_sq[2];
@@ -50,7 +54,7 @@ void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, i
         if (res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
         }
     }
 }
@@ -64,15 +68,16 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        double next_re = z.re * z.re - z.im * z.im + c.re;
-        double next_im = 2 * z.re * z.im + c.im;
-        z.re = next_re;
-        z.im = next_im;
-
-        double mag_sq = z.re * z.re + z.im * z.im;
+        double zre2 = z.re * z.re;
+        double zim2 = z.im * z.im;
+        double mag_sq = zre2 + zim2;
         if (mag_sq > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(mag_sq));
+            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_sq)));
         }
+
+        double next_im = 2 * z.re * z.im + c.im;
+        z.re = zre2 - zim2 + c.re;
+        z.im = next_im;
 
         iterations++;
     }
@@ -100,14 +105,8 @@ void julia_check_avx2(const double* re, const double* im, complex_t c, int max_i
 
         __m256d zre2 = _mm256_mul_pd(zre, zre);
         __m256d zim2 = _mm256_mul_pd(zim, zim);
+        __m256d mag_sq = _mm256_add_pd(zre2, zim2);
 
-        __m256d next_re = _mm256_add_pd(_mm256_sub_pd(zre2, zim2), cre);
-        __m256d next_im =
-            _mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(2.0), _mm256_mul_pd(zre, zim)), cim);
-        zre = next_re;
-        zim = next_im;
-
-        __m256d mag_sq = _mm256_add_pd(_mm256_mul_pd(zre, zre), _mm256_mul_pd(zim, zim));
         __m256d mask = _mm256_cmp_pd(mag_sq, esc_radius_sq, _CMP_GT_OQ);
         __m256d just_escaped = _mm256_andnot_pd(escaped_mask, mask);
 
@@ -115,6 +114,11 @@ void julia_check_avx2(const double* re, const double* im, complex_t c, int max_i
         escaped_mask = _mm256_or_pd(escaped_mask, mask);
 
         iters = _mm256_add_pd(iters, _mm256_andnot_pd(escaped_mask, _mm256_set1_pd(1.0)));
+
+        __m256d next_im =
+            _mm256_add_pd(_mm256_mul_pd(_mm256_set1_pd(2.0), _mm256_mul_pd(zre, zim)), cim);
+        zre = _mm256_add_pd(_mm256_sub_pd(zre2, zim2), cre);
+        zim = next_im;
     }
 
     double res_iters[4], res_mag_sq[4];
@@ -125,7 +129,7 @@ void julia_check_avx2(const double* re, const double* im, complex_t c, int max_i
         if (res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
         }
     }
 }
@@ -143,20 +147,17 @@ double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 c
     while (iterations < max_iterations) {
         simd_f128 zre2 = simd_f128_mul(zre, zre);
         simd_f128 zim2 = simd_f128_mul(zim, zim);
-        
-        simd_f128 next_re = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
-        simd_f128 next_im = simd_f128_add(simd_f128_mul(two, simd_f128_mul(zre, zim)), cim);
-        
-        zre = next_re;
-        zim = next_im;
-        
-        simd_f128 mag_sq_128 = simd_f128_add(simd_f128_mul(zre, zre), simd_f128_mul(zim, zim));
+        simd_f128 mag_sq_128 = simd_f128_add(zre2, zim2);
         double mag_hi, mag_lo;
         simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
         
         if (mag_hi > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(mag_hi));
+            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
         }
+        
+        simd_f128 next_im = simd_f128_add(simd_f128_mul(two, simd_f128_mul(zre, zim)), cim);
+        zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
+        zim = next_im;
         
         iterations++;
     }
