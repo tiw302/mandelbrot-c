@@ -6,6 +6,19 @@ const canvas = document.getElementById('canvas');
 const debugInfo = document.getElementById('debug-info');
 const zoomBox = document.getElementById('zoom-box');
 
+function addLog(msg) {
+    const log = document.getElementById('loading-log');
+    if (log) {
+        log.textContent += msg + '\n';
+        log.scrollTop = log.scrollHeight;
+    }
+}
+
+// initial loader logs
+addLog("[loader] initializing webgl sandbox...");
+addLog("[loader] loading assets/fonts/font.ttf...");
+addLog("[loader] loading WebAssembly runtime...");
+
 const PALETTES = ["sine wave", "grayscale", "fire", "electric", "ocean", "inferno", "viridis", "plasma", "twilight"];
 let _gpuMode = true;
 let _tourActive = false;
@@ -20,30 +33,159 @@ function toggleTour() {
 function toggleGpu() {
     Module._wasm_toggle_gpu();
     _gpuMode = !_gpuMode;
-    document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu ✓' : 'cpu';
-    // precision is GPU-only — hide button when in CPU mode
+    const gpuText = _gpuMode ? 'gpu ✓' : 'cpu';
+    document.getElementById('gpuBtn').textContent = gpuText;
+    const setGpu = document.getElementById('setGpuBtn');
+    if (setGpu) setGpu.textContent = _gpuMode ? 'gpu' : 'cpu';
+    
     document.getElementById('precisionBtn').style.display = _gpuMode ? '' : 'none';
+    const setPrecRow = document.getElementById('setPrecisionRow');
+    if (setPrecRow) setPrecRow.style.display = _gpuMode ? 'flex' : 'none';
 }
 
 let _highPrecision = false;
 function togglePrecision() {
-    if (!_gpuMode) return; // precision only applies to GPU mode
+    if (!_gpuMode) return; // precision only applies to gpu mode
     if (Module._wasm_toggle_precision) {
         Module._wasm_toggle_precision();
         _highPrecision = !_highPrecision;
-        document.getElementById('precisionBtn').textContent = _highPrecision ? '64-bit ✓' : '32-bit';
+        const precText = _highPrecision ? '64-bit ✓' : '32-bit';
+        document.getElementById('precisionBtn').textContent = precText;
+        const setPrec = document.getElementById('setPrecisionBtn');
+        if (setPrec) setPrec.textContent = _highPrecision ? '64-bit' : '32-bit';
+    }
+}
+
+let _settingsOpen = false;
+function toggleSettings() {
+    const panel = document.getElementById('settings-panel');
+    _settingsOpen = !_settingsOpen;
+    panel.classList.toggle('active', _settingsOpen);
+    if (_settingsOpen) {
+        const setGpu = document.getElementById('setGpuBtn');
+        if (setGpu) setGpu.textContent = _gpuMode ? 'gpu' : 'cpu';
+        
+        const setPrecRow = document.getElementById('setPrecisionRow');
+        if (setPrecRow) setPrecRow.style.display = _gpuMode ? 'flex' : 'none';
+        
+        const setPrec = document.getElementById('setPrecisionBtn');
+        if (setPrec) setPrec.textContent = _highPrecision ? '64-bit' : '32-bit';
+        
+        const setPalette = document.getElementById('setPaletteSelect');
+        if (setPalette) setPalette.value = _currentState.palette_idx;
+        
+        const setIters = document.getElementById('setIterationsVal');
+        if (setIters) setIters.textContent = _currentState.iters;
+
+        // sync coordinates inputs
+        document.getElementById('setCenterRe').value = _currentState.center_re.toFixed(14);
+        document.getElementById('setCenterIm').value = _currentState.center_im.toFixed(14);
+        document.getElementById('setZoom').value = _currentState.zoom.toExponential(6);
+
+        const juliaRow = document.getElementById('setJuliaCoordsRow');
+        if (_currentState.julia_mode) {
+            juliaRow.style.display = 'flex';
+            document.getElementById('setJuliaRe').value = _currentState.julia_re.toFixed(14);
+            document.getElementById('setJuliaIm').value = _currentState.julia_im.toFixed(14);
+            if (Module._wasm_is_julia_locked) {
+                const locked = Module._wasm_is_julia_locked();
+                document.getElementById('setJuliaLockBtn').textContent = locked ? 'locked 🔒' : 'unlocked';
+            }
+        } else {
+            juliaRow.style.display = 'none';
+        }
+
+        const setMode = document.getElementById('setFractalModeSelect');
+        if (setMode) {
+            if (_currentState.julia_mode) setMode.value = 'julia';
+            else if (_currentState.burning_ship_mode) setMode.value = 'ship';
+            else setMode.value = 'mandelbrot';
+        }
+        const setTour = document.getElementById('setTourBtn');
+        if (setTour) {
+            setTour.textContent = _tourActive ? 'stop tour' : 'start tour';
+        }
+    }
+}
+
+function updateCoordinatesFromSettings() {
+    const re = parseFloat(document.getElementById('setCenterRe').value);
+    const im = parseFloat(document.getElementById('setCenterIm').value);
+    const z = parseFloat(document.getElementById('setZoom').value);
+    if (!isNaN(re) && !isNaN(im) && !isNaN(z) && Module._wasm_set_view) {
+        Module._wasm_set_view(re, im, z);
+    }
+    if (_currentState.julia_mode) {
+        const jre = parseFloat(document.getElementById('setJuliaRe').value);
+        const jim = parseFloat(document.getElementById('setJuliaIm').value);
+        if (!isNaN(jre) && !isNaN(jim) && Module._wasm_set_state) {
+            Module._wasm_set_state(1, jre, jim, _currentState.iters, _currentState.palette_idx);
+        }
+    }
+}
+
+function adjustJuliaC(dre, dim) {
+    if (!_currentState.julia_mode) return;
+    const jreInput = document.getElementById('setJuliaRe');
+    const jimInput = document.getElementById('setJuliaIm');
+    let jre = parseFloat(jreInput.value);
+    let jim = parseFloat(jimInput.value);
+    if (isNaN(jre)) jre = _currentState.julia_re;
+    if (isNaN(jim)) jim = _currentState.julia_im;
+    jre += dre;
+    jim += dim;
+    jreInput.value = jre.toFixed(14);
+    jimInput.value = jim.toFixed(14);
+    if (Module._wasm_set_state) {
+        Module._wasm_set_state(1, jre, jim, _currentState.iters, _currentState.palette_idx);
+    }
+}
+
+function toggleJuliaLock() {
+    if (Module._wasm_toggle_julia_lock) {
+        Module._wasm_toggle_julia_lock();
+        const locked = Module._wasm_is_julia_locked();
+        document.getElementById('setJuliaLockBtn').textContent = locked ? 'locked 🔒' : 'unlocked';
+    }
+}
+
+function changeFractalMode(val) {
+    const targetJulia = (val === 'julia');
+    const targetShip = (val === 'ship');
+    
+    if (_currentState.burning_ship_mode && !targetShip && Module._wasm_toggle_burning_ship) {
+        Module._wasm_toggle_burning_ship();
+    }
+    if (_currentState.julia_mode && !targetJulia && Module._wasm_toggle_julia) {
+        Module._wasm_toggle_julia();
+    }
+    if (!_currentState.burning_ship_mode && targetShip && Module._wasm_toggle_burning_ship) {
+        Module._wasm_toggle_burning_ship();
+    }
+    if (!_currentState.julia_mode && targetJulia && Module._wasm_toggle_julia) {
+        Module._wasm_toggle_julia();
+    }
+}
+
+function changePalette(val) {
+    const idx = parseInt(val);
+    if (Module._wasm_set_palette) {
+        Module._wasm_set_palette(idx);
     }
 }
 
 // global state for just-in-time URL generation
 let _currentState = {
-    julia_mode: false, iters: 500, zoom: 3.0,
+    julia_mode: false, burning_ship_mode: false, iters: 500, zoom: 3.0,
     center_re: -0.5, center_im: 0.0, palette_idx: 0,
     julia_re: 0.0, julia_im: 0.0
 };
 
-window.updateDebugInfo = function (gpu_mode, julia_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision) {
-    let engine = julia_mode ? "julia" : "mandelbrot";
+window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision) {
+    let engine = "mandelbrot";
+    if (julia_mode) engine = "julia";
+    else if (burning_ship_mode) engine = "burning ship";
+
     if (gpu_mode) engine += high_precision ? " (gpu 64-bit)" : " (gpu 32-bit)";
     else engine += " (cpu)";
 
@@ -62,7 +204,7 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, max_iters, zoom, center
     debugInfo.textContent = html;
 
     // store state instead of updating URL constantly
-    _currentState = { julia_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
+    _currentState = { julia_mode, burning_ship_mode: !!burning_ship_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
 
     // sync UI buttons from C's authoritative state (handles keyboard shortcuts too)
     const gpuNow = !!gpu_mode;
@@ -79,6 +221,59 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, max_iters, zoom, center
     // fix #4: show/hide E=64-bit hint based on GPU mode
     const helpE = document.getElementById('help-e-hint');
     if (helpE) helpE.style.display = _gpuMode ? '' : 'none';
+
+    // update tour state button text
+    _tourActive = (tour_phase !== 0);
+    document.getElementById('tourBtn').textContent = _tourActive ? 'stop tour' : 'tour';
+
+    // sync settings widgets
+    const setPalette = document.getElementById('setPaletteSelect');
+    if (setPalette) setPalette.value = palette_idx;
+    
+    const setIters = document.getElementById('setIterationsVal');
+    if (setIters) setIters.textContent = max_iters;
+
+    if (_settingsOpen) {
+        const reInput = document.getElementById('setCenterRe');
+        if (reInput && document.activeElement !== reInput) {
+            reInput.value = center_re.toFixed(14);
+        }
+        const imInput = document.getElementById('setCenterIm');
+        if (imInput && document.activeElement !== imInput) {
+            imInput.value = center_im.toFixed(14);
+        }
+        const zInput = document.getElementById('setZoom');
+        if (zInput && document.activeElement !== zInput) {
+            zInput.value = zoom.toExponential(6);
+        }
+        const jreInput = document.getElementById('setJuliaRe');
+        if (jreInput && document.activeElement !== jreInput) {
+            jreInput.value = julia_re.toFixed(14);
+        }
+        const jimInput = document.getElementById('setJuliaIm');
+        if (jimInput && document.activeElement !== jimInput) {
+            jimInput.value = julia_im.toFixed(14);
+        }
+        const lockBtn = document.getElementById('setJuliaLockBtn');
+        if (lockBtn && Module._wasm_is_julia_locked) {
+            const locked = Module._wasm_is_julia_locked();
+            lockBtn.textContent = locked ? 'locked 🔒' : 'unlocked';
+        }
+        const juliaRow = document.getElementById('setJuliaCoordsRow');
+        if (juliaRow) {
+            juliaRow.style.display = julia_mode ? 'flex' : 'none';
+        }
+        const setMode = document.getElementById('setFractalModeSelect');
+        if (setMode) {
+            if (julia_mode) setMode.value = 'julia';
+            else if (burning_ship_mode) setMode.value = 'ship';
+            else setMode.value = 'mandelbrot';
+        }
+        const setTour = document.getElementById('setTourBtn');
+        if (setTour) {
+            setTour.textContent = _tourActive ? 'stop tour' : 'start tour';
+        }
+    }
 };
 
 function updateURL() {
@@ -278,20 +473,33 @@ var Module = {
             if (e.touches.length === 0) isPinching = false;
         }, { passive: false });
     }],
-    print: (text) => console.log(text),
+    print: (text) => {
+        console.log(text);
+        addLog(text);
+    },
+    printErr: (text) => {
+        console.error(text);
+        addLog("[stderr] " + text);
+    },
     canvas: canvas,
     setStatus: (text) => {
         if (!text) {
+            addLog("[loader] WebAssembly runtime initialized.");
+            addLog("[loader] starting mandelbrot rendering engine...");
             loadingScreen.style.opacity = '0';
             setTimeout(() => loadingScreen.style.display = 'none', 600);
         } else {
             statusText.textContent = text;
+            addLog(`[loader] ${text}`);
         }
     },
     totalDependencies: 0,
     monitorRunDependencies: function(left) {
         this.totalDependencies = Math.max(this.totalDependencies || 0, left);
-        Module.setStatus(left ? `loading dependencies (${this.totalDependencies - left}/${this.totalDependencies})...` : '');
+        if (left) {
+            const msg = `dependency download progress: ${this.totalDependencies - left}/${this.totalDependencies}`;
+            Module.setStatus(msg);
+        }
     }
 };
 
