@@ -12,6 +12,7 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "tour.h"
+#include "bookmark.h"
 
 typedef struct {
     ViewState mandelbrot_view;
@@ -97,7 +98,7 @@ int main(int argc, char* argv[]) {
     TourState m_tour = {TOUR_IDLE, 0, 0, 0, 0, 0, 0, 0, -1};
     JuliaTourState j_tour = {JULIA_TOUR_IDLE, 0, 0, 0, 0, 0, -1};
 
-    int julia_mode = 0;
+    int julia_mode = 0, burning_ship_mode = 0;
     complex_t julia_c = {-0.7, 0.27};
     JuliaSession julia_session = {{0}, 0};
 
@@ -111,6 +112,7 @@ int main(int argc, char* argv[]) {
     SDL_Rect zoom_rect = {0};
     Uint32 render_time = 0;
     int screenshot_requested = 0;
+    int current_bookmark_idx = -1;
 
     init_renderer(max_iterations, palette_idx);
     print_controls();
@@ -187,9 +189,52 @@ int main(int argc, char* argv[]) {
                         }
                         needs_redraw = 1;
 
+                    } else if (event.key.keysym.sym == SDLK_b) {
+                        burning_ship_mode = !burning_ship_mode;
+                        julia_mode = 0;
+                        julia_session.active = 0;
+                        m_tour.phase = TOUR_IDLE;
+                        j_tour.phase = JULIA_TOUR_IDLE;
+                        view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+                        history_count = 0;
+                        SDL_SetWindowTitle(window, burning_ship_mode ? "Burning Ship Explorer" : "Mandelbrot Explorer");
+                        needs_redraw = 1;
+
                     } else if (event.key.keysym.sym == SDLK_s) {
                         screenshot_requested = 1;
 
+                    } else if (event.key.keysym.sym == SDLK_m) {
+                        Bookmark b = {
+                            .center_re = view.center_re,
+                            .center_im = view.center_im,
+                            .zoom = view.zoom,
+                            .max_iterations = max_iterations,
+                            .fractal_type = julia_mode ? 1 : (burning_ship_mode ? 2 : 0),
+                            .julia_c = julia_c
+                        };
+                        save_bookmark(&b);
+                        printf("Bookmark saved!\n");
+                    } else if (event.key.keysym.sym == SDLK_l) {
+                        Bookmark b;
+                        int count = get_bookmark_count();
+                        if (count > 0) {
+                            if (history_count < MAX_HISTORY_SIZE) history[history_count++] = view;
+                            current_bookmark_idx = (current_bookmark_idx + 1) % count;
+                            if (load_bookmark(current_bookmark_idx, &b)) {
+                                view.center_re = b.center_re;
+                                view.center_im = b.center_im;
+                                view.zoom = b.zoom;
+                                max_iterations = b.max_iterations;
+                                julia_mode = (b.fractal_type == 1);
+                                burning_ship_mode = (b.fractal_type == 2);
+                                julia_c = b.julia_c;
+                                m_tour.phase = TOUR_IDLE;
+                                j_tour.phase = JULIA_TOUR_IDLE;
+                                init_renderer(max_iterations, palette_idx);
+                                needs_redraw = 1;
+                                printf("Loaded bookmark %d/%d\n", current_bookmark_idx + 1, count);
+                            }
+                        }
                     } else if (event.key.keysym.sym == SDLK_UP) {
                         int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
                         if (max_iterations + step <= MAX_ITERATIONS_LIMIT) {
@@ -358,6 +403,9 @@ int main(int argc, char* argv[]) {
             if (julia_mode)
                 render_julia_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_min, im_max,
                                       julia_c, max_iterations);
+            else if (burning_ship_mode)
+                render_burning_ship_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_min,
+                                             im_max, max_iterations);
             else
                 render_mandelbrot_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_min,
                                            im_max, max_iterations);
@@ -404,7 +452,7 @@ int main(int argc, char* argv[]) {
             /* line 1: engine | mode | threads | render */
             int num_threads = get_actual_thread_count();
             snprintf(buf, sizeof(buf), "cpu | %s | threads: %d | render: %u ms",
-                     julia_mode ? "julia" : "mandelbrot", num_threads, render_time);
+                     julia_mode ? "julia" : (burning_ship_mode ? "burning ship" : "mandelbrot"), num_threads, render_time);
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
