@@ -53,6 +53,9 @@ static int pick_idx(int last, int count) {
 
 void update_tour(TourState* state, ViewState* view, uint32_t now) {
     if (state->phase == TOUR_IDLE) return;
+    if (state->phase_start == 0) {
+        state->phase_start = now;
+    }
 
     double duration = (state->phase == TOUR_PANNING)      ? TOUR_PAN_MS
                       : (state->phase == TOUR_ZOOMING_IN) ? TOUR_ZOOM_IN_MS
