@@ -13,29 +13,125 @@
     <div id="loading-screen">
         <div class="spinner"></div>
         <div id="status">initializing engine...</div>
+        <div id="loading-log"></div>
     </div>
 
     <canvas id="canvas" oncontextmenu="event.preventDefault()"></canvas>
 
-    <div id="toolbar">
-        <button onclick="Module._wasm_reset_view()">reset</button>
-        <button onclick="Module._wasm_undo_zoom()">undo</button>
-        <button onclick="toggleTour()" id="tourBtn">tour</button>
-        <button onclick="Module._wasm_next_palette()" id="paletteBtn">palette</button>
-        <button onclick="toggleGpu()" id="gpuBtn">gpu ✓</button>
-        <button onclick="togglePrecision()" id="precisionBtn">32-bit</button>
-        <button onclick="Module._wasm_toggle_julia()" id="juliaBtn">julia</button>
-        <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
-        <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
-        <button onclick="copyLink()" id="copyBtn">copy link</button>
-        <button onclick="downloadScreenshot()">screenshot</button>
+    <div id="ui-overlay">
+        <div id="toolbar">
+            <button onclick="Module._wasm_reset_view()">reset</button>
+            <button onclick="Module._wasm_undo_zoom()">undo</button>
+            <button onclick="toggleTour()" id="tourBtn">tour</button>
+            <button onclick="Module._wasm_next_palette()" id="paletteBtn">palette</button>
+            <button onclick="toggleGpu()" id="gpuBtn">gpu ✓</button>
+            <button onclick="togglePrecision()" id="precisionBtn">32-bit</button>
+            <button onclick="Module._wasm_toggle_julia()" id="juliaBtn">julia</button>
+            <button onclick="Module._wasm_toggle_burning_ship()" id="shipBtn">ship</button>
+            <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
+            <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
+            <button onclick="copyLink()" id="copyBtn">copy link</button>
+            <button onclick="downloadScreenshot()">screenshot</button>
+            <button onclick="toggleSettings()" id="settingsBtn">settings ⚙</button>
+        </div>
+        <div id="debug-info"></div>
     </div>
 
-    <div id="debug-info"></div>
+    <div id="settings-panel">
+        <div class="settings-title">--- settings ---</div>
+        <div class="settings-row">
+            <span>engine:</span>
+            <button onclick="toggleGpu()" id="setGpuBtn">cpu</button>
+        </div>
+        <div class="settings-row" id="setPrecisionRow">
+            <span>precision:</span>
+            <button onclick="togglePrecision()" id="setPrecisionBtn">32-bit</button>
+        </div>
+        <div class="settings-row">
+            <span>mode:</span>
+            <select onchange="changeFractalMode(this.value)" id="setFractalModeSelect">
+                <option value="mandelbrot">mandelbrot</option>
+                <option value="julia">julia</option>
+                <option value="ship">burning ship</option>
+            </select>
+        </div>
+        <div class="settings-row">
+            <span>palette:</span>
+            <select onchange="changePalette(this.value)" id="setPaletteSelect">
+                <option value="0">sine wave</option>
+                <option value="1">ultra fractal</option>
+                <option value="2">rainbow</option>
+                <option value="3">fire</option>
+                <option value="4">electric</option>
+                <option value="5">ice</option>
+                <option value="6">green</option>
+                <option value="7">monochrome</option>
+                <option value="8">cyclic</option>
+            </select>
+        </div>
+        <div class="settings-row">
+            <span>iterations:</span>
+            <div style="display: flex; gap: 6px; align-items: center;">
+                <button onclick="Module._wasm_adjust_iterations(-100)">-100</button>
+                <span id="setIterationsVal">500</span>
+                <button onclick="Module._wasm_adjust_iterations(100)">+100</button>
+            </div>
+        </div>
+
+        <div class="settings-title" style="margin-top: 6px;">--- coordinates ---</div>
+        <div class="settings-row">
+            <span>center re:</span>
+            <input type="text" id="setCenterRe" style="width: 140px;" onchange="updateCoordinatesFromSettings()">
+        </div>
+        <div class="settings-row">
+            <span>center im:</span>
+            <input type="text" id="setCenterIm" style="width: 140px;" onchange="updateCoordinatesFromSettings()">
+        </div>
+        <div class="settings-row">
+            <span>zoom:</span>
+            <input type="text" id="setZoom" style="width: 140px;" onchange="updateCoordinatesFromSettings()">
+        </div>
+
+        <div id="setJuliaCoordsRow" style="display: none; flex-direction: column; gap: 8px;">
+            <div class="settings-title" style="margin-top: 6px; border-bottom: none;">--- julia constant ---</div>
+            <div class="settings-row">
+                <span>julia re:</span>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    <button onclick="adjustJuliaC(-0.01, 0)">-</button>
+                    <input type="text" id="setJuliaRe" style="width: 80px;" onchange="updateCoordinatesFromSettings()">
+                    <button onclick="adjustJuliaC(0.01, 0)">+</button>
+                </div>
+            </div>
+            <div class="settings-row">
+                <span>julia im:</span>
+                <div style="display: flex; gap: 4px; align-items: center;">
+                    <button onclick="adjustJuliaC(0, -0.01)">-</button>
+                    <input type="text" id="setJuliaIm" style="width: 80px;" onchange="updateCoordinatesFromSettings()">
+                    <button onclick="adjustJuliaC(0, 0.01)">+</button>
+                </div>
+            </div>
+            <div class="settings-row">
+                <span>track pointer:</span>
+                <button onclick="toggleJuliaLock()" id="setJuliaLockBtn">unlocked</button>
+            </div>
+        </div>
+
+        <div class="settings-title" style="margin-top: 6px;">--- actions ---</div>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+            <button onclick="Module._wasm_reset_view()">reset view</button>
+            <button onclick="Module._wasm_undo_zoom()">undo zoom</button>
+            <button onclick="toggleTour()" id="setTourBtn">start tour</button>
+            <button onclick="downloadScreenshot()">screenshot</button>
+            <button onclick="copyLink()" id="setCopyBtn" style="grid-column: span 2;">copy shareable link</button>
+        </div>
+
+        <button onclick="toggleSettings()" class="settings-close">close</button>
+    </div>
+
     <div id="zoom-box"></div>
 
     <div id="info">
-        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | T=Tour | G=GPU | <span id="help-e-hint">E=64-bit | </span>S=Shot | Ctrl+Z=Undo | Arrows=Iter</span>
+        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | B=Ship | T=Tour | G=GPU | <span id="help-e-hint">E=64-bit | </span>S=Shot | Ctrl+Z=Undo | Arrows=Iter</span>
         <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
     </div>
 
