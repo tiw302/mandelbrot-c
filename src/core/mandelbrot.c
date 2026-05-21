@@ -1,6 +1,8 @@
 #include "core_math.h"
 
+#ifdef __AVX2__
 #include <immintrin.h>
+#endif
 #include <math.h>
 #include <stdint.h>
 
@@ -36,8 +38,10 @@ double mandelbrot_check(complex_t c, int max_iterations) {
         if (zre2 + zim2 > escape_radius_sq) {
             /* smooth (fractional) coloring formula:
              * removes banding by interpolating the exact escape point
-             * continuously rather than in discrete integer steps. */
-            return (double)iterations + 2.0 - log2(log(zre2 + zim2));
+             * continuously rather than in discrete integer steps.
+             * fmax guards against log(0) when mag is exactly 1.0. */
+            double mag = zre2 + zim2;
+            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag)));
         }
 
         z.im = 2.0 * z.re * z.im + c.im;
@@ -105,7 +109,7 @@ void mandelbrot_check_avx2(const double* re, const double* im, int max_iteration
         if (res_in_set[i] || res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
         }
     }
 }
@@ -148,6 +152,9 @@ void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_i
         v128_t mag_sq = wasm_f64x2_add(zre2, zim2);
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
+
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * arguments are intentionally swapped vs the avx2 path above. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -169,7 +176,7 @@ void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_i
         if (res_in_set[i] || res_iters[i] >= max_iterations - 1) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(res_mag_sq[i]));
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
         }
     }
 }
@@ -196,7 +203,7 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
         simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
         
         if (mag_hi > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(mag_hi));
+            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
         }
         
         simd_f128 zre_zim = simd_f128_mul(zre, zim);
