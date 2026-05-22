@@ -53,6 +53,7 @@ typedef struct {
     /* pool metadata */
     int        thread_count;
     int        shutdown;
+    int        use_128bit;
 
     /* synchronization */
     pthread_mutex_t mutex;
@@ -65,6 +66,7 @@ typedef struct {
 static RenderPool  pool               = {0};
 static pthread_t*  threads_pool       = NULL;
 static int         actual_thread_count = 0;
+static int         requested_128bit    = 0;
 
 /* cpu core detection */
 static int get_cpu_cores(void) {
@@ -95,42 +97,46 @@ int get_actual_thread_count(void)  { return actual_thread_count; }
 /* row processing — called from worker threads (and directly on wasm) */
 static void process_rows(void) {
 #ifdef USE_SIMD_F128
-    simd_f128 re_min = simd_f128_from_double(pool.re_min);
-    simd_f128 im_min = simd_f128_from_double(pool.im_min);
-    simd_f128 re_factor = simd_f128_from_double((pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0);
-    simd_f128 im_factor = simd_f128_from_double((pool.window_height > 0) ? (pool.im_max - pool.im_min) / pool.window_height : 0.0);
-    
-    simd_f128 julia_cre = simd_f128_from_double(pool.julia_c.re);
-    simd_f128 julia_cim = simd_f128_from_double(pool.julia_c.im);
+    if (pool.use_128bit) {
+        simd_f128 re_min = simd_f128_from_double(pool.re_min);
+        simd_f128 im_min = simd_f128_from_double(pool.im_min);
+        simd_f128 re_factor = simd_f128_from_double((pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0);
+        simd_f128 im_factor = simd_f128_from_double((pool.window_height > 0) ? (pool.im_max - pool.im_min) / pool.window_height : 0.0);
+        
+        simd_f128 julia_cre = simd_f128_from_double(pool.julia_c.re);
+        simd_f128 julia_cim = simd_f128_from_double(pool.julia_c.im);
 
-    int y;
-    while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
-        if (pool.shutdown) break;
-        simd_f128 y_128 = simd_f128_from_double((double)y);
-        simd_f128 y_im = simd_f128_add(im_min, simd_f128_mul(y_128, im_factor));
+        int y;
+        while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
+            if (pool.shutdown) break;
+            simd_f128 y_128 = simd_f128_from_double((double)y);
+            simd_f128 y_im = simd_f128_add(im_min, simd_f128_mul(y_128, im_factor));
 
-        for (int x = 0; x < pool.window_width; x++) {
-            simd_f128 x_128 = simd_f128_from_double((double)x);
-            simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
+            for (int x = 0; x < pool.window_width; x++) {
+                simd_f128 x_128 = simd_f128_from_double((double)x);
+                simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
 
-            double iterations;
-            if (pool.mode == RENDER_JULIA)
-                iterations = julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
-            else if (pool.mode == RENDER_BURNING_SHIP)
-                iterations = burning_ship_check_f128(x_re, y_im, pool.max_iterations);
-            else
-                iterations = mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
+                double iterations;
+                if (pool.mode == RENDER_JULIA)
+                    iterations = julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
+                else if (pool.mode == RENDER_BURNING_SHIP)
+                    iterations = burning_ship_check_f128(x_re, y_im, pool.max_iterations);
+                else
+                    iterations = mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
 
-            uint8_t r, g, b;
-            get_color(iterations, pool.max_iterations, &r, &g, &b);
+                uint8_t r, g, b;
+                get_color(iterations, pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-            pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] = (0xFF << 24) | (b << 16) | (g << 8) | r;
+                pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] = (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-            pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
+                pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
+            }
         }
+        return;
     }
-#else
+#endif
+
     double re_factor = (pool.window_width  > 0)
                      ? (pool.re_max - pool.re_min) / pool.window_width  : 0.0;
     double im_factor = (pool.window_height > 0)
@@ -227,7 +233,6 @@ static void process_rows(void) {
 #endif
         }
     }
-#endif
 }
 
 /* persistent worker thread — parks between frames, wakes on broadcast */
@@ -323,6 +328,7 @@ static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_h
     pool.mode           = mode;
     pool.julia_c        = julia_c;
     pool.max_iterations = max_iterations;
+    pool.use_128bit     = requested_128bit;
     atomic_store(&pool.next_row, 0);
 
 #if defined(__EMSCRIPTEN__)
@@ -364,3 +370,12 @@ void render_burning_ship_threaded(uint32_t* pixels, int pitch, int window_width,
 
 /* legacy symbol — kept so existing call sites in main files compile unchanged */
 void* render_thread(void* arg) { (void)arg; process_rows(); return NULL; }
+
+/* dynamic precision control */
+void set_cpu_precision(int use_128bit) {
+    requested_128bit = use_128bit;
+}
+
+int get_cpu_precision(void) {
+    return requested_128bit;
+}
