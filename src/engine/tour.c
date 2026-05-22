@@ -112,6 +112,8 @@ void start_tour(TourState* state, ViewState* view) {
     state->home_im = view->center_im;
     state->home_zoom = view->zoom;
     state->deep_zoom = view->zoom / TOUR_ZOOM_DEPTH;
+    state->target_re = view->center_re;
+    state->target_im = view->center_im;
     state->phase = TOUR_ZOOMING_OUT;
     state->phase_start = 0;
 }
