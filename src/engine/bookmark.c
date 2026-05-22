@@ -9,32 +9,38 @@
 
 /* very simple json writer to avoid pulling in a full json library for just one feature */
 void save_bookmark(const Bookmark* b) {
-    FILE* f = fopen(BOOKMARKS_FILE, "a+");
-    if (!f) return;
-
-    /* check if file is empty */
-    fseek(f, 0, SEEK_END);
-    long size = ftell(f);
-    if (size == 0) {
+    FILE* f = fopen(BOOKMARKS_FILE, "r+");
+    if (!f) {
+        /* file does not exist, open in write mode to create it */
+        f = fopen(BOOKMARKS_FILE, "w");
+        if (!f) return;
         fprintf(f, "[\n");
     } else {
-        /* scan backwards for the closing ']' — handles crlf line endings
-         * and any trailing whitespace after manual edits. */
-        long pos = size;
-        int found = 0;
-        while (pos > 0) {
-            fseek(f, --pos, SEEK_SET);
-            int ch = fgetc(f);
-            if (ch == ']') {
-                fseek(f, pos, SEEK_SET);
-                fprintf(f, ",\n");
-                found = 1;
-                break;
+        /* check if file is empty */
+        fseek(f, 0, SEEK_END);
+        long size = ftell(f);
+        if (size <= 2) {
+            fseek(f, 0, SEEK_SET);
+            fprintf(f, "[\n");
+        } else {
+            /* scan backwards for the closing ']' — handles crlf line endings
+             * and any trailing whitespace after manual edits. */
+            long pos = size;
+            int found = 0;
+            while (pos > 0) {
+                fseek(f, --pos, SEEK_SET);
+                int ch = fgetc(f);
+                if (ch == ']') {
+                    fseek(f, pos, SEEK_SET);
+                    fprintf(f, ",\n");
+                    found = 1;
+                    break;
+                }
             }
-        }
-        if (!found) {
-            fclose(f);
-            return;
+            if (!found) {
+                /* fallback: just seek to the end if no closing bracket is found */
+                fseek(f, 0, SEEK_END);
+            }
         }
     }
 
