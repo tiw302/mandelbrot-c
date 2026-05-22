@@ -20,6 +20,7 @@
 #include "config.h"
 #include "core_math.h"
 #include "renderer.h"
+#include "color.h"
 #include "sokol/sokol_app.h"
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
@@ -427,12 +428,18 @@ static void event(const sapp_event* ev) {
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_UP) {
-            ctx.max_iterations += 10;
+            int step = ctx.max_iterations / 10;
+            if (step < 10) step = 10;
+            
+            ctx.max_iterations += step;
             if (ctx.max_iterations > 10000) ctx.max_iterations = 10000;
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_DOWN) {
-            ctx.max_iterations -= 10;
+            int step = ctx.max_iterations / 10;
+            if (step < 10) step = 10;
+            
+            ctx.max_iterations -= step;
             if (ctx.max_iterations < 10) ctx.max_iterations = 10;
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
@@ -467,6 +474,7 @@ static void event(const sapp_event* ev) {
 static void cleanup(void) {
     free(ctx.pixels);
     cleanup_renderer();
+    cleanup_color_palette();
     sg_shutdown();
 }
 
@@ -517,14 +525,14 @@ void wasm_toggle_tour(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
-    ctx.palette_idx = (ctx.palette_idx + 1) % 9;
+    ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_palette(int idx) {
-    if (idx >= 0 && idx < 9) {
+    if (idx >= 0 && idx < PALETTE_COUNT) {
         ctx.palette_idx = idx;
         init_renderer(ctx.max_iterations, ctx.palette_idx);
         ctx.needs_redraw = 1;
