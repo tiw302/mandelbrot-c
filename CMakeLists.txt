@@ -25,7 +25,7 @@ else()
 endif()
 
 # include paths
-include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd_f128)
+include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128)
 
 # common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/burning_ship.c src/core/color.c)
