@@ -10,6 +10,7 @@
 #include "bookmark.h"
 #include "color.h"
 #include "config.h"
+#include "ini_config.h"
 #include "julia.h"
 #include "mandelbrot.h"
 #include "renderer.h"
@@ -30,6 +31,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 #include "desktop_gpu_shaders.h"
 #include "tour.h"
@@ -90,6 +92,7 @@ typedef struct {
     TourState m_tour;
     JuliaTourState j_tour;
     int julia_mode, gpu_mode, high_precision_mode, burning_ship_mode;
+    int cpu_precision_128;
     complex_t julia_c;
     JuliaSession julia_session;
 
@@ -223,23 +226,28 @@ static void init(void) {
 
     ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
     ctx.julia_c = (complex_t){-0.7, 0.27};
-    ctx.max_iterations = DEFAULT_ITERATIONS;
+    ctx.max_iterations = get_config_default_iterations();
+    ctx.palette_idx = get_config_default_palette();
     ctx.gpu_mode = 1;
+    ctx.cpu_precision_128 = 0;
     ctx.m_tour = (TourState){TOUR_IDLE, 0, 0, 0, 0, 0, 0, 0, -1};
     ctx.j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0, 0, 0, 0, 0, -1};
     init_renderer(ctx.max_iterations, ctx.palette_idx);
+    set_cpu_precision(ctx.cpu_precision_128);
     ctx.needs_redraw = 1;
 
     /* seed rng for random tour target selection */
     srand((unsigned)time(NULL));
 
     puts("mandelbrot explorer");
-    puts("  left drag   : zoom selection  right drag : pan");
-    puts("  scroll      : zoom at cursor  ctrl+z     : undo");
-    puts("  up/down     : iterations      shift+up/dn: x100");
-    puts("  p           : cycle palette   r          : reset");
-    puts("  j           : julia mode      t          : tour");
-    puts("  e           : toggle 64-bit   s          : screenshot");
+    puts("  left drag   : zoom selection  right drag  : pan");
+    puts("  scroll      : zoom at cursor  ctrl+z      : undo");
+    puts("  up/down     : iterations      shift+up/dn : x100");
+    puts("  p           : cycle palette   r           : reset");
+    puts("  e           : toggle precision (64/128-bit on CPU, 32/64-bit on GPU)");
+    puts("  j           : julia mode      t           : tour");
+    puts("  b           : burning ship    s           : screenshot");
+    puts("  m           : save bookmark   l           : load bookmark");
     puts("  q / esc     : quit");
 }
 
@@ -257,6 +265,7 @@ static void frame(void) {
 
     /* cpu fallback: render into pixel buffer and upload to gpu texture */
     if (!ctx.gpu_mode && ctx.needs_redraw) {
+        set_cpu_precision(ctx.cpu_precision_128);
         double aspect = (double)ctx.win_w / ctx.win_h;
         double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2;
         double rmax = ctx.view.center_re + ctx.view.zoom * aspect / 2;
@@ -334,14 +343,17 @@ static void frame(void) {
 
     /* debug info background with blending */
     sgl_load_pipeline(ctx.pip_blend);
-    int num_lines =
-        3 + (ctx.m_tour.phase != TOUR_IDLE ? 1 : 0) + (ctx.j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
-    float visual_font_size = FONT_SIZE * 1.25f;
-    float lh = visual_font_size + 4.0f;
-    float bg_w = 600.0f;
-    float bg_h = num_lines * lh + 12.0f;
+    int num_lines = 3; /* base lines (3 info lines) */
+    if (ctx.m_tour.phase != TOUR_IDLE) num_lines++;
+    if (ctx.j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
+    if (is_video_recording()) num_lines++;
+    
+    float visual_font_size = FONT_SIZE * 1.26f;
+    float lh = visual_font_size + 6.0f;
+    float bg_w = 780.0f;
+    float bg_h = num_lines * lh + 20.0f;
     sgl_begin_quads();
-    sgl_c4b(0, 0, 0, 180);
+    sgl_c4b(20, 20, 25, 220); /* dark gray, semi-transparent */
     sgl_v2f(5.0f, 5.0f);
     sgl_v2f(bg_w, 5.0f);
     sgl_v2f(bg_w, bg_h);
@@ -354,50 +366,95 @@ static void frame(void) {
         fonsSetFont(ctx.fons, ctx.font_id);
         fonsSetSize(ctx.fons, visual_font_size);
         fonsSetAlign(ctx.fons, FONS_ALIGN_LEFT | FONS_ALIGN_TOP);
-        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
         float x = 15.0f, y = 12.0f;
         char buf[256];
 
-        snprintf(buf, sizeof(buf), "%s | %s | threads: %d | render: %u ms",
-                 ctx.gpu_mode ? (ctx.high_precision_mode ? "gpu (64-bit)" : "gpu (32-bit)") : "cpu",
-                 ctx.julia_mode ? "julia" : (ctx.burning_ship_mode ? "burning ship" : "mandelbrot"),
+        /* line 1: engine | mode | threads | render */
+        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
+        const char* engine_name = "CPU (64-bit)";
+        if (ctx.gpu_mode) {
+            engine_name = ctx.high_precision_mode ? "GPU (64-bit)" : "GPU (32-bit)";
+        } else {
+#ifdef USE_SIMD_F128
+            engine_name = ctx.cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
+#endif
+        }
+        snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms",
+                 engine_name,
+                 ctx.julia_mode ? "Julia" : (ctx.burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
                  get_actual_thread_count(), ctx.render_time_ms);
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
+        /* line 2: coordinates */
         if (ctx.julia_mode) {
-            snprintf(buf, sizeof(buf), "c: (%.14f, %.14f)", ctx.julia_c.re, ctx.julia_c.im);
+            snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx.julia_c.re, ctx.julia_c.im);
         } else {
-            snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", ctx.view.center_re,
+            snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", ctx.view.center_re,
                      ctx.view.center_im);
         }
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
-        snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s", ctx.view.zoom,
+        /* line 3: render params */
+        snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", ctx.view.zoom,
                  ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx % PALETTE_COUNT]);
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
+        /* auto-tour info */
         if (ctx.m_tour.phase != TOUR_IDLE) {
-            snprintf(buf, sizeof(buf), "auto-zoom [%s] target #%d",
+            snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d",
                      get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour) + 1);
             fonsDrawText(ctx.fons, x, y, buf, NULL);
             y += lh;
         }
         if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
-            snprintf(buf, sizeof(buf), "auto-c [%s] #%d (%.4f, %.4f)",
+            snprintf(buf, sizeof(buf), "[TOUR]   Auto-C [%s] #%d",
                      ctx.j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
-                     get_julia_tour_target_idx(&ctx.j_tour) + 1, ctx.julia_c.re, ctx.julia_c.im);
+                     get_julia_tour_target_idx(&ctx.j_tour) + 1);
             fonsDrawText(ctx.fons, x, y, buf, NULL);
             y += lh;
         }
+        
+        if (is_video_recording()) {
+            fonsSetColor(ctx.fons, sfons_rgba(255, 50, 50, 255));
+            snprintf(buf, sizeof(buf), "[REC] recording video...");
+            fonsDrawText(ctx.fons, x, y, buf, NULL);
+        }
+
         sfons_flush(ctx.fons);
     }
 
     sgl_draw();
     sg_end_pass();
     sg_commit();
+
+    if (is_video_recording()) {
+        /* since sokol_gfx doesn't provide a direct way to read back the framebuffer synchronously 
+           without extensions, we render the current fractal parameters to cpu RAM instead just for the video pipe.
+           this means the video won't show the HUD, but it guarantees clean output without stalling the GPU pipe. */
+        uint32_t* buf = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
+        if (buf) {
+            double aspect = (double)ctx.win_w / ctx.win_h;
+            double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2;
+            double rmax = ctx.view.center_re + ctx.view.zoom * aspect / 2;
+            double im_top = ctx.view.center_im + ctx.view.zoom / 2;
+            double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
+            if (ctx.julia_mode)
+                render_julia_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                      im_top, im_bot, ctx.julia_c, ctx.max_iterations);
+            else if (ctx.burning_ship_mode)
+                render_burning_ship_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                             im_top, im_bot, ctx.max_iterations);
+            else
+                render_mandelbrot_threaded(buf, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+                                           im_top, im_bot, ctx.max_iterations);
+            
+            append_video_frame(buf, ctx.win_w, ctx.win_h);
+            free(buf);
+        }
+    }
 }
 
 static void event(const sapp_event* ev) {
@@ -506,7 +563,7 @@ static void event(const sapp_event* ev) {
             ctx.julia_session.active = 0;
             ctx.m_tour.phase = TOUR_IDLE;
             ctx.j_tour.phase = JULIA_TOUR_IDLE;
-            ctx.max_iterations = DEFAULT_ITERATIONS;
+            ctx.max_iterations = get_config_default_iterations();
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
             ctx.history_count = 0;
@@ -518,8 +575,13 @@ static void event(const sapp_event* ev) {
         } else if (ev->key_code == SAPP_KEYCODE_E) {
             if (ctx.gpu_mode) {
                 ctx.high_precision_mode = !ctx.high_precision_mode;
-                ctx.needs_redraw = 1;
+            } else {
+#ifdef USE_SIMD_F128
+                ctx.cpu_precision_128 = !ctx.cpu_precision_128;
+                set_cpu_precision(ctx.cpu_precision_128);
+#endif
             }
+            ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_P) {
             ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
             init_renderer(ctx.max_iterations, ctx.palette_idx);
@@ -565,6 +627,28 @@ static void event(const sapp_event* ev) {
                 save_screenshot(buf, ctx.win_w, ctx.win_h);
                 free(buf);
             }
+        } else if (ev->key_code == SAPP_KEYCODE_X) {
+            double aspect = (double)ctx.win_w / ctx.win_h;
+            double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2;
+            double rmax = ctx.view.center_re + ctx.view.zoom * aspect / 2;
+            double im_top = ctx.view.center_im + ctx.view.zoom / 2;
+            double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
+            
+            /* render a massive 8192 x 8192 screenshot */
+            int mega_w = 8192;
+            int mega_h = 8192;
+            int f_type = ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0);
+            
+            save_mega_screenshot(mega_w, mega_h, rmin, rmax, im_bot, im_top, ctx.max_iterations, 
+                                 ctx.palette_idx, f_type, ctx.julia_c);
+            
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_V) {
+            if (is_video_recording()) {
+                stop_video_recording();
+            } else {
+                start_video_recording(ctx.win_w, ctx.win_h, 60);
+            }
         } else if (ev->key_code == SAPP_KEYCODE_T) {
             if (ctx.julia_mode) {
                 if (ctx.j_tour.phase == JULIA_TOUR_IDLE) {
@@ -592,19 +676,25 @@ static void event(const sapp_event* ev) {
                 }
             }
         } else if (ev->key_code == SAPP_KEYCODE_UP) {
-            int step = mod_shift ? 100 : 10;
-            if (ctx.max_iterations + step <= MAX_ITERATIONS_LIMIT) {
+            int step = ctx.max_iterations / 10;
+            if (step < 10) step = 10;
+            if (mod_shift) step *= 10;
+            
+            if (ctx.max_iterations + step <= get_config_max_iterations_limit()) {
                 ctx.max_iterations += step;
                 init_renderer(ctx.max_iterations, ctx.palette_idx);
                 ctx.needs_redraw = 1;
             }
         } else if (ev->key_code == SAPP_KEYCODE_DOWN) {
-            int step = mod_shift ? 100 : 10;
-            if (ctx.max_iterations - step >= 10) {
-                ctx.max_iterations -= step;
-                init_renderer(ctx.max_iterations, ctx.palette_idx);
-                ctx.needs_redraw = 1;
-            }
+            int step = ctx.max_iterations / 10;
+            if (step < 10) step = 10;
+            if (mod_shift) step *= 10;
+            
+            ctx.max_iterations -= step;
+            if (ctx.max_iterations < 10) ctx.max_iterations = 10;
+            
+            init_renderer(ctx.max_iterations, ctx.palette_idx);
+            ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_B) {
             /* toggle burning ship fractal */
             ctx.burning_ship_mode = !ctx.burning_ship_mode;
@@ -653,8 +743,10 @@ static void event(const sapp_event* ev) {
 }
 
 static void cleanup(void) {
+    if (is_video_recording()) stop_video_recording();
     free(ctx.pixels);
     cleanup_renderer();
+    cleanup_color_palette();
     sfons_destroy(ctx.fons);
     sgl_shutdown();
     sg_shutdown();
@@ -663,12 +755,20 @@ static void cleanup(void) {
 sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
+    
+#if !defined(_WIN32)
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
+    /* try to load configuration from file */
+    load_config_from_file("settings.txt");
+    
     return (sapp_desc){.init_cb = init,
                        .frame_cb = frame,
                        .cleanup_cb = cleanup,
                        .event_cb = event,
-                       .width = WINDOW_WIDTH,
-                       .height = WINDOW_HEIGHT,
+                       .width = get_config_window_width(),
+                       .height = get_config_window_height(),
                        .window_title = "Mandelbrot GPU Explorer",
                        .high_dpi = false};
 }
