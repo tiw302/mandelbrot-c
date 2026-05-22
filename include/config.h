@@ -4,7 +4,7 @@
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 768
 
-#define DEFAULT_ITERATIONS 500
+#define DEFAULT_ITERATIONS 1200
 #define MAX_ITERATIONS_LIMIT 10000
 
 #define ESCAPE_RADIUS 10.0
@@ -12,7 +12,7 @@
 #define DEFAULT_THREAD_COUNT 0   /* 0 = auto-detect from cpu cores */
 
 #define DEBUG_INFO 1
-#define FONT_SIZE 16
+#define FONT_SIZE 15
 #define DEFAULT_PALETTE 0
 
 #define FONT_PATH_LOCAL "assets/fonts/font.ttf"
