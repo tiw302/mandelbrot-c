@@ -147,6 +147,11 @@ static const char* dg_fs_gpu =
     "    vec2 c_val_y = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;\n"
     "    vec2 zx = (u_fractal_type == 1.0) ? px : vec2(0.0);\n"
     "    vec2 zy = (u_fractal_type == 1.0) ? py : vec2(0.0);\n"
+    "    if (u_fractal_type < 0.5) {\n"
+    "      float cr = px.x - 0.25, ci2 = py.x*py.x, q = cr*cr+ci2;\n"
+    "      if (q*(q+cr) <= 0.25*ci2) { i = m; }\n"
+    "      else { float cr1 = px.x+1.0; if (cr1*cr1+ci2 <= 0.0625) i = m; }\n"
+    "    }\n"
     /* gpu loop cap: glsl requires a compile-time constant loop bound on many
      * drivers. 2000 is a safe limit for broad gpu compatibility. if u_iters
      * exceeds this the shader will silently stop early — for deeper iteration
