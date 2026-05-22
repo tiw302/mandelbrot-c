@@ -73,3 +73,7 @@ screenshot_*.tga
 # temporary scripts
 tests/test_math
 tests/test_math_f128
+
+# user data & local configuration
+settings.txt
+bookmarks.json
