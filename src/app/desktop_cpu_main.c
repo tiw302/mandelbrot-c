@@ -5,14 +5,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <time.h>
+#include <signal.h>
 
 #include "config.h"
+#include "ini_config.h"
 #include "julia.h"
 #include "mandelbrot.h"
 #include "renderer.h"
 #include "screenshot.h"
 #include "tour.h"
 #include "bookmark.h"
+#include "color.h"
 
 typedef struct {
     ViewState mandelbrot_view;
@@ -35,6 +38,10 @@ int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
 
+#if !defined(_WIN32)
+    signal(SIGPIPE, SIG_IGN);
+#endif
+
     if (argc > 1) {
         if (strcmp(argv[1], "--version") == 0 || strcmp(argv[1], "-v") == 0) {
             printf("mandelbrot-c 3.0.0\n");
@@ -48,14 +55,17 @@ int main(int argc, char* argv[]) {
 
     srand((unsigned)time(NULL));
 
+    /* try to load configuration from file */
+    load_config_from_file("settings.txt");
+
     if (SDL_Init(SDL_INIT_VIDEO) != 0) return 1;
     if (TTF_Init() == -1) {
         SDL_Quit();
         return 1;
     }
 
-    int win_w = WINDOW_WIDTH;
-    int win_h = WINDOW_HEIGHT;
+    int win_w = get_config_window_width();
+    int win_h = get_config_window_height();
 
     SDL_Window* window =
         SDL_CreateWindow("Mandelbrot Explorer", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
@@ -102,8 +112,8 @@ int main(int argc, char* argv[]) {
     complex_t julia_c = {-0.7, 0.27};
     JuliaSession julia_session = {{0}, 0};
 
-    int max_iterations = DEFAULT_ITERATIONS;
-    int palette_idx = DEFAULT_PALETTE;
+    int max_iterations = get_config_default_iterations();
+    int palette_idx = get_config_default_palette();
     int running = 1;
     int needs_redraw = 1;
     int is_panning = 0, is_zooming = 0;
@@ -112,9 +122,12 @@ int main(int argc, char* argv[]) {
     SDL_Rect zoom_rect = {0};
     Uint32 render_time = 0;
     int screenshot_requested = 0;
+    int mega_screenshot_requested = 0;
     int current_bookmark_idx = -1;
+    int cpu_precision_128 = 0;
 
     init_renderer(max_iterations, palette_idx);
+    set_cpu_precision(cpu_precision_128);
     print_controls();
 
     while (running) {
@@ -158,7 +171,7 @@ int main(int argc, char* argv[]) {
                         julia_session.active = 0;
                         m_tour.phase = TOUR_IDLE;
                         j_tour.phase = JULIA_TOUR_IDLE;
-                        max_iterations = DEFAULT_ITERATIONS;
+                        max_iterations = get_config_default_iterations();
                         /* keep palette_idx as is */
                         init_renderer(max_iterations, palette_idx);
                         view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
@@ -203,6 +216,16 @@ int main(int argc, char* argv[]) {
                     } else if (event.key.keysym.sym == SDLK_s) {
                         screenshot_requested = 1;
 
+                    } else if (event.key.keysym.sym == SDLK_x) {
+                        mega_screenshot_requested = 1;
+
+                    } else if (event.key.keysym.sym == SDLK_v) {
+                        if (is_video_recording()) {
+                            stop_video_recording();
+                        } else {
+                            start_video_recording(win_w, win_h, 60); /* default 60fps for now */
+                        }
+
                     } else if (event.key.keysym.sym == SDLK_m) {
                         Bookmark b = {
                             .center_re = view.center_re,
@@ -236,25 +259,38 @@ int main(int argc, char* argv[]) {
                             }
                         }
                     } else if (event.key.keysym.sym == SDLK_UP) {
-                        int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
-                        if (max_iterations + step <= MAX_ITERATIONS_LIMIT) {
+                        int step = max_iterations / 10;
+                        if (step < 10) step = 10;
+                        if (SDL_GetModState() & KMOD_SHIFT) step *= 10;
+                        
+                        if (max_iterations + step <= get_config_max_iterations_limit()) {
                             max_iterations += step;
                             init_renderer(max_iterations, palette_idx);
                             needs_redraw = 1;
                         }
 
                     } else if (event.key.keysym.sym == SDLK_DOWN) {
-                        int step = (SDL_GetModState() & KMOD_SHIFT) ? 100 : 10;
-                        if (max_iterations - step >= 10) {
-                            max_iterations -= step;
-                            init_renderer(max_iterations, palette_idx);
-                            needs_redraw = 1;
-                        }
+                        int step = max_iterations / 10;
+                        if (step < 10) step = 10;
+                        if (SDL_GetModState() & KMOD_SHIFT) step *= 10;
+                        
+                        max_iterations -= step;
+                        if (max_iterations < 10) max_iterations = 10;
+                        
+                        init_renderer(max_iterations, palette_idx);
+                        needs_redraw = 1;
 
                     } else if (event.key.keysym.sym == SDLK_p) {
                         palette_idx = (palette_idx + 1) % PALETTE_COUNT;
                         init_renderer(max_iterations, palette_idx);
                         needs_redraw = 1;
+
+                    } else if (event.key.keysym.sym == SDLK_e) {
+#ifdef USE_SIMD_F128
+                        cpu_precision_128 = !cpu_precision_128;
+                        set_cpu_precision(cpu_precision_128);
+                        needs_redraw = 1;
+#endif
 
                     } else if (event.key.keysym.sym == SDLK_t) {
                         if (julia_mode) {
@@ -430,6 +466,23 @@ int main(int argc, char* argv[]) {
             screenshot_requested = 0;
         }
 
+        if (mega_screenshot_requested) {
+            double re_min, re_max, im_min, im_max;
+            calculate_boundaries(view.center_re, view.center_im, view.zoom, win_w, win_h, &re_min,
+                                 &re_max, &im_min, &im_max);
+            
+            /* render a massive 8192 x 8192 screenshot */
+            int mega_w = 8192;
+            int mega_h = 8192;
+            int f_type = julia_mode ? 1 : (burning_ship_mode ? 2 : 0);
+            
+            save_mega_screenshot(mega_w, mega_h, re_min, re_max, im_min, im_max, max_iterations, 
+                                 palette_idx, f_type, julia_c);
+            
+            mega_screenshot_requested = 0;
+            needs_redraw = 1; /* redraw to clear any visual artifacts and reset the renderer state */
+        }
+
         if (is_zooming) {
             SDL_SetRenderDrawColor(renderer, 255, 255, 0, 255);
             SDL_RenderDrawRect(renderer, &zoom_rect);
@@ -440,56 +493,88 @@ int main(int argc, char* argv[]) {
             SDL_Color white = {255, 255, 255, 255};
             int x = 15;
             int y = 12;
-            int line_h = FONT_SIZE + 4;
-            int num_lines =
-                3 + (m_tour.phase != TOUR_IDLE ? 1 : 0) + (j_tour.phase != JULIA_TOUR_IDLE ? 1 : 0);
-
-            SDL_Rect bg = {5, 5, 600, num_lines * line_h + 12};
+            int line_h = FONT_SIZE + 6;
+            
+            /* calculate dynamic height based on active modes */
+            int num_lines = 3; /* base lines (3 info lines) */
+            if (m_tour.phase != TOUR_IDLE) num_lines++;
+            if (j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
+            if (is_video_recording()) num_lines++;
+            
+            /* draw panel background */
+            SDL_Rect bg = {5, 5, 700, num_lines * line_h + 20};
             SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-            SDL_SetRenderDrawColor(renderer, 0, 0, 0, 180);
+            SDL_SetRenderDrawColor(renderer, 20, 20, 25, 220); 
             SDL_RenderFillRect(renderer, &bg);
 
             /* line 1: engine | mode | threads | render */
             int num_threads = get_actual_thread_count();
-            snprintf(buf, sizeof(buf), "cpu | %s | threads: %d | render: %u ms",
-                     julia_mode ? "julia" : (burning_ship_mode ? "burning ship" : "mandelbrot"), num_threads, render_time);
+#ifdef USE_SIMD_F128
+            snprintf(buf, sizeof(buf), "[ENGINE] CPU (%s) | Mode: %s | Threads: %d | Render: %u ms",
+                     cpu_precision_128 ? "128-bit" : "64-bit",
+                     julia_mode ? "Julia" : (burning_ship_mode ? "Burning Ship" : "Mandelbrot"), num_threads, render_time);
+#else
+            snprintf(buf, sizeof(buf), "[ENGINE] CPU (64-bit) | Mode: %s | Threads: %d | Render: %u ms",
+                     julia_mode ? "Julia" : (burning_ship_mode ? "Burning Ship" : "Mandelbrot"), num_threads, render_time);
+#endif
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
+            /* line 2: coordinates */
             if (julia_mode) {
-                snprintf(buf, sizeof(buf), "c: (%.14f, %.14f)", julia_c.re, julia_c.im);
+                snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", julia_c.re, julia_c.im);
             } else {
-                snprintf(buf, sizeof(buf), "center: (%.14f, %.14f)", view.center_re,
-                         view.center_im);
+                snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", view.center_re, view.center_im);
             }
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
-            snprintf(buf, sizeof(buf), "zoom: %.6g | iterations: %d | palette: %s", view.zoom,
+            /* line 3: render params */
+            snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", view.zoom,
                      max_iterations, PALETTE_NAMES[palette_idx % PALETTE_COUNT]);
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
+            /* auto-tour info */
             if (m_tour.phase != TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "auto-zoom [%s] target #%d",
+                snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d",
                          get_tour_phase_name(m_tour.phase), get_tour_target_idx(&m_tour) + 1);
                 render_text(renderer, font, buf, x, y, white);
                 y += line_h;
             }
             if (j_tour.phase != JULIA_TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "auto-c [%s] #%d (%.4f, %.4f)",
+                snprintf(buf, sizeof(buf), "[TOUR]   Auto-C [%s] #%d",
                          j_tour.phase == JULIA_TOUR_MOVING ? "moving" : "dwelling",
-                         get_julia_tour_target_idx(&j_tour) + 1, julia_c.re, julia_c.im);
+                         get_julia_tour_target_idx(&j_tour) + 1);
                 render_text(renderer, font, buf, x, y, white);
                 y += line_h;
+            }
+            
+            if (is_video_recording()) {
+                snprintf(buf, sizeof(buf), "[REC] recording video...");
+                SDL_Color red = {255, 50, 50, 255};
+                render_text(renderer, font, buf, x, y, red);
             }
         }
 
         SDL_RenderPresent(renderer);
+        
+        if (is_video_recording()) {
+            /* to record what is actually on the screen (including HUD), we have to read pixels back from SDL renderer.
+               this is slow, but acceptable for a tool feature. */
+            uint32_t* frame_pixels = malloc((size_t)win_w * win_h * 4);
+            if (frame_pixels) {
+                SDL_RenderReadPixels(renderer, NULL, SDL_PIXELFORMAT_ARGB8888, frame_pixels, win_w * 4);
+                append_video_frame(frame_pixels, win_w, win_h);
+                free(frame_pixels);
+            }
+        }
     }
 
+    if (is_video_recording()) stop_video_recording();
     if (font) TTF_CloseFont(font);
     cleanup_renderer();
+    cleanup_color_palette();
     SDL_DestroyTexture(texture);
     SDL_DestroyRenderer(renderer);
     SDL_DestroyWindow(window);
@@ -511,7 +596,7 @@ static void calculate_boundaries(double center_re, double center_im, double zoom
 
 static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
                         SDL_Color color) {
-    SDL_Surface* surface = TTF_RenderText_Blended(font, text, color);
+    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text, color);
     if (!surface) return;
     SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
     if (tex) {
@@ -534,12 +619,13 @@ static TTF_Font* load_font(void) {
 
 static void print_controls(void) {
     puts("mandelbrot explorer");
-    puts("  left drag   : zoom selection  right drag : pan");
-    puts("  scroll      : zoom at cursor  ctrl+z     : undo");
-    puts("  up/down     : iterations      shift+up/dn: x100");
-    puts("  p           : cycle palette   r          : reset");
-    puts("  j           : julia mode      t          : tour");
-    puts("  b           : burning ship    s          : screenshot");
-    puts("  m           : save bookmark   l          : load bookmark");
+    puts("  left drag   : zoom selection  right drag  : pan");
+    puts("  scroll      : zoom at cursor  ctrl+z      : undo");
+    puts("  up/down     : iterations      shift+up/dn : x100");
+    puts("  p           : cycle palette   r           : reset");
+    puts("  e           : toggle precision (64/128-bit)");
+    puts("  j           : julia mode      t           : tour");
+    puts("  b           : burning ship    s           : screenshot");
+    puts("  m           : save bookmark   l           : load bookmark");
     puts("  q / esc     : quit");
 }
