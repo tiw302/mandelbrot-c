@@ -40,4 +40,8 @@ void render_burning_ship_threaded(uint32_t* pixels, int pitch, int window_width,
 /* legacy symbol — kept for backward compatibility */
 void* render_thread(void* arg);
 
+/* dynamic precision control */
+void set_cpu_precision(int use_128bit);
+int get_cpu_precision(void);
+
 #endif
