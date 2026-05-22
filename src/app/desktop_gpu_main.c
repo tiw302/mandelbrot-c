@@ -240,14 +240,15 @@ static void init(void) {
     srand((unsigned)time(NULL));
 
     puts("mandelbrot explorer");
-    puts("  left drag   : zoom selection  right drag  : pan");
-    puts("  scroll      : zoom at cursor  ctrl+z      : undo");
-    puts("  up/down     : iterations      shift+up/dn : x100");
-    puts("  p           : cycle palette   r           : reset");
-    puts("  e           : toggle precision (64/128-bit on CPU, 32/64-bit on GPU)");
-    puts("  j           : julia mode      t           : tour");
-    puts("  b           : burning ship    s           : screenshot");
-    puts("  m           : save bookmark   l           : load bookmark");
+    puts("  left drag   : zoom selection   | right drag  : pan");
+    puts("  scroll      : zoom at cursor   | ctrl+z      : undo");
+    puts("  up/down     : iterations       | shift+up/dn : x100");
+    puts("  p           : cycle palette    | r           : reset");
+    puts("  e           : toggle precision (64/128-bit)");
+    puts("  j           : julia mode       | t           : tour");
+    puts("  b           : burning ship     | s           : screenshot");
+    puts("  m           : save bookmark    | l           : load bookmark");
+    puts("  x           : mega screenshot  | v           : record video");
     puts("  q / esc     : quit");
 }
 
