@@ -187,27 +187,39 @@ void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_i
  * utilizes simd intrinsics for single-pixel precision enhancement.
  * used for deep zooming (beyond 10^14) where standard 64-bit float degrades. */
 double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
+    double cre_hi, cre_lo, cim_hi, cim_lo;
+    simd_f128_extract(cre, &cre_hi, &cre_lo);
+    simd_f128_extract(cim, &cim_hi, &cim_lo);
+
+    double cr_minus_025 = cre_hi - 0.25;
+    double im_sq = cim_hi * cim_hi;
+    double q = cr_minus_025 * cr_minus_025 + im_sq;
+    if (q * (q + cr_minus_025) <= 0.25 * im_sq) {
+        return (double)max_iterations;
+    }
+
+    double cr_plus_1 = cre_hi + 1.0;
+    if (cr_plus_1 * cr_plus_1 + im_sq <= 0.0625) {
+        return (double)max_iterations;
+    }
+
     simd_f128 zre = simd_f128_from_double(0.0);
     simd_f128 zim = simd_f128_from_double(0.0);
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
-    
-    simd_f128 two = simd_f128_from_double(2.0);
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_mul(zre, zre);
-        simd_f128 zim2 = simd_f128_mul(zim, zim);
-        simd_f128 mag_sq_128 = simd_f128_add(zre2, zim2);
+        simd_f128 zre2 = simd_f128_sqr(zre);
+        simd_f128 zim2 = simd_f128_sqr(zim);
         
-        double mag_hi, mag_lo;
-        simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
+        double mag_hi = simd_f128_get_hi(zre2) + simd_f128_get_hi(zim2);
         
         if (mag_hi > escape_radius_sq) {
             return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
         }
         
         simd_f128 zre_zim = simd_f128_mul(zre, zim);
-        zim = simd_f128_add(simd_f128_mul(two, zre_zim), cim);
+        zim = simd_f128_add(simd_f128_mul2(zre_zim), cim);
         zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
         
         iterations++;
