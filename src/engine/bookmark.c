@@ -77,13 +77,23 @@ static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
                 memset(&current, 0, sizeof(Bookmark));
             }
         } else if (in_object) {
-            sscanf(line, " \"center_re\": %lf,", &current.center_re);
-            sscanf(line, " \"center_im\": %lf,", &current.center_im);
-            sscanf(line, " \"zoom\": %lf,", &current.zoom);
-            sscanf(line, " \"max_iterations\": %d,", &current.max_iterations);
-            sscanf(line, " \"fractal_type\": %d,", &current.fractal_type);
-            sscanf(line, " \"julia_c_re\": %lf,", &current.julia_c.re);
-            sscanf(line, " \"julia_c_im\": %lf", &current.julia_c.im);
+            char* p;
+            char* colon;
+            if ((p = strstr(line, "\"center_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%lf", &current.center_re);
+            } else if ((p = strstr(line, "\"center_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%lf", &current.center_im);
+            } else if ((p = strstr(line, "\"zoom\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%lf", &current.zoom);
+            } else if ((p = strstr(line, "\"max_iterations\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%d", &current.max_iterations);
+            } else if ((p = strstr(line, "\"fractal_type\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%d", &current.fractal_type);
+            } else if ((p = strstr(line, "\"julia_c_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%lf", &current.julia_c.re);
+            } else if ((p = strstr(line, "\"julia_c_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+                sscanf(colon + 1, "%lf", &current.julia_c.im);
+            }
         }
     }
 
