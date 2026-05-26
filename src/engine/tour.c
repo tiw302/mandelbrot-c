@@ -24,8 +24,38 @@ static const struct {
     {-0.170337, -1.065156},
     {-1.768778833, -0.001738996},
     {-0.748, 0.1},
+    {-0.743643135, 0.131825963},
+    {0.27322626, 0.59515333},
+    {-0.1, 0.838},
+    {-0.1528, 1.0397},
+    {-1.768778833, 0.0},
+    {-1.25066, 0.02012},
+    {-0.7453, 0.1127},
+    {-0.75, 0.11},
+    {-0.1, 0.651},
+    {0.2869, 0.0142},
 };
 #define NUM_ZOOM_TARGETS (int)(sizeof(ZOOM_TARGETS) / sizeof(ZOOM_TARGETS[0]))
+
+static const struct {
+    double re, im;
+} SHIP_ZOOM_TARGETS[] = {
+    {-1.75, -0.03},
+    {-1.86, -0.005},
+    {-1.745, -0.04},
+    {-1.797, -0.02},
+    {-1.861, -0.004},
+    {-1.76, -0.01},
+    {-1.75482613, -0.02100650},
+    {-1.740061, -0.028169},
+    {-1.8386, -0.001},
+    {-1.745, -0.02},
+    {-1.765, -0.015},
+    {-1.742, -0.01},
+    {-1.78, -0.025},
+    {-1.82, -0.015},
+};
+#define NUM_SHIP_ZOOM_TARGETS (int)(sizeof(SHIP_ZOOM_TARGETS) / sizeof(SHIP_ZOOM_TARGETS[0]))
 
 #define JULIA_TOUR_MOVE_MS 3000.0
 #define JULIA_TOUR_DWELL_MS 1200.0
@@ -51,7 +81,7 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
-void update_tour(TourState* state, ViewState* view, uint32_t now) {
+void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning_ship) {
     if (state->phase == TOUR_IDLE) return;
     if (state->phase_start == 0) {
         state->phase_start = now;
@@ -95,9 +125,15 @@ void update_tour(TourState* state, ViewState* view, uint32_t now) {
                 view->center_re = state->home_re;
                 view->center_im = state->home_im;
                 view->zoom = state->home_zoom;
-                state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_ZOOM_TARGETS);
-                state->target_re = ZOOM_TARGETS[state->last_zoom_idx].re;
-                state->target_im = ZOOM_TARGETS[state->last_zoom_idx].im;
+                if (is_burning_ship) {
+                    state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_SHIP_ZOOM_TARGETS);
+                    state->target_re = SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
+                    state->target_im = SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
+                } else {
+                    state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_ZOOM_TARGETS);
+                    state->target_re = ZOOM_TARGETS[state->last_zoom_idx].re;
+                    state->target_im = ZOOM_TARGETS[state->last_zoom_idx].im;
+                }
                 state->phase = TOUR_PANNING;
                 state->phase_start = now;
             }
@@ -168,6 +204,34 @@ const char* get_tour_phase_name(TourPhase phase) {
 
 int get_tour_target_idx(const TourState* state) {
     return state->last_zoom_idx;
+}
+
+int get_num_tour_targets(int is_burning_ship) {
+    return is_burning_ship ? NUM_SHIP_ZOOM_TARGETS : NUM_ZOOM_TARGETS;
+}
+
+double get_tour_target_re(const TourState* state, int is_burning_ship) {
+    if (state->phase == TOUR_IDLE) return 0.0;
+    if (is_burning_ship) {
+        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_SHIP_ZOOM_TARGETS)
+            return SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
+    } else {
+        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_ZOOM_TARGETS)
+            return ZOOM_TARGETS[state->last_zoom_idx].re;
+    }
+    return 0.0;
+}
+
+double get_tour_target_im(const TourState* state, int is_burning_ship) {
+    if (state->phase == TOUR_IDLE) return 0.0;
+    if (is_burning_ship) {
+        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_SHIP_ZOOM_TARGETS)
+            return SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
+    } else {
+        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_ZOOM_TARGETS)
+            return ZOOM_TARGETS[state->last_zoom_idx].im;
+    }
+    return 0.0;
 }
 
 int get_julia_tour_target_idx(const JuliaTourState* state) {
