@@ -25,7 +25,7 @@ typedef struct {
     int last_julia_idx;
 } JuliaTourState;
 
-void update_tour(TourState* state, ViewState* view, uint32_t now);
+void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning_ship);
 void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now);
 
 void start_tour(TourState* state, ViewState* view);
@@ -36,6 +36,9 @@ void stop_julia_tour(JuliaTourState* state);
 
 const char* get_tour_phase_name(TourPhase phase);
 int get_tour_target_idx(const TourState* state);
+int get_num_tour_targets(int is_burning_ship);
+double get_tour_target_re(const TourState* state, int is_burning_ship);
+double get_tour_target_im(const TourState* state, int is_burning_ship);
 int get_julia_tour_target_idx(const JuliaTourState* state);
 
 #endif
