@@ -31,6 +31,13 @@ function toggleTour() {
 }
 
 function toggleGpu() {
+    if (_gpuMode && _highPrecision) {
+        // Prevent accidentally entering 128-bit CPU mode when disabling GPU
+        if (Module._wasm_toggle_precision) {
+            Module._wasm_toggle_precision();
+            _highPrecision = false;
+        }
+    }
     Module._wasm_toggle_gpu();
     _gpuMode = !_gpuMode;
     const gpuText = _gpuMode ? 'gpu ✓' : 'cpu';
@@ -38,21 +45,39 @@ function toggleGpu() {
     const setGpu = document.getElementById('setGpuBtn');
     if (setGpu) setGpu.textContent = _gpuMode ? 'gpu' : 'cpu';
     
-    document.getElementById('precisionBtn').style.display = _gpuMode ? '' : 'none';
-    const setPrecRow = document.getElementById('setPrecisionRow');
-    if (setPrecRow) setPrecRow.style.display = _gpuMode ? 'flex' : 'none';
+    updatePrecisionUI();
 }
 
 let _highPrecision = false;
+
+function updatePrecisionUI() {
+    const precText = _gpuMode 
+        ? (_highPrecision ? '64-bit ✓' : '32-bit')
+        : (_highPrecision ? '128-bit ✓' : '64-bit');
+    
+    const setPrecText = _gpuMode
+        ? (_highPrecision ? '64-bit' : '32-bit')
+        : (_highPrecision ? '128-bit' : '64-bit');
+
+    const btn = document.getElementById('precisionBtn');
+    if (btn) btn.textContent = precText;
+    const setPrec = document.getElementById('setPrecisionBtn');
+    if (setPrec) setPrec.textContent = setPrecText;
+}
+
+function closeAlert() {
+    document.getElementById('alert-panel').classList.remove('active');
+}
+
 function togglePrecision() {
-    if (!_gpuMode) return; // precision only applies to gpu mode
+    if (!_gpuMode && !_highPrecision) {
+        document.getElementById('alert-panel').classList.add('active');
+        return;
+    }
     if (Module._wasm_toggle_precision) {
         Module._wasm_toggle_precision();
         _highPrecision = !_highPrecision;
-        const precText = _highPrecision ? '64-bit ✓' : '32-bit';
-        document.getElementById('precisionBtn').textContent = precText;
-        const setPrec = document.getElementById('setPrecisionBtn');
-        if (setPrec) setPrec.textContent = _highPrecision ? '64-bit' : '32-bit';
+        updatePrecisionUI();
     }
 }
 
@@ -66,10 +91,10 @@ function toggleSettings() {
         if (setGpu) setGpu.textContent = _gpuMode ? 'gpu' : 'cpu';
         
         const setPrecRow = document.getElementById('setPrecisionRow');
-        if (setPrecRow) setPrecRow.style.display = _gpuMode ? 'flex' : 'none';
+        if (setPrecRow) setPrecRow.style.display = 'flex';
         
         const setPrec = document.getElementById('setPrecisionBtn');
-        if (setPrec) setPrec.textContent = _highPrecision ? '64-bit' : '32-bit';
+        if (setPrec) setPrec.textContent = _gpuMode ? (_highPrecision ? '64-bit' : '32-bit') : (_highPrecision ? '128-bit' : '64-bit');
         
         const setPalette = document.getElementById('setPaletteSelect');
         if (setPalette) setPalette.value = _currentState.palette_idx;
@@ -176,22 +201,27 @@ function changePalette(val) {
 
 // global state for just-in-time URL generation
 let _currentState = {
-    julia_mode: false, burning_ship_mode: false, iters: 500, zoom: 3.0,
+    julia_mode: false, burning_ship_mode: false, iters: 350, zoom: 3.0,
     center_re: -0.5, center_im: 0.0, palette_idx: 0,
     julia_re: 0.0, julia_im: 0.0
 };
 
-window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision) {
+window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im) {
     let engine = "mandelbrot";
     if (julia_mode) engine = "julia";
     else if (burning_ship_mode) engine = "burning ship";
 
     if (gpu_mode) engine += high_precision ? " (gpu 64-bit)" : " (gpu 32-bit)";
-    else engine += " (cpu)";
+    else engine += high_precision ? " (cpu 128-bit)" : " (cpu 64-bit)";
 
-    let tour_str = tour_phase !== 0 ? " | tour: on" : "";
+    let tour_str = "";
+    if (tour_phase !== 0) {
+        const phases = ["", "Panning", "Zooming in", "Zooming out"];
+        const p_name = phases[tour_phase] || "";
+        tour_str = `\n[tour] ${p_name} - Point ${tour_target_idx + 1}/${tour_total_targets} | Target: (${tour_target_re.toFixed(4)}, ${tour_target_im.toFixed(4)})`;
+    }
 
-    let html = `${engine}${tour_str}\n`;
+    let html = `${engine}\n`;
 
     if (julia_mode) {
         html += `c: (${julia_re.toFixed(10)}, ${julia_im.toFixed(10)})\n`;
@@ -199,7 +229,7 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_
         html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
     }
 
-    html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 9]}`;
+    html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 9]}${tour_str}`;
 
     debugInfo.textContent = html;
 
@@ -209,18 +239,14 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_
     // sync UI buttons from C's authoritative state (handles keyboard shortcuts too)
     const gpuNow = !!gpu_mode;
     const precNow = !!high_precision;
-    if (_gpuMode !== gpuNow) {
+    if (_gpuMode !== gpuNow || _highPrecision !== precNow) {
         _gpuMode = gpuNow;
-        document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu \u2713' : 'cpu';
-        document.getElementById('precisionBtn').style.display = _gpuMode ? '' : 'none';
-    }
-    if (_highPrecision !== precNow) {
         _highPrecision = precNow;
-        document.getElementById('precisionBtn').textContent = _highPrecision ? '64-bit \u2713' : '32-bit';
+        document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu \u2713' : 'cpu';
+        updatePrecisionUI();
     }
-    // fix #4: show/hide E=64-bit hint based on GPU mode
     const helpE = document.getElementById('help-e-hint');
-    if (helpE) helpE.style.display = _gpuMode ? '' : 'none';
+    if (helpE) helpE.style.display = '';
 
     // update tour state button text
     _tourActive = (tour_phase !== 0);
