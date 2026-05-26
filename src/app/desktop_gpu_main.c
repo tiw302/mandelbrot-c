@@ -256,7 +256,7 @@ static void frame(void) {
     uint32_t now = (uint32_t)stm_ms(stm_now());
 
     if (ctx.m_tour.phase != TOUR_IDLE) {
-        update_tour(&ctx.m_tour, &ctx.view, now);
+        update_tour(&ctx.m_tour, &ctx.view, now, ctx.burning_ship_mode);
         ctx.needs_redraw = 1;
     }
     if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
@@ -405,8 +405,12 @@ static void frame(void) {
 
         /* auto-tour info */
         if (ctx.m_tour.phase != TOUR_IDLE) {
-            snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d",
-                     get_tour_phase_name(ctx.m_tour.phase), get_tour_target_idx(&ctx.m_tour) + 1);
+            int t_idx = get_tour_target_idx(&ctx.m_tour);
+            int t_tot = get_num_tour_targets(ctx.burning_ship_mode);
+            double t_re = get_tour_target_re(&ctx.m_tour, ctx.burning_ship_mode);
+            double t_im = get_tour_target_im(&ctx.m_tour, ctx.burning_ship_mode);
+            snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d/%d (%.4f, %.4f)",
+                     get_tour_phase_name(ctx.m_tour.phase), t_idx + 1, t_tot, t_re, t_im);
             fonsDrawText(ctx.fons, x, y, buf, NULL);
             y += lh;
         }
