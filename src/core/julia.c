@@ -141,21 +141,18 @@ void julia_check_avx2(const double* re, const double* im, complex_t c, int max_i
 double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 cim, int max_iterations) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
-    
-    simd_f128 two = simd_f128_from_double(2.0);
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_mul(zre, zre);
-        simd_f128 zim2 = simd_f128_mul(zim, zim);
-        simd_f128 mag_sq_128 = simd_f128_add(zre2, zim2);
-        double mag_hi, mag_lo;
-        simd_f128_extract(mag_sq_128, &mag_hi, &mag_lo);
+        simd_f128 zre2 = simd_f128_sqr(zre);
+        simd_f128 zim2 = simd_f128_sqr(zim);
+        
+        double mag_hi = simd_f128_get_hi(zre2) + simd_f128_get_hi(zim2);
         
         if (mag_hi > escape_radius_sq) {
             return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
         }
         
-        simd_f128 next_im = simd_f128_add(simd_f128_mul(two, simd_f128_mul(zre, zim)), cim);
+        simd_f128 next_im = simd_f128_add(simd_f128_mul2(simd_f128_mul(zre, zim)), cim);
         zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
         zim = next_im;
         
