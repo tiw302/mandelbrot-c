@@ -132,6 +132,8 @@ SIMD_F128_INLINE simd_f128 simd_f128_from_double(double d);
 SIMD_F128_INLINE simd_f128 simd_f128_add(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_sub(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_mul(simd_f128 a, simd_f128 b);
+SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a);
+SIMD_F128_INLINE simd_f128 simd_f128_mul2(simd_f128 a);
 SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_sqrt(simd_f128 x);
 SIMD_F128_INLINE simd_f128 simd_f128_rsqrt(simd_f128 x);
@@ -150,6 +152,18 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 #else
     *hi = x.hi;
     *lo = x.lo;
+#endif
+}
+
+SIMD_F128_INLINE double simd_f128_get_hi(simd_f128 x) {
+#if defined(SIMD_F128_USE_AVX2) || defined(SIMD_F128_USE_SSE2)
+    return _mm_cvtsd_f64(x);
+#elif defined(SIMD_F128_USE_WASM)
+    return wasm_f64x2_extract_lane(x, 0);
+#elif defined(SIMD_F128_USE_NEON)
+    return vgetq_lane_f64(x, 0);
+#else
+    return x.hi;
 #endif
 }
 
@@ -174,6 +188,22 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 // ██      ██ ██   ██    ██    ██   ██
 //
 // >>math helpers
+
+    // dekker's split (fallback when no fma)
+    SIMD_F128_INLINE double simd_f128_exact_mul_err(double a, double b, double p) {
+#ifdef FP_FAST_FMA
+        return fma(a, b, -p);
+#else
+        double c, ahi, alo, bhi, blo;
+        c = 134217729.0 * a;
+        ahi = c - (c - a);
+        alo = a - ahi;
+        c = 134217729.0 * b;
+        bhi = c - (c - b);
+        blo = b - bhi;
+        return ((ahi * bhi - p) + ahi * blo + alo * bhi) + alo * blo;
+#endif
+    }
 
 #if defined(SIMD_F128_USE_AVX2)
 
@@ -236,6 +266,26 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         __m128d final_lo = _mm_sub_sd(e, _mm_sub_sd(final_hi, p));
 
         return _mm_unpacklo_pd(final_hi, final_lo);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        __m128d ahi = _mm_unpacklo_pd(a, a);
+        
+        __m128d p = _mm_mul_sd(ahi, ahi);
+        __m128d e = _mm_fmsub_sd(ahi, ahi, p);
+        
+        __m128d alo = _mm_unpackhi_pd(a, a);
+        __m128d c1 = _mm_mul_sd(ahi, alo);
+        e = _mm_add_sd(e, _mm_add_sd(c1, c1));
+
+        __m128d final_hi = _mm_add_sd(p, e);
+        __m128d final_lo = _mm_sub_sd(e, _mm_sub_sd(final_hi, p));
+
+        return _mm_unpacklo_pd(final_hi, final_lo);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_mul2(simd_f128 a) {
+        return _mm_add_pd(a, a);
     }
 
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
@@ -333,13 +383,31 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         simd_f128_extract(b, &bhi, &blo);
 
         double p = ahi * bhi;
-        double e = fma(ahi, bhi, -p);
-        e += fma(ahi, blo, alo * bhi);
+        double e = simd_f128_exact_mul_err(ahi, bhi, p);
+        e += (ahi * blo + alo * bhi);
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);
         
         return _mm_set_pd(final_lo, final_hi);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double ahi, alo;
+        simd_f128_extract(a, &ahi, &alo);
+
+        double p = ahi * ahi;
+        double e = simd_f128_exact_mul_err(ahi, ahi, p);
+        e += 2.0 * ahi * alo;
+
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+        
+        return _mm_set_pd(final_lo, final_hi);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_mul2(simd_f128 a) {
+        return _mm_add_pd(a, a);
     }
 
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
@@ -352,10 +420,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         r = r * (2.0 - bhi * r);
 
         double q = ahi * r;
-        double qlo = fma(ahi, r, -q) + alo * r;
+        double qlo = simd_f128_exact_mul_err(ahi, r, q) + alo * r;
 
         double p = bhi * q;
-        double plo = fma(bhi, q, -p) + blo * q + qlo * bhi;
+        double plo = simd_f128_exact_mul_err(bhi, q, p) + blo * q + qlo * bhi;
 
         double final_hi = q + (ahi - p - plo) * r;
         double final_lo = (ahi - p - plo) * r - (final_hi - q);
@@ -372,10 +440,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         y = 0.5 * y * (3.0 - xhi * y * y);
 
         double z = xhi * y;
-        double zlo = fma(xhi, y, -z) + xlo * y;
+        double zlo = simd_f128_exact_mul_err(xhi, y, z) + xlo * y;
 
         double est = z * z;
-        double estlo = fma(z, z, -est) + 2.0 * z * zlo;
+        double estlo = simd_f128_exact_mul_err(z, z, est) + 2.0 * z * zlo;
         double err = (xhi - est) - estlo + xlo;
 
         double final_hi = z + 0.5 * err * y;
@@ -417,13 +485,31 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         simd_f128_extract(b, &bhi, &blo);
 
         double p = ahi * bhi;
-        double e = fma(ahi, bhi, -p);
-        e += fma(ahi, blo, alo * bhi);
+        double e = simd_f128_exact_mul_err(ahi, bhi, p);
+        e += (ahi * blo + alo * bhi);
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);
         
         return wasm_f64x2_make(final_hi, final_lo);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double ahi, alo;
+        simd_f128_extract(a, &ahi, &alo);
+
+        double p = ahi * ahi;
+        double e = simd_f128_exact_mul_err(ahi, ahi, p);
+        e += 2.0 * ahi * alo;
+
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+        
+        return wasm_f64x2_make(final_hi, final_lo);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_mul2(simd_f128 a) {
+        return wasm_f64x2_add(a, a);
     }
 
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
@@ -436,10 +522,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         r = r * (2.0 - bhi * r);
 
         double q = ahi * r;
-        double qlo = fma(ahi, r, -q) + alo * r;
+        double qlo = simd_f128_exact_mul_err(ahi, r, q) + alo * r;
 
         double p = bhi * q;
-        double plo = fma(bhi, q, -p) + blo * q + qlo * bhi;
+        double plo = simd_f128_exact_mul_err(bhi, q, p) + blo * q + qlo * bhi;
 
         double final_hi = q + (ahi - p - plo) * r;
         double final_lo = (ahi - p - plo) * r - (final_hi - q);
@@ -456,10 +542,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         y = 0.5 * y * (3.0 - xhi * y * y);
 
         double z = xhi * y;
-        double zlo = fma(xhi, y, -z) + xlo * y;
+        double zlo = simd_f128_exact_mul_err(xhi, y, z) + xlo * y;
 
         double est = z * z;
-        double estlo = fma(z, z, -est) + 2.0 * z * zlo;
+        double estlo = simd_f128_exact_mul_err(z, z, est) + 2.0 * z * zlo;
         double err = (xhi - est) - estlo + xlo;
 
         double final_hi = z + 0.5 * err * y;
@@ -505,14 +591,33 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double blo = vgetq_lane_f64(b, 1);
 
         double p = ahi * bhi;
-        double e = fma(ahi, bhi, -p);
-        e += fma(ahi, blo, alo * bhi);
+        double e = simd_f128_exact_mul_err(ahi, bhi, p);
+        e += (ahi * blo + alo * bhi);
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);
 
         float64x2_t r = vdupq_n_f64(final_lo);
         return vsetq_lane_f64(final_hi, r, 0);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double ahi = vgetq_lane_f64(a, 0);
+        double alo = vgetq_lane_f64(a, 1);
+
+        double p = ahi * ahi;
+        double e = simd_f128_exact_mul_err(ahi, ahi, p);
+        e += 2.0 * ahi * alo;
+
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+
+        float64x2_t r = vdupq_n_f64(final_lo);
+        return vsetq_lane_f64(final_hi, r, 0);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_mul2(simd_f128 a) {
+        return vaddq_f64(a, a);
     }
 
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
@@ -526,10 +631,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         r = r * (2.0 - bhi * r);
 
         double q = ahi * r;
-        double qlo = fma(ahi, r, -q) + alo * r;
+        double qlo = simd_f128_exact_mul_err(ahi, r, q) + alo * r;
 
         double p = bhi * q;
-        double plo = fma(bhi, q, -p) + blo * q + qlo * bhi;
+        double plo = simd_f128_exact_mul_err(bhi, q, p) + blo * q + qlo * bhi;
 
         double final_hi = q + (ahi - p - plo) * r;
         double final_lo = (ahi - p - plo) * r - (final_hi - q);
@@ -547,10 +652,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         y = 0.5 * y * (3.0 - xhi * y * y);
 
         double z = xhi * y;
-        double zlo = fma(xhi, y, -z) + xlo * y;
+        double zlo = simd_f128_exact_mul_err(xhi, y, z) + xlo * y;
 
         double est = z * z;
-        double estlo = fma(z, z, -est) + 2.0 * z * zlo;
+        double estlo = simd_f128_exact_mul_err(z, z, est) + 2.0 * z * zlo;
         double err = (xhi - est) - estlo + xlo;
 
         double final_hi = z + 0.5 * err * y;
@@ -584,21 +689,6 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         return simd_f128_add(a, b);
     }
 
-    // dekker's split (fallback when no fma)
-    SIMD_F128_INLINE double simd_f128_exact_mul_err(double a, double b, double p) {
-#ifdef FP_FAST_FMA
-        return fma(a, b, -p);
-#else
-        double c, ahi, alo, bhi, blo;
-        c = 134217729.0 * a;
-        ahi = c - (c - a);
-        alo = a - ahi;
-        c = 134217729.0 * b;
-        bhi = c - (c - b);
-        blo = b - bhi;
-        return ((ahi * bhi - p) + ahi * blo + alo * bhi) + alo * blo;
-#endif
-    }
 
     SIMD_F128_INLINE simd_f128 simd_f128_mul(simd_f128 a, simd_f128 b) {
         double p = a.hi * b.hi;
@@ -609,6 +699,23 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double final_lo = e - (final_hi - p);
         
         simd_f128 res = {final_hi, final_lo};
+        return res;
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double p = a.hi * a.hi;
+        double e = simd_f128_exact_mul_err(a.hi, a.hi, p);
+        e += 2.0 * a.hi * a.lo;
+        
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+        
+        simd_f128 res = {final_hi, final_lo};
+        return res;
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_mul2(simd_f128 a) {
+        simd_f128 res = {a.hi + a.hi, a.lo + a.lo};
         return res;
     }
 
