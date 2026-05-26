@@ -73,7 +73,7 @@
             <span>iterations:</span>
             <div style="display: flex; gap: 6px; align-items: center;">
                 <button onclick="Module._wasm_adjust_iterations(-100)">-100</button>
-                <span id="setIterationsVal">500</span>
+                <span id="setIterationsVal">350</span>
                 <button onclick="Module._wasm_adjust_iterations(100)">+100</button>
             </div>
         </div>
@@ -128,10 +128,21 @@
         <button onclick="toggleSettings()" class="settings-close">close</button>
     </div>
 
+    <div id="alert-panel">
+        <div class="settings-title">--- precision disabled ---</div>
+        <div style="font-size: 13px; line-height: 1.5; text-align: center; margin: 10px 0;">
+            128-bit precision requires intense computational power and is disabled on the Web version to prevent browser freezes.<br><br>
+            To use 128-bit mode, please compile and run the Desktop (C) version of this application locally.
+        </div>
+        <div style="display: flex; justify-content: center;">
+            <button onclick="closeAlert()" class="settings-close">dismiss</button>
+        </div>
+    </div>
+
     <div id="zoom-box"></div>
 
     <div id="info">
-        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | B=Ship | T=Tour | G=GPU | <span id="help-e-hint">E=64-bit | </span>S=Shot | Ctrl+Z=Undo | Arrows=Iter</span>
+        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | B=Ship | T=Tour | G=GPU | <span id="help-e-hint">E=Prec | </span>S=Shot | Ctrl+Z=Undo | Arrows=Iter</span>
         <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
     </div>
 
