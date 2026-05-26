@@ -24,6 +24,8 @@ void init_color_palette(int max_iterations, int palette_idx) {
         if (new_lut) {
             palette_lut = new_lut;
             lut_size = needed_size;
+        } else {
+            needed_size = lut_size;
         }
     }
 
@@ -42,24 +44,24 @@ void init_color_palette(int max_iterations, int palette_idx) {
                     r_val = g_val = b_val = fmod(dfi, 256.0);
                     break;
                 case 2: /* fire */
-                    r_val = fmin(255.0, dfi * 1.0);
-                    g_val = fmin(255.0, dfi * 2.0);
-                    b_val = fmin(255.0, dfi * 4.0);
+                    r_val = 255.0 - fabs(fmod(dfi * 1.0, 510.0) - 255.0);
+                    g_val = 255.0 - fabs(fmod(dfi * 2.0, 510.0) - 255.0);
+                    b_val = 255.0 - fabs(fmod(dfi * 4.0, 510.0) - 255.0);
                     break;
                 case 3: /* electric */
-                    r_val = fmin(255.0, dfi * 8.0);
-                    g_val = fmin(255.0, dfi * 4.0);
-                    b_val = fmin(255.0, dfi * 1.0);
+                    r_val = 255.0 - fabs(fmod(dfi * 8.0, 510.0) - 255.0);
+                    g_val = 255.0 - fabs(fmod(dfi * 4.0, 510.0) - 255.0);
+                    b_val = 255.0 - fabs(fmod(dfi * 1.0, 510.0) - 255.0);
                     break;
                 case 4: /* ocean */
-                    r_val = fmin(255.0, dfi * 5.0);
-                    g_val = fmin(255.0, dfi * 2.0);
-                    b_val = fmin(255.0, dfi * 0.5);
+                    r_val = 255.0 - fabs(fmod(dfi * 5.0, 510.0) - 255.0);
+                    g_val = 255.0 - fabs(fmod(dfi * 2.0, 510.0) - 255.0);
+                    b_val = 255.0 - fabs(fmod(dfi * 0.5, 510.0) - 255.0);
                     break;
                 case 5: /* inferno */
-                    r_val = fmin(255.0, dfi * 0.5);
-                    g_val = fmin(255.0, dfi * 2.0);
-                    b_val = fmin(255.0, dfi * 8.0);
+                    r_val = 255.0 - fabs(fmod(dfi * 0.5, 510.0) - 255.0);
+                    g_val = 255.0 - fabs(fmod(dfi * 2.0, 510.0) - 255.0);
+                    b_val = 255.0 - fabs(fmod(dfi * 8.0, 510.0) - 255.0);
                     break;
                 case 6: { /* viridis */
                     double t = fmod(dfi / 256.0, 1.0);
