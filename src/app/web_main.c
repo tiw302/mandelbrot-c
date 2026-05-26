@@ -33,11 +33,13 @@
 
 EM_JS(void, update_debug_info_js,
       (int gpu_mode, int julia_mode, int burning_ship_mode, int max_iters, double zoom, double center_re, double center_im,
-       int palette_idx, int tour_phase, double julia_re, double julia_im, int high_precision),
+       int palette_idx, int tour_phase, double julia_re, double julia_im, int high_precision,
+       int tour_target_idx, int tour_total_targets, double tour_target_re, double tour_target_im),
       {
           if (typeof updateDebugInfo === 'function') {
               updateDebugInfo(gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im,
-                              palette_idx, tour_phase, julia_re, julia_im, high_precision);
+                              palette_idx, tour_phase, julia_re, julia_im, high_precision,
+                              tour_target_idx, tour_total_targets, tour_target_re, tour_target_im);
           }
       });
 
@@ -229,7 +231,7 @@ static void frame(void) {
             ctx.julia_c.re = r * cos(t);
             ctx.julia_c.im = r * sin(t);
         } else {
-            update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now()));
+            update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now()), ctx.burning_ship_mode);
         }
         ctx.needs_redraw = 1;
     }
@@ -327,9 +329,14 @@ static void frame(void) {
         }
         ctx.screenshot_requested = 0;
     }
+    int tour_idx = get_tour_target_idx(&ctx.m_tour);
+    int tour_total = get_num_tour_targets(ctx.burning_ship_mode);
+    double tour_re = get_tour_target_re(&ctx.m_tour, ctx.burning_ship_mode);
+    double tour_im = get_tour_target_im(&ctx.m_tour, ctx.burning_ship_mode);
+
     update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.burning_ship_mode, ctx.max_iterations, ctx.view.zoom,
                          ctx.view.center_re, ctx.view.center_im, ctx.palette_idx, ctx.m_tour.phase,
-                         ctx.julia_c.re, ctx.julia_c.im, ctx.high_precision_mode);
+                         ctx.julia_c.re, ctx.julia_c.im, ctx.high_precision_mode, tour_idx, tour_total, tour_re, tour_im);
 }
 
 static void event(const sapp_event* ev) {
@@ -710,6 +717,7 @@ void wasm_request_screenshot(void) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_precision(void) {
     ctx.high_precision_mode = !ctx.high_precision_mode;
+    set_cpu_precision(ctx.high_precision_mode);
     ctx.needs_redraw = 1;
 }
 
