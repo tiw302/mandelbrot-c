@@ -6,7 +6,6 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # --- build options ---
 option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
-option(BUILD_CPU_128 "Build CPU-Engine 128-bit (Desktop)" OFF)
 option(BUILD_GPU     "Build GPU-Engine (Desktop)"       OFF)
 option(BUILD_WEB     "Build Web-Engine (WASM)"          OFF)
 
@@ -50,14 +49,6 @@ if(BUILD_CPU)
     target_link_libraries(mandelbrot_cpu PRIVATE SDL2 SDL2_ttf m)
 endif()
 
-# --- 1.5. CPU Engine (128-bit) ---
-if(BUILD_CPU_128)
-    add_executable(mandelbrot_cpu_128 ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/engine/ini_config.c src/app/desktop_cpu_main.c)
-    target_compile_definitions(mandelbrot_cpu_128 PRIVATE SOKOL_GLCORE USE_SIMD_F128)
-    target_compile_options(mandelbrot_cpu_128 PRIVATE ${ARCH_FLAGS} -pthread)
-    find_system_libs(mandelbrot_cpu_128)
-    target_link_libraries(mandelbrot_cpu_128 PRIVATE SDL2 SDL2_ttf m)
-endif()
 
 # --- 2. GPU Engine ---
 if(BUILD_GPU)
@@ -70,7 +61,7 @@ endif()
 # --- 3. Web Engine ---
 if(BUILD_WEB)
     add_executable(mandelbrot_web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/ini_config.c src/app/web_main.c)
-    target_compile_definitions(mandelbrot_web PRIVATE SOKOL_GLES3)
+    target_compile_definitions(mandelbrot_web PRIVATE SOKOL_GLES3 USE_SIMD_F128)
     target_compile_options(mandelbrot_web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
     target_link_options(mandelbrot_web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824" "-pthread")
     set_target_properties(mandelbrot_web PROPERTIES OUTPUT_NAME "index")
