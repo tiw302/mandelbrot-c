@@ -418,7 +418,7 @@ int main(int argc, char* argv[]) {
 
         Uint32 now = SDL_GetTicks();
         if (m_tour.phase != TOUR_IDLE) {
-            update_tour(&m_tour, &view, now);
+            update_tour(&m_tour, &view, now, burning_ship_mode);
             needs_redraw = 1;
         }
         if (j_tour.phase != JULIA_TOUR_IDLE) {
@@ -437,14 +437,14 @@ int main(int argc, char* argv[]) {
                                  &re_max, &im_min, &im_max);
 
             if (julia_mode)
-                render_julia_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_min, im_max,
+                render_julia_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_max, im_min,
                                       julia_c, max_iterations);
             else if (burning_ship_mode)
-                render_burning_ship_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_min,
-                                             im_max, max_iterations);
+                render_burning_ship_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_max,
+                                             im_min, max_iterations);
             else
-                render_mandelbrot_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_min,
-                                           im_max, max_iterations);
+                render_mandelbrot_threaded(pixels, pitch, win_w, win_h, re_min, re_max, im_max,
+                                           im_min, max_iterations);
 
             SDL_UnlockTexture(texture);
             render_time = SDL_GetTicks() - start;
@@ -535,10 +535,13 @@ int main(int argc, char* argv[]) {
             render_text(renderer, font, buf, x, y, white);
             y += line_h;
 
-            /* auto-tour info */
             if (m_tour.phase != TOUR_IDLE) {
-                snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d",
-                         get_tour_phase_name(m_tour.phase), get_tour_target_idx(&m_tour) + 1);
+                int t_idx = get_tour_target_idx(&m_tour);
+                int t_tot = get_num_tour_targets(burning_ship_mode);
+                double t_re = get_tour_target_re(&m_tour, burning_ship_mode);
+                double t_im = get_tour_target_im(&m_tour, burning_ship_mode);
+                snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d/%d (%.4f, %.4f)",
+                         get_tour_phase_name(m_tour.phase), t_idx + 1, t_tot, t_re, t_im);
                 render_text(renderer, font, buf, x, y, white);
                 y += line_h;
             }
