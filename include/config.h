@@ -4,7 +4,12 @@
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 768
 
+#if defined(__EMSCRIPTEN__)
+#define DEFAULT_ITERATIONS 350
+#else
 #define DEFAULT_ITERATIONS 1200
+#endif
+
 #define MAX_ITERATIONS_LIMIT 10000
 
 #define ESCAPE_RADIUS 10.0
