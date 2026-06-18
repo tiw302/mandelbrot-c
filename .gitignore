@@ -29,14 +29,49 @@ web/index.js
 !web/app.js
 !web/coi-serviceworker.js
 
+# python
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+env/
+.venv/
+
 # debugging
 *.dSYM/
 *.suo
 *.pdb
 *.idb
 
-# IDEs
+# coverage & profiling
+*.gcov
+*.gcda
+*.gcno
+*.profraw
+*.profdata
+perf.data
+perf.data.old
+
+# logs & temporary
+*.log
+*.bak
+*.tmp
+*.temp
+/core
+/core.*
+
+# environment & secrets (security)
+.env
+.env.*
+*.local
+credentials.json
+*.pem
+*.key
+
+# IDEs & c++ tools
 .idea/
+.cache/
+.clangd/
 
 # editor-specific files (vscode)
 .vscode/*
@@ -45,12 +80,6 @@ web/index.js
 !.vscode/launch.json
 !.vscode/extensions.json
 *.code-workspace
-.cache/
-.clangd/
-
-# os specific
-.DS_Store
-Thumbs.db
 
 # editor-specific files (neovim)
 [._]*.s[a-v][a-z]
@@ -64,6 +93,11 @@ undo/
 .netrwhist
 *~
 
+# os specific
+.DS_Store
+Thumbs.db
+desktop.ini
+
 # screenshots & assets
 *.png
 !assets/**/*.png
@@ -71,8 +105,9 @@ screenshot_*.tga
 *.tga
 
 # temporary scripts
-tests/test_math
-tests/test_math_f128
+test_*
+!test_*.c
+!tests/CMakeLists.txt
 
 # user data & local configuration
 settings.txt
