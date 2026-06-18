@@ -17,24 +17,35 @@
 #include <emscripten.h>
 #endif
 
-/* scalar path — processes one pixel at a time */
+// scalar path — processes one pixel at a time
 double mandelbrot_check(complex_t c, int max_iterations);
 
-/* avx2 vectorized path — processes 4 pixels simultaneously (x86_64 desktop) */
+// avx2 vectorized path — processes 4 pixels simultaneously (x86_64 desktop)
 #ifdef __AVX2__
-void mandelbrot_check_avx2(const double* re, const double* im, int max_iterations, double* results);
+#include <immintrin.h>
+void mandelbrot_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* results);
 #endif
 
-/* wasm simd128 path — processes 2 pixels simultaneously (browser) */
+// avx-512 vectorized path — processes 8 pixels simultaneously (x86_64 desktop)
+#ifdef __AVX512F__
+#include <immintrin.h>
+void mandelbrot_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* results);
+#endif
+
+// wasm simd128 path — processes 2 pixels simultaneously (browser)
 #ifdef __wasm_simd128__
-void mandelbrot_check_wasm_simd128(const double* re, const double* im, int max_iterations,
-                                   double* results);
+#include <wasm_simd128.h>
+void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, double* results);
 #endif
 
-/* 128-bit double-double path — single pixel, extreme precision.
- * simd_f128 type is provided by core_math.h when USE_SIMD_F128 is defined. */
+// 128-bit double-double path — single pixel, extreme precision.
+// simd_f128 type is provided by core_math.h when USE_SIMD_F128 is defined.
 #ifdef USE_SIMD_F128
 double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations);
+#ifdef __AVX2__
+// 128-bit double-double AVX2 path — processes 4 pixels simultaneously.
+void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations, double* results);
+#endif
 #endif
 
 #endif
