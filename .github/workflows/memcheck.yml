@@ -1,0 +1,34 @@
+name: Memory Safety Check
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  memcheck:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+    
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev libxi-dev libxcursor-dev libgl1-mesa-dev libsdl2-dev libsdl2-ttf-dev valgrind
+        
+    - name: Build Engine (Debug)
+      run: |
+        cmake -S . -B build -DCMAKE_BUILD_TYPE=Debug -DBUILD_CPU=ON -DBUILD_GPU=OFF
+        cmake --build build --parallel
+        
+    - name: Run Memory Leak Tests (Valgrind)
+      working-directory: ./build
+      run: |
+        ctest -T memcheck --output-on-failure
+        
+        # Check if CTest detected any memory leaks
+        if grep -q "Memory Leak" Testing/Temporary/MemoryChecker.*.log 2>/dev/null; then
+          echo "::error::Memory leak detected by Valgrind! Check workflow logs for details."
+          exit 1
+        fi
