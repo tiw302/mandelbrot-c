@@ -1,0 +1,62 @@
+name: Windows Build
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    defaults:
+      run:
+        shell: msys2 {0}
+    strategy:
+      matrix:
+        engine: [CPU, GPU]
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup MSYS2
+      uses: msys2/setup-msys2@v2
+      with:
+        msystem: UCRT64
+        update: true
+        install: >-
+          mingw-w64-ucrt-x86_64-gcc
+          mingw-w64-ucrt-x86_64-cmake
+          mingw-w64-ucrt-x86_64-SDL2
+          mingw-w64-ucrt-x86_64-SDL2_ttf
+
+    - name: Build Engine
+      run: |
+        cmake -S . -B build_${{ matrix.engine }} -DCMAKE_BUILD_TYPE=Release -DBUILD_${{ matrix.engine }}=ON
+        cmake --build build_${{ matrix.engine }} --parallel
+
+    - name: Run Tests
+      working-directory: ./build_${{ matrix.engine }}
+      run: ctest --output-on-failure
+
+    - name: Run Benchmarks
+      working-directory: ./build_${{ matrix.engine }}
+      run: |
+        echo "## 📊 Performance Benchmarks (${{ matrix.engine }})" >> $GITHUB_STEP_SUMMARY
+        echo "\`\`\`text" >> $GITHUB_STEP_SUMMARY
+        if [ "${{ matrix.engine }}" == "CPU" ]; then
+          echo "=== Math Kernel Benchmark ===" >> $GITHUB_STEP_SUMMARY
+          ./benchmarks/benchmark_math.exe >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "=== Renderer Benchmark ===" >> $GITHUB_STEP_SUMMARY
+          ./benchmarks/benchmark_renderer.exe >> $GITHUB_STEP_SUMMARY
+        else
+          echo "=== GPU Renderer Benchmark ===" >> $GITHUB_STEP_SUMMARY
+          ./benchmarks/benchmark_gpu.exe >> $GITHUB_STEP_SUMMARY || echo "GPU Benchmark skipped or failed" >> $GITHUB_STEP_SUMMARY
+        fi
+        echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mandelbrot-windows-${{ matrix.engine }}
+        path: build_${{ matrix.engine }}/mandelbrot_*.exe
