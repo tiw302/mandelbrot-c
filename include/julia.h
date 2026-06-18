@@ -1,35 +1,44 @@
-/* julia.h — public api for julia set iteration kernels.
+/* julia.h — julia set escape-time kernels.
  *
- * mirrors the mandelbrot api but takes an additional constant c parameter.
- * unlike mandelbrot, julia sets use the pixel coordinate as initial z
- * and keep c fixed across the entire fractal. */
+ * similar to mandelbrot but uses a fixed c-parameter across the whole frame.
+ * the initial z coordinate is derived from the pixel position.
+ */
 
 #ifndef JULIA_H
 #define JULIA_H
 
-/* note: julia.h → mandelbrot.h → core_math.h → julia.h is circular,
- * but include guards make this safe — complex_t is always defined before
- * this header's declarations are processed. */
 #include "mandelbrot.h"
 
-/* scalar path */
+// scalar path: single pixel
 double julia_check(complex_t z, complex_t c, int max_iterations);
 
-/* avx2 vectorized path — 4 pixels at once */
+// avx2 path: 4 pixels simultaneously
 #ifdef __AVX2__
-void julia_check_avx2(const double* re, const double* im, complex_t c, int max_iterations,
-                      double* results);
+#include <immintrin.h>
+void julia_check_avx2(__m256d zre, __m256d zim, complex_t c, int max_iterations, double* results);
 #endif
 
-/* wasm simd128 path — 2 pixels at once */
+// avx-512 path: 8 pixels simultaneously
+#ifdef __AVX512F__
+#include <immintrin.h>
+void julia_check_avx512(__m512d zre, __m512d zim, complex_t c, int max_iterations, double* results);
+#endif
+
+// wasm simd128 path: 2 pixels simultaneously
 #ifdef __wasm_simd128__
-void julia_check_wasm_simd128(const double* re, const double* im, complex_t c, int max_iterations,
+#include <wasm_simd128.h>
+void julia_check_wasm_simd128(v128_t zre, v128_t zim, complex_t c, int max_iterations,
                               double* results);
 #endif
 
-/* 128-bit double-double path */
+// high-precision 128-bit paths
 #ifdef USE_SIMD_F128
-double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 cim, int max_iterations);
+double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 cim,
+                        int max_iterations);
+#ifdef __AVX2__
+void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_f128x4 cim,
+                        int max_iterations, double* results);
+#endif
 #endif
 
 #endif
