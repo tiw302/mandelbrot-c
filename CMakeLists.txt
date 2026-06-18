@@ -4,10 +4,14 @@ project(MandelbrotC C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
+# ensure consistent optimization flags
+add_compile_options(-O3 -ffast-math)
+
 # --- build options ---
 option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
 option(BUILD_GPU     "Build GPU-Engine (Desktop)"       OFF)
 option(BUILD_WEB     "Build Web-Engine (WASM)"          OFF)
+option(BUILD_DEEP    "Build Deep-Zoom Engine (GMP)"     OFF)
 
 # architecture tuning — set USE_NATIVE_ARCH=ON if your target machine
 # matches the build machine. falls back to avx2+fma when OFF. if the
@@ -15,12 +19,15 @@ option(BUILD_WEB     "Build Web-Engine (WASM)"          OFF)
 option(USE_NATIVE_ARCH "Use -march=native for host-optimal codegen" OFF)
 option(ARCH_GENERIC    "Disable all SIMD for maximum portability"   OFF)
 
-if(ARCH_GENERIC)
+if(EMSCRIPTEN)
+    # emscripten only supports -msimd128, not x86-specific -mavx2
+    set(ARCH_FLAGS -msimd128)
+elseif(ARCH_GENERIC)
     set(ARCH_FLAGS "")
 elseif(USE_NATIVE_ARCH)
     set(ARCH_FLAGS -march=native)
 else()
-    set(ARCH_FLAGS -mavx2 -mfma)
+    set(ARCH_FLAGS -march=native)
 endif()
 
 # include paths
@@ -62,7 +69,29 @@ endif()
 if(BUILD_WEB)
     add_executable(mandelbrot_web ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/ini_config.c src/app/web_main.c)
     target_compile_definitions(mandelbrot_web PRIVATE SOKOL_GLES3 USE_SIMD_F128)
-    target_compile_options(mandelbrot_web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
-    target_link_options(mandelbrot_web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824" "-pthread")
+    target_compile_options(mandelbrot_web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__)
+    target_link_options(mandelbrot_web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824")
     set_target_properties(mandelbrot_web PROPERTIES OUTPUT_NAME "index")
+endif()
+
+# --- 4. Link-Time Optimization (LTO / IPO) ---
+include(CheckIPOSupported)
+check_ipo_supported(RESULT ipo_supported OUTPUT ipo_error)
+if(ipo_supported)
+    if(BUILD_CPU)
+        set_target_properties(mandelbrot_cpu PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    if(BUILD_GPU)
+        set_target_properties(mandelbrot_gpu PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+endif()
+
+# --- 5. Benchmarks ---
+# ALWAYS add the benchmarks directory so it builds regardless of BUILD_CPU/GPU
+add_subdirectory(benchmarks)
+
+# --- 6. Tests ---
+# add tests directory if BUILD_TESTING is ON
+if(BUILD_TESTING)
+    add_subdirectory(tests)
 endif()
