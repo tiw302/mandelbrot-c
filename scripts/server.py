@@ -11,13 +11,24 @@ PORT = 8081
 DIRECTORY = "web" # default directory to serve
 
 def kill_port_owner(port):
+    # attempts to kill the process holding the port to allow instant restarts
     try:
-        # linux/macos only
-        cmd = f"lsof -ti:{port}"
-        pids = subprocess.check_output(cmd, shell=True).decode().split()
-        for pid in pids:
-            os.kill(int(pid), signal.SIGKILL)
+        if sys.platform == "win32":
+            # windows path: use netstat to find pid and taskkill to terminate
+            cmd = f'netstat -ano | findstr :{port}'
+            output = subprocess.check_output(cmd, shell=True).decode()
+            for line in output.splitlines():
+                if "LISTENING" in line:
+                    pid = line.strip().split()[-1]
+                    subprocess.call(f'taskkill /F /PID {pid}', shell=True)
+        else:
+            # unix path: use lsof to find pids and kill syscall to terminate
+            cmd = f"lsof -ti:{port}"
+            pids = subprocess.check_output(cmd, shell=True).decode().split()
+            for pid in pids:
+                os.kill(int(pid), signal.SIGKILL)
     except:
+        # ignore errors if port is already free or access is denied
         pass
 
 class Handler(http.server.SimpleHTTPRequestHandler):
@@ -31,6 +42,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
             clean_path = "/index.html"
             
         if DIRECTORY == "web" or DIRECTORY == ".":
+            # custom mapping to allow serving artifacts from the build folder
             if clean_path.startswith("/index.js") or clean_path.startswith("/index.wasm"):
                 return os.path.abspath(os.path.join("build_web", clean_path.lstrip("/")))
             elif clean_path.startswith("/assets/"):
@@ -41,10 +53,10 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         return super().translate_path(path)
 
     def end_headers(self):
-        # required for sharedarraybuffer/pthreads
+        # coop/coep headers are mandatory for sharedarraybuffer (multi-threading)
         self.send_header("Cross-Origin-Opener-Policy", "same-origin")
         self.send_header("Cross-Origin-Embedder-Policy", "require-corp")
-        # prevent caching during development
+        # disable caching to ensure the latest wasm binary is always loaded
         self.send_header("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0")
         super().end_headers()
 
