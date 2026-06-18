@@ -1,0 +1,48 @@
+name: WebAssembly Build & Deploy
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-deploy-web:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Emscripten
+      uses: mymindstorm/setup-emsdk@v14
+
+    - name: Build Web Engine
+      run: |
+        emcmake cmake -S . -B build_web -DCMAKE_BUILD_TYPE=Release -DBUILD_WEB=ON
+        cmake --build build_web --parallel
+
+    - name: Prepare deployment
+      run: |
+        mkdir -p deploy
+        cp web/index.html deploy/
+        cp web/style.css deploy/
+        cp web/app.js deploy/
+        cp web/coi-serviceworker.js deploy/
+        cp build_web/index.js deploy/
+        cp build_web/index.wasm deploy/
+        if [ -d "assets" ]; then cp -r assets deploy/; fi
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: mandelbrot-wasm
+        path: deploy/
+
+    - name: Deploy to GitHub Pages
+      if: github.ref == 'refs/heads/master' || github.ref == 'refs/heads/main'
+      uses: JamesIves/github-pages-deploy-action@v4
+      with:
+        folder: deploy
+        branch: gh-pages
