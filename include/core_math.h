@@ -17,22 +17,28 @@
 #include <immintrin.h>
 #endif
 
-/* shared complex number type used by all math kernels */
+// shared complex number type used by all math kernels
 typedef struct {
     double re;
     double im;
 } complex_t;
 
-/* 128-bit double-double type for extreme zoom precision.
- * only available when building with -DUSE_SIMD_F128. */
+// 128-bit double-double type for extreme zoom precision.
+// only available when building with -DUSE_SIMD_F128.
 #ifdef USE_SIMD_F128
 #define SIMD_F128_IMPLEMENTATION
 #include "../third_party/simd-f128/simd_f128.h"
+#include "../third_party/simd-f128/simd_f128_complex.h"
+#include "../third_party/simd-f128/simd_f128_math.h"
+#include "../third_party/simd-f128/simd_f128_utils.h"
+#ifdef __AVX2__
+#include "../third_party/simd-f128/simd_f128_vector.h"
+#endif
 #endif
 
-/* pull in individual kernel headers — they depend on complex_t above */
-#include "mandelbrot.h"
-#include "julia.h"
+// pull in individual kernel headers — they depend on complex_t above
 #include "burning_ship.h"
+#include "julia.h"
+#include "mandelbrot.h"
 
 #endif
