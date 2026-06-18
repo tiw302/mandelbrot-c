@@ -1,0 +1,40 @@
+name: "CodeQL Analysis"
+
+on:
+  push:
+    branches: [ "master", "main" ]
+  pull_request:
+    branches: [ "master", "main" ]
+  schedule:
+    - cron: '30 1 * * 0'
+
+jobs:
+  analyze:
+    name: Analyze
+    runs-on: ubuntu-latest
+    permissions:
+      actions: read
+      contents: read
+      security-events: write
+
+    steps:
+    - name: Checkout repository
+      uses: actions/checkout@v4
+
+    - name: Initialize CodeQL
+      uses: github/codeql-action/init@v3
+      with:
+        languages: cpp
+
+    - name: Install dependencies
+      run: |
+        sudo apt-get update
+        sudo apt-get install -y libx11-dev libxi-dev libxcursor-dev libgl1-mesa-dev libsdl2-dev libsdl2-ttf-dev
+
+    - name: Build Engine
+      run: |
+        cmake -S . -B build -DBUILD_CPU=ON -DBUILD_GPU=ON
+        cmake --build build --parallel
+
+    - name: Perform CodeQL Analysis
+      uses: github/codeql-action/analyze@v3
