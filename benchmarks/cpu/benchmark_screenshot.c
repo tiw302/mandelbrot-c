@@ -1,0 +1,90 @@
+// benchmark_screenshot.c — measures image encoding and disk I/O performance.
+// tests both stbi_write_png and chunked mega screenshot saving.
+
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <time.h>
+
+#ifdef _WIN32
+#include <io.h>
+#define unlink _unlink
+#else
+#include <unistd.h>
+#endif
+
+#include "renderer.h"
+#include "screenshot.h"
+
+#define MAX_ITERATIONS 1000
+
+// returns time in seconds
+static double get_time_sec() {
+    struct timespec ts;
+    clock_gettime(CLOCK_MONOTONIC, &ts);
+    return ts.tv_sec + ts.tv_nsec * 1e-9;
+}
+
+// helper to delete files generated during benchmark
+static void remove_latest_file(const char* prefix, const char* ext) {
+    // simplified cleanup: just inform user.
+    // robust file globbing in pure c is platform dependent.
+    printf("  (note: please clean up %s*.%s manually if needed)\n", prefix, ext);
+}
+
+int main() {
+    printf("==========================================\n");
+    printf(" Screenshot I/O Benchmarks                \n");
+    printf("==========================================\n\n");
+
+    init_renderer(MAX_ITERATIONS, 0);
+
+    const double x_min = -2.0;
+    const double x_max = 1.0;
+    const double y_min = -1.5;
+    const double y_max = 1.5;
+    complex_t dummy = {0};
+
+    // --- 1. Standard PNG Screenshot (1080p) ---
+    int width_1080 = 1920;
+    int height_1080 = 1080;
+    printf("1. Standard PNG Screenshot (%dx%d)\n", width_1080, height_1080);
+
+    uint32_t* pixels = (uint32_t*)malloc((size_t)width_1080 * height_1080 * sizeof(uint32_t));
+    if (pixels) {
+        // pre-render an image so we have realistic data to compress
+        printf("   (pre-rendering 1080p buffer...)\n");
+        render_mandelbrot_threaded(pixels, width_1080 * 4, width_1080, height_1080, x_min, x_max,
+                                   y_min, y_max, MAX_ITERATIONS);
+
+        printf("   Saving PNG to disk...\n");
+        double start = get_time_sec();
+        save_screenshot(pixels, width_1080, height_1080);
+        double end = get_time_sec();
+
+        printf("   -> Time taken: %.4f seconds\n\n", end - start);
+        remove_latest_file("mandelbrot_", "png");
+        free(pixels);
+    }
+
+    // --- 2. Mega Screenshot (8K TGA) ---
+    // 8K UHD is 7680x4320
+    int width_8k = 7680;
+    int height_8k = 4320;
+    printf("2. Mega Screenshot TGA (%dx%d - %.2f Mpx)\n", width_8k, height_8k,
+           (width_8k * height_8k) / 1e6);
+    printf("   Rendering and saving chunks to disk...\n");
+
+    double start = get_time_sec();
+    save_mega_screenshot(width_8k, height_8k, x_min, x_max, y_min, y_max, MAX_ITERATIONS, 0, 0,
+                         dummy);
+    double end = get_time_sec();
+
+    printf("   -> Time taken: %.4f seconds\n\n", end - start);
+    remove_latest_file("mega_mandelbrot_", "tga");
+
+    cleanup_renderer();
+    printf("Benchmark complete.\n");
+    return 0;
+}
