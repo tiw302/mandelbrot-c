@@ -1,5 +1,10 @@
 /* minimalist css reset */
-* { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+    -webkit-tap-highlight-color: transparent;
+}
 
 @font-face {
     font-family: 'AppFont';
@@ -29,8 +34,9 @@ canvas {
 /* ui overlay wrapper */
 #ui-overlay {
     position: fixed;
-    top: env(safe-area-inset-top, 0); 
-    left: 0; right: 0;
+    top: env(safe-area-inset-top, 0);
+    left: 0;
+    right: 0;
     display: flex;
     flex-direction: column;
     z-index: 10;
@@ -42,7 +48,7 @@ canvas {
     flex-wrap: wrap;
     gap: 4px;
     padding: 8px;
-    background: linear-gradient(to bottom, rgba(0,0,0,0.7), transparent);
+    background: linear-gradient(to bottom, rgba(0, 0, 0, 0.7), transparent);
     pointer-events: auto;
     width: 100%;
 }
@@ -61,7 +67,6 @@ canvas {
     border-radius: 2px;
     min-width: 65px;
     text-align: center;
-    /* subtle animations */
     transition: background-color 0.15s ease, border-color 0.15s ease, transform 0.1s ease;
 }
 
@@ -96,7 +101,7 @@ canvas {
     #debug-info {
         position: fixed;
         top: auto;
-        bottom: 35px; /* above the info bar */
+        bottom: 35px;
         left: 5px;
         align-self: auto;
         margin-top: 0;
@@ -119,9 +124,11 @@ canvas {
 
 #info {
     position: fixed;
-    bottom: 0; left: 0; right: 0;
+    bottom: 0;
+    left: 0;
+    right: 0;
     padding: 4px 10px;
-    background: rgba(0,0,0,0.6);
+    background: rgba(0, 0, 0, 0.6);
     font-size: 11px;
     color: #eee;
     z-index: 10;
@@ -130,16 +137,33 @@ canvas {
     font-family: monospace;
     backdrop-filter: blur(4px);
     -webkit-backdrop-filter: blur(4px);
-    border-top: 1px solid rgba(255,255,255,0.1);
+    border-top: 1px solid rgba(255, 255, 255, 0.1);
 }
 
-#info a { color: #fff; text-decoration: none; opacity: 0.8; }
-#info a:hover { opacity: 1; text-decoration: underline; }
+#info a {
+    color: #fff;
+    text-decoration: none;
+    opacity: 0.8;
+}
+
+#info a:hover {
+    opacity: 1;
+    text-decoration: underline;
+}
 
 @media (max-width: 600px) {
-    #info { font-size: 9px; padding: 6px 8px; }
-    #info span:first-child { display: none; } /* hide long text on mobile */
-    #info::before { content: "Scroll/Pinch=Zoom | Drag=Move"; }
+    #info {
+        font-size: 9px;
+        padding: 6px 8px;
+    }
+
+    #info span:first-child {
+        display: none;
+    }
+
+    #info::before {
+        content: "Scroll/Pinch=Zoom | Drag=Move";
+    }
 }
 
 #loading-screen {
@@ -166,9 +190,12 @@ canvas {
     margin-bottom: 12px;
 }
 
-@keyframes spin { to { transform: rotate(360deg); } }
+@keyframes spin {
+    to {
+        transform: rotate(360deg);
+    }
+}
 
-/* console log terminal inside loading screen */
 #loading-log {
     width: 85%;
     max-width: 500px;
@@ -188,8 +215,8 @@ canvas {
     line-height: 1.4;
 }
 
-/* retro settings panel overlay */
-#settings-panel, #alert-panel {
+#settings-panel,
+#alert-panel {
     position: fixed;
     top: 50%;
     left: 50%;
@@ -206,13 +233,13 @@ canvas {
     flex-direction: column;
     gap: 12px;
     box-shadow: 0 10px 30px rgba(0, 0, 0, 0.85);
-    /* popup transitions */
     opacity: 0;
     pointer-events: none;
     transition: opacity 0.2s ease, transform 0.2s cubic-bezier(0.175, 0.885, 0.32, 1.275);
 }
 
-#settings-panel.active, #alert-panel.active {
+#settings-panel.active,
+#alert-panel.active {
     opacity: 1;
     pointer-events: auto;
     transform: translate(-50%, -50%) scale(1);
@@ -234,7 +261,9 @@ canvas {
     font-size: 13px;
 }
 
-#settings-panel button, #settings-panel select, #settings-panel input,
+#settings-panel button,
+#settings-panel select,
+#settings-panel input,
 #alert-panel button {
     background: rgba(45, 45, 45, 0.8);
     color: #eee;
@@ -246,16 +275,21 @@ canvas {
     outline: none;
 }
 
-#settings-panel button, #settings-panel select, #alert-panel button {
+#settings-panel button,
+#settings-panel select,
+#alert-panel button {
     cursor: pointer;
     transition: background-color 0.15s ease, transform 0.1s ease;
 }
 
-#settings-panel button:hover, #settings-panel select:hover, #alert-panel button:hover {
+#settings-panel button:hover,
+#settings-panel select:hover,
+#alert-panel button:hover {
     background: rgba(68, 68, 68, 0.9);
 }
 
-#settings-panel button:active, #alert-panel button:active {
+#settings-panel button:active,
+#alert-panel button:active {
     background: rgba(85, 85, 85, 0.9);
     transform: scale(0.95);
 }
