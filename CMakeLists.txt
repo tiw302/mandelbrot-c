@@ -65,6 +65,10 @@ endif()
 
 # --- 2. GPU Engine ---
 if(BUILD_GPU)
+    if(APPLE)
+        # sokol_app.h uses Cocoa on macOS, so its implementation file must be compiled as Objective-C
+        set_source_files_properties(src/app/desktop_gpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
+    endif()
     add_executable(mandelbrot_gpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/engine/ini_config.c src/app/desktop_gpu_main.c)
     target_compile_definitions(mandelbrot_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE USE_SIMD_F128)
     target_compile_options(mandelbrot_gpu PRIVATE ${ARCH_FLAGS} -pthread)

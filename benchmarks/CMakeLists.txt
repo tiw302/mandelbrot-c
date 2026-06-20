@@ -39,6 +39,9 @@ target_link_libraries(benchmark_screenshot PRIVATE m pthread)
 
 # 4. benchmark_gpu (performance benchmarking for sokol GL GPU pipeline)
 if(BUILD_GPU)
+    if(APPLE)
+        set_source_files_properties(gpu/benchmark_gpu.c PROPERTIES COMPILE_FLAGS "-x objective-c")
+    endif()
     add_executable(benchmark_gpu gpu/benchmark_gpu.c
         ../src/core/color.c
         ../src/core/mandelbrot.c
