@@ -1,11 +1,13 @@
 'use strict';
 
+// dom element references
 const loadingScreen = document.getElementById('loading-screen');
 const statusText = document.getElementById('status');
 const canvas = document.getElementById('canvas');
 const debugInfo = document.getElementById('debug-info');
 const zoomBox = document.getElementById('zoom-box');
 
+// appends a message to the splash screen log
 function addLog(msg) {
     const log = document.getElementById('loading-log');
     if (log) {
@@ -14,25 +16,36 @@ function addLog(msg) {
     }
 }
 
-// initial loader logs
 addLog("[loader] initializing webgl sandbox...");
 addLog("[loader] loading assets/fonts/font.ttf...");
 addLog("[loader] loading WebAssembly runtime...");
 
+// configuration and runtime state
 const PALETTES = ["sine wave", "grayscale", "fire", "electric", "ocean", "inferno", "viridis", "plasma", "twilight"];
 let _gpuMode = true;
 let _tourActive = false;
 let _juliaMode = false;
+let _highPrecision = false;
+let _settingsOpen = false;
 
+// transient state for jit url generation and settings synchronization
+let _currentState = {
+    julia_mode: false, burning_ship_mode: false, iters: 350, zoom: 3.0,
+    center_re: -0.5, center_im: 0.0, palette_idx: 0,
+    julia_re: 0.0, julia_im: 0.0
+};
+
+// toggles automated fractal navigation
 function toggleTour() {
     Module._wasm_toggle_tour();
     _tourActive = !_tourActive;
     document.getElementById('tourBtn').textContent = _tourActive ? 'stop tour' : 'tour';
 }
 
+// switches between webgl2 fragment shader and multi-threaded wasm workers
 function toggleGpu() {
     if (_gpuMode && _highPrecision) {
-        // Prevent accidentally entering 128-bit CPU mode when disabling GPU
+        // safety: force exit of high-precision mode if disabling gpu
         if (Module._wasm_toggle_precision) {
             Module._wasm_toggle_precision();
             _highPrecision = false;
@@ -44,17 +57,16 @@ function toggleGpu() {
     document.getElementById('gpuBtn').textContent = gpuText;
     const setGpu = document.getElementById('setGpuBtn');
     if (setGpu) setGpu.textContent = _gpuMode ? 'gpu' : 'cpu';
-    
+
     updatePrecisionUI();
 }
 
-let _highPrecision = false;
-
+// updates the precision toggle text based on current engine mode
 function updatePrecisionUI() {
-    const precText = _gpuMode 
+    const precText = _gpuMode
         ? (_highPrecision ? '64-bit ✓' : '32-bit')
         : (_highPrecision ? '128-bit ✓' : '64-bit');
-    
+
     const setPrecText = _gpuMode
         ? (_highPrecision ? '64-bit' : '32-bit')
         : (_highPrecision ? '128-bit' : '64-bit');
@@ -69,6 +81,7 @@ function closeAlert() {
     document.getElementById('alert-panel').classList.remove('active');
 }
 
+// toggles emulated 64-bit math (gpu) or native double-double (cpu)
 function togglePrecision() {
     if (!_gpuMode && !_highPrecision) {
         document.getElementById('alert-panel').classList.add('active');
@@ -81,28 +94,28 @@ function togglePrecision() {
     }
 }
 
-let _settingsOpen = false;
+// toggles the slide-out advanced settings panel
 function toggleSettings() {
     const panel = document.getElementById('settings-panel');
     _settingsOpen = !_settingsOpen;
     panel.classList.toggle('active', _settingsOpen);
     if (_settingsOpen) {
+        // sync panel widgets with authoritative wasm state
         const setGpu = document.getElementById('setGpuBtn');
         if (setGpu) setGpu.textContent = _gpuMode ? 'gpu' : 'cpu';
-        
+
         const setPrecRow = document.getElementById('setPrecisionRow');
         if (setPrecRow) setPrecRow.style.display = 'flex';
-        
+
         const setPrec = document.getElementById('setPrecisionBtn');
         if (setPrec) setPrec.textContent = _gpuMode ? (_highPrecision ? '64-bit' : '32-bit') : (_highPrecision ? '128-bit' : '64-bit');
-        
+
         const setPalette = document.getElementById('setPaletteSelect');
         if (setPalette) setPalette.value = _currentState.palette_idx;
-        
+
         const setIters = document.getElementById('setIterationsVal');
         if (setIters) setIters.textContent = _currentState.iters;
 
-        // sync coordinates inputs
         document.getElementById('setCenterRe').value = _currentState.center_re.toFixed(14);
         document.getElementById('setCenterIm').value = _currentState.center_im.toFixed(14);
         document.getElementById('setZoom').value = _currentState.zoom.toExponential(6);
@@ -133,6 +146,7 @@ function toggleSettings() {
     }
 }
 
+// pushes manual coordinate overrides from settings to the wasm engine
 function updateCoordinatesFromSettings() {
     const re = parseFloat(document.getElementById('setCenterRe').value);
     const im = parseFloat(document.getElementById('setCenterIm').value);
@@ -149,6 +163,7 @@ function updateCoordinatesFromSettings() {
     }
 }
 
+// adjusts julia c-parameter via increments (keyboard or buttons)
 function adjustJuliaC(dre, dim) {
     if (!_currentState.julia_mode) return;
     const jreInput = document.getElementById('setJuliaRe');
@@ -177,7 +192,7 @@ function toggleJuliaLock() {
 function changeFractalMode(val) {
     const targetJulia = (val === 'julia');
     const targetShip = (val === 'ship');
-    
+
     if (_currentState.burning_ship_mode && !targetShip && Module._wasm_toggle_burning_ship) {
         Module._wasm_toggle_burning_ship();
     }
@@ -199,13 +214,7 @@ function changePalette(val) {
     }
 }
 
-// global state for just-in-time URL generation
-let _currentState = {
-    julia_mode: false, burning_ship_mode: false, iters: 350, zoom: 3.0,
-    center_re: -0.5, center_im: 0.0, palette_idx: 0,
-    julia_re: 0.0, julia_im: 0.0
-};
-
+// core telemetry callback — called by C engine every frame via EM_JS
 window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im) {
     let engine = "mandelbrot";
     if (julia_mode) engine = "julia";
@@ -222,21 +231,16 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_
     }
 
     let html = `${engine}\n`;
-
-    if (julia_mode) {
-        html += `c: (${julia_re.toFixed(10)}, ${julia_im.toFixed(10)})\n`;
-    } else {
-        html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
-    }
+    if (julia_mode) html += `c: (${julia_re.toFixed(10)}, ${julia_im.toFixed(10)})\n`;
+    else html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
 
     html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 9]}${tour_str}`;
-
     debugInfo.textContent = html;
 
-    // store state instead of updating URL constantly
+    // cache state for background tasks (like url generation)
     _currentState = { julia_mode, burning_ship_mode: !!burning_ship_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
 
-    // sync UI buttons from C's authoritative state (handles keyboard shortcuts too)
+    // sync frontend ui with authoritative engine state
     const gpuNow = !!gpu_mode;
     const precNow = !!high_precision;
     if (_gpuMode !== gpuNow || _highPrecision !== precNow) {
@@ -245,63 +249,48 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_
         document.getElementById('gpuBtn').textContent = _gpuMode ? 'gpu \u2713' : 'cpu';
         updatePrecisionUI();
     }
-    const helpE = document.getElementById('help-e-hint');
-    if (helpE) helpE.style.display = '';
-
-    // update tour state button text
+    
     _tourActive = (tour_phase !== 0);
     document.getElementById('tourBtn').textContent = _tourActive ? 'stop tour' : 'tour';
 
-    // sync settings widgets
+    // update settings panel widgets if visible
     const setPalette = document.getElementById('setPaletteSelect');
     if (setPalette) setPalette.value = palette_idx;
-    
+
     const setIters = document.getElementById('setIterationsVal');
     if (setIters) setIters.textContent = max_iters;
 
     if (_settingsOpen) {
         const reInput = document.getElementById('setCenterRe');
-        if (reInput && document.activeElement !== reInput) {
-            reInput.value = center_re.toFixed(14);
-        }
+        if (reInput && document.activeElement !== reInput) reInput.value = center_re.toFixed(14);
         const imInput = document.getElementById('setCenterIm');
-        if (imInput && document.activeElement !== imInput) {
-            imInput.value = center_im.toFixed(14);
-        }
+        if (imInput && document.activeElement !== imInput) imInput.value = center_im.toFixed(14);
         const zInput = document.getElementById('setZoom');
-        if (zInput && document.activeElement !== zInput) {
-            zInput.value = zoom.toExponential(6);
-        }
+        if (zInput && document.activeElement !== zInput) zInput.value = zoom.toExponential(6);
         const jreInput = document.getElementById('setJuliaRe');
-        if (jreInput && document.activeElement !== jreInput) {
-            jreInput.value = julia_re.toFixed(14);
-        }
+        if (jreInput && document.activeElement !== jreInput) jreInput.value = julia_re.toFixed(14);
         const jimInput = document.getElementById('setJuliaIm');
-        if (jimInput && document.activeElement !== jimInput) {
-            jimInput.value = julia_im.toFixed(14);
-        }
+        if (jimInput && document.activeElement !== jimInput) jimInput.value = julia_im.toFixed(14);
+        
         const lockBtn = document.getElementById('setJuliaLockBtn');
         if (lockBtn && Module._wasm_is_julia_locked) {
             const locked = Module._wasm_is_julia_locked();
             lockBtn.textContent = locked ? 'locked 🔒' : 'unlocked';
         }
+        
         const juliaRow = document.getElementById('setJuliaCoordsRow');
-        if (juliaRow) {
-            juliaRow.style.display = julia_mode ? 'flex' : 'none';
-        }
+        if (juliaRow) juliaRow.style.display = julia_mode ? 'flex' : 'none';
+        
         const setMode = document.getElementById('setFractalModeSelect');
         if (setMode) {
             if (julia_mode) setMode.value = 'julia';
             else if (burning_ship_mode) setMode.value = 'ship';
             else setMode.value = 'mandelbrot';
         }
-        const setTour = document.getElementById('setTourBtn');
-        if (setTour) {
-            setTour.textContent = _tourActive ? 'stop tour' : 'start tour';
-        }
     }
 };
 
+// serializes current view state into browser url parameters
 function updateURL() {
     const s = _currentState;
     const params = new URLSearchParams(window.location.search);
@@ -313,9 +302,7 @@ function updateURL() {
         params.set('jre', s.julia_re.toFixed(14));
         params.set('jim', s.julia_im.toFixed(14));
     } else {
-        params.delete('j');
-        params.delete('jre');
-        params.delete('jim');
+        params.delete('j'); params.delete('jre'); params.delete('jim');
     }
     params.set('it', s.iters);
     params.set('p', s.palette_idx);
@@ -325,71 +312,54 @@ function updateURL() {
     return window.location.href;
 }
 
+// restores engine state from browser url parameters
 function loadFromURL() {
     const params = new URLSearchParams(window.location.search);
-    const re = parseFloat(params.get('re'));
-    const im = parseFloat(params.get('im'));
-    const z = parseFloat(params.get('z'));
+    const re = parseFloat(params.get('re')), im = parseFloat(params.get('im')), z = parseFloat(params.get('z'));
     const j = params.get('j') === '1';
-    const jre = parseFloat(params.get('jre')) || 0;
-    const jim = parseFloat(params.get('jim')) || 0;
-    const it = parseInt(params.get('it')) || 0;
-    const p = parseInt(params.get('p')) || 0;
+    const jre = parseFloat(params.get('jre')) || 0, jim = parseFloat(params.get('jim')) || 0;
+    const it = parseInt(params.get('it')) || 0, p = parseInt(params.get('p')) || 0;
 
     if (!isNaN(re) && !isNaN(im) && !isNaN(z)) {
-        if (Module._wasm_set_view) {
-            Module._wasm_set_view(re, im, z);
-        }
-        if (Module._wasm_set_state) {
-            Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
-        }
+        if (Module._wasm_set_view) Module._wasm_set_view(re, im, z);
+        if (Module._wasm_set_state) Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
     }
-
-    // no longer need to delay enabling updates since we update only on demand
 }
 
+// generates a deep link and copies it to clipboard
 function copyLink() {
     const btn = document.getElementById('copyBtn');
-    const url = updateURL(); // generate and update address bar just-in-time
+    const url = updateURL(); 
     navigator.clipboard.writeText(url).then(() => {
         const oldText = btn.textContent;
         btn.textContent = 'copied!';
         setTimeout(() => btn.textContent = oldText, 2000);
-    }).catch(err => {
-        alert("Link: " + url);
-    });
+    }).catch(err => { alert("Link: " + url); });
 }
 
+// visual helper callback for zooming interaction
 window.updateZoomBox = function (is_zooming, x, y, w, h) {
     if (is_zooming) {
         zoomBox.style.display = 'block';
-        zoomBox.style.left = x + 'px';
-        zoomBox.style.top = y + 'px';
-        zoomBox.style.width = w + 'px';
-        zoomBox.style.height = h + 'px';
+        zoomBox.style.left = x + 'px'; zoomBox.style.top = y + 'px';
+        zoomBox.style.width = w + 'px'; zoomBox.style.height = h + 'px';
     } else {
         zoomBox.style.display = 'none';
     }
 };
 
+// triggers frame download — called from C engine after glReadPixels
 window.downloadScreenshotData = function (ptr, w, h, heap) {
     if (!ptr || w <= 0 || h <= 0) return;
-
     const wasmHeap = heap || Module.HEAPU8;
-    if (!wasmHeap) {
-        console.error("WASM Memory is not available.");
-        return;
-    }
-
-    // copy pixels from wasm heap
+    
+    // transform wasm memory range to js image data
     const data = new Uint8ClampedArray(wasmHeap.buffer, ptr, w * h * 4);
     const pixels = new Uint8ClampedArray(data);
     const imgData = new ImageData(pixels, w, h);
 
-    // generate png via temp canvas
     const tmpCanvas = document.createElement('canvas');
-    tmpCanvas.width = w;
-    tmpCanvas.height = h;
+    tmpCanvas.width = w; tmpCanvas.height = h;
     const ctx2d = tmpCanvas.getContext('2d');
     ctx2d.putImageData(imgData, 0, 0);
 
@@ -407,20 +377,15 @@ window.downloadScreenshotData = function (ptr, w, h, heap) {
 };
 
 function syncSize() {
-    const w = window.innerWidth;
-    const h = window.innerHeight;
-    if (Module._wasm_set_resolution) {
-        Module._wasm_set_resolution(w, h);
-    }
+    const w = window.innerWidth, h = window.innerHeight;
+    if (Module._wasm_set_resolution) Module._wasm_set_resolution(w, h);
 }
 
 function downloadScreenshot() {
-    if (Module._wasm_request_screenshot) {
-        Module._wasm_request_screenshot();
-    }
+    if (Module._wasm_request_screenshot) Module._wasm_request_screenshot();
 }
 
-// emscripten config
+// main emscripten module configuration
 var Module = {
     preRun: [],
     postRun: [function () {
@@ -431,7 +396,7 @@ var Module = {
             window._rt = setTimeout(syncSize, 100);
         });
 
-        // keyboard events
+        // raw input mapping (authoritative state lives in C)
         window.addEventListener('keydown', (e) => {
             if (e.repeat) return;
             const key = e.key.toLowerCase();
@@ -450,7 +415,7 @@ var Module = {
             }
         });
 
-        // mobile touch: 1-finger zoom, 2-finger pinch
+        // touch interaction: maps gestures to wasm mouse emulation
         let lastTouches = [];
         let isPinching = false;
 
@@ -470,17 +435,11 @@ var Module = {
             e.preventDefault();
             const touches = Array.from(e.touches);
             if (touches.length === 1 && !isPinching) {
-                // single finger: zoom selection box
                 Module._wasm_mouse_move(touches[0].clientX, touches[0].clientY);
             } else if (touches.length === 2 && lastTouches.length === 2) {
-                // two fingers: pinch zoom
                 isPinching = true;
-                const d0 = Math.hypot(
-                    lastTouches[0].clientX - lastTouches[1].clientX,
-                    lastTouches[0].clientY - lastTouches[1].clientY);
-                const d1 = Math.hypot(
-                    touches[0].clientX - touches[1].clientX,
-                    touches[0].clientY - touches[1].clientY);
+                const d0 = Math.hypot(lastTouches[0].clientX - lastTouches[1].clientX, lastTouches[0].clientY - lastTouches[1].clientY);
+                const d1 = Math.hypot(touches[0].clientX - touches[1].clientX, touches[0].clientY - touches[1].clientY);
                 if (d0 > 0) {
                     const factor = d0 / d1;
                     const cx = (touches[0].clientX + touches[1].clientX) / 2;
@@ -499,42 +458,27 @@ var Module = {
             if (e.touches.length === 0) isPinching = false;
         }, { passive: false });
     }],
-    print: (text) => {
-        console.log(text);
-        addLog(text);
-    },
-    printErr: (text) => {
-        console.error(text);
-        addLog("[stderr] " + text);
-    },
+    print: (text) => { console.log(text); addLog(text); },
+    printErr: (text) => { console.error(text); addLog("[stderr] " + text); },
     canvas: canvas,
     setStatus: (text) => {
         if (!text) {
             addLog("[loader] WebAssembly runtime initialized.");
-            addLog("[loader] starting mandelbrot rendering engine...");
             loadingScreen.style.opacity = '0';
             setTimeout(() => loadingScreen.style.display = 'none', 600);
         } else {
             statusText.textContent = text;
             addLog(`[loader] ${text}`);
         }
-    },
-    totalDependencies: 0,
-    monitorRunDependencies: function(left) {
-        this.totalDependencies = Math.max(this.totalDependencies || 0, left);
-        if (left) {
-            const msg = `dependency download progress: ${this.totalDependencies - left}/${this.totalDependencies}`;
-            Module.setStatus(msg);
-        }
     }
 };
 
-window.onerror = (event) => {
+window.onerror = () => {
     statusText.textContent = "error: could not load engine.";
     statusText.style.color = "#ff5555";
 };
 
-// webgl2 check
+// basic webgl 2.0 environment probe
 const tempCanvas = document.createElement('canvas');
 const gl = tempCanvas.getContext('webgl2');
 if (!gl) {
