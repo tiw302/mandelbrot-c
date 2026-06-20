@@ -6,11 +6,13 @@
 
 #include "config.h"
 
-#define TOUR_ZOOM_DEPTH 6000.0
-#define TOUR_PAN_MS 1800.0
-#define TOUR_ZOOM_IN_MS 4000.0
-#define TOUR_ZOOM_OUT_MS 3200.0
+// tour configuration constants
+#define TOUR_ZOOM_DEPTH 6000.0   // target zoom depth (relative to current)
+#define TOUR_PAN_MS 1800.0       // duration of the initial pan movement
+#define TOUR_ZOOM_IN_MS 4000.0   // duration of the deep zoom phase
+#define TOUR_ZOOM_OUT_MS 3200.0  // duration of the pull-back phase
 
+// preset coordinates for the mandelbrot set tour
 static const struct {
     double re, im;
 } ZOOM_TARGETS[] = {
@@ -37,6 +39,7 @@ static const struct {
 };
 #define NUM_ZOOM_TARGETS (int)(sizeof(ZOOM_TARGETS) / sizeof(ZOOM_TARGETS[0]))
 
+// preset coordinates for the burning ship fractal tour
 static const struct {
     double re, im;
 } SHIP_ZOOM_TARGETS[] = {
@@ -57,9 +60,10 @@ static const struct {
 };
 #define NUM_SHIP_ZOOM_TARGETS (int)(sizeof(SHIP_ZOOM_TARGETS) / sizeof(SHIP_ZOOM_TARGETS[0]))
 
-#define JULIA_TOUR_MOVE_MS 3000.0
-#define JULIA_TOUR_DWELL_MS 1200.0
+#define JULIA_TOUR_MOVE_MS 3000.0   // duration of parameter interpolation
+#define JULIA_TOUR_DWELL_MS 1200.0  // duration of pause at keyframes
 
+// preset c-parameter keyframes for the julia set tour
 static const struct {
     double re, im;
 } JULIA_C_TARGETS[] = {
@@ -69,10 +73,12 @@ static const struct {
 };
 #define NUM_JULIA_C_TARGETS (int)(sizeof(JULIA_C_TARGETS) / sizeof(JULIA_C_TARGETS[0]))
 
+// standard hermite interpolation for smooth ease-in/out motion
 static inline double smoothstep(double t) {
     return t * t * (3.0 - 2.0 * t);
 }
 
+// random target selection that guarantees we never pick the same target twice in a row
 static int pick_idx(int last, int count) {
     int idx;
     do {
@@ -81,6 +87,7 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
+// advances the main fractal tour state machine based on current timestamp
 void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning_ship) {
     if (state->phase == TOUR_IDLE) return;
     if (state->phase_start == 0) {
@@ -90,11 +97,13 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
     double duration = (state->phase == TOUR_PANNING)      ? TOUR_PAN_MS
                       : (state->phase == TOUR_ZOOMING_IN) ? TOUR_ZOOM_IN_MS
                                                           : TOUR_ZOOM_OUT_MS;
-    double raw_t = fmin((double)(now - state->phase_start) / duration, 1.0);
+    int32_t dt = (int32_t)(now - state->phase_start);
+    double raw_t = fmax(0.0, fmin((double)dt / duration, 1.0));
     double e = smoothstep(raw_t);
 
     switch (state->phase) {
         case TOUR_PANNING:
+            // linear interpolation for camera position during panning
             view->center_re = state->home_re + (state->target_re - state->home_re) * e;
             view->center_im = state->home_im + (state->target_im - state->home_im) * e;
             view->zoom = state->home_zoom;
@@ -106,6 +115,7 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
             }
             break;
         case TOUR_ZOOMING_IN:
+            // exponential interpolation for smooth zoom depth perception
             view->center_re = state->target_re;
             view->center_im = state->target_im;
             view->zoom =
@@ -117,6 +127,7 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
             }
             break;
         case TOUR_ZOOMING_OUT:
+            // return to home position while pulling back the camera
             view->center_re = state->target_re + (state->home_re - state->target_re) * e;
             view->center_im = state->target_im + (state->home_im - state->target_im) * e;
             view->zoom =
@@ -125,6 +136,8 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
                 view->center_re = state->home_re;
                 view->center_im = state->home_im;
                 view->zoom = state->home_zoom;
+
+                // select a new random target for the next loop
                 if (is_burning_ship) {
                     state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_SHIP_ZOOM_TARGETS);
                     state->target_re = SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
@@ -143,6 +156,7 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
     }
 }
 
+// initializes tour state based on the current viewport
 void start_tour(TourState* state, ViewState* view) {
     state->home_re = view->center_re;
     state->home_im = view->center_im;
@@ -150,7 +164,7 @@ void start_tour(TourState* state, ViewState* view) {
     state->deep_zoom = view->zoom / TOUR_ZOOM_DEPTH;
     state->target_re = view->center_re;
     state->target_im = view->center_im;
-    state->phase = TOUR_ZOOMING_OUT;
+    state->phase = TOUR_ZOOMING_OUT;  // start with a reset move
     state->phase_start = 0;
 }
 
@@ -158,6 +172,7 @@ void stop_tour(TourState* state) {
     state->phase = TOUR_IDLE;
 }
 
+// initializes the julia parameter tour
 void start_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now) {
     state->from_re = julia_c->re;
     state->from_im = julia_c->im;
@@ -169,11 +184,13 @@ void stop_julia_tour(JuliaTourState* state) {
     state->phase = JULIA_TOUR_IDLE;
 }
 
+// advances the julia parameter state machine (keyframe interpolation)
 void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now) {
     if (state->phase == JULIA_TOUR_IDLE) return;
 
     if (state->phase == JULIA_TOUR_MOVING) {
-        double raw_t = fmin((double)(now - state->phase_start) / JULIA_TOUR_MOVE_MS, 1.0);
+        int32_t dt = (int32_t)(now - state->phase_start);
+        double raw_t = fmax(0.0, fmin((double)dt / JULIA_TOUR_MOVE_MS, 1.0));
         double e = smoothstep(raw_t);
         julia_c->re = state->from_re + (state->to_re - state->from_re) * e;
         julia_c->im = state->from_im + (state->to_im - state->from_im) * e;
@@ -184,7 +201,9 @@ void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now) 
             state->phase_start = now;
         }
     } else {
-        if ((double)(now - state->phase_start) >= JULIA_TOUR_DWELL_MS) {
+        // dwell phase: stay at keyframe for a brief moment before moving again
+        int32_t dt = (int32_t)(now - state->phase_start);
+        if ((double)dt >= JULIA_TOUR_DWELL_MS) {
             state->from_re = julia_c->re;
             state->from_im = julia_c->im;
             state->last_julia_idx = pick_idx(state->last_julia_idx, NUM_JULIA_C_TARGETS);
@@ -196,6 +215,7 @@ void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now) 
     }
 }
 
+// converts enum state to human readable string for hud display
 const char* get_tour_phase_name(TourPhase phase) {
     static const char* PHASE_NAMES[] = {"", "Panning", "Zooming in", "Zooming out"};
     if (phase >= 0 && phase < 4) return PHASE_NAMES[phase];
@@ -210,6 +230,7 @@ int get_num_tour_targets(int is_burning_ship) {
     return is_burning_ship ? NUM_SHIP_ZOOM_TARGETS : NUM_ZOOM_TARGETS;
 }
 
+// retrieves current target coordinate for hud telemetry
 double get_tour_target_re(const TourState* state, int is_burning_ship) {
     if (state->phase == TOUR_IDLE) return 0.0;
     if (is_burning_ship) {
