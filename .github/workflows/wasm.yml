@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-and-deploy-web:
     runs-on: ubuntu-latest
@@ -32,6 +36,7 @@ jobs:
         cp web/coi-serviceworker.js deploy/
         cp build_web/index.js deploy/
         cp build_web/index.wasm deploy/
+        cp build_web/index.worker.js deploy/ 2>/dev/null || true
         if [ -d "assets" ]; then cp -r assets deploy/; fi
 
     - name: Upload Artifacts
