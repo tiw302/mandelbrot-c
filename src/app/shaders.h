@@ -22,7 +22,7 @@ static const char* fs_cpu_src =
     "    frag_color = texture(tex, uv);\n"
     "}\n";
 
-/* gpu shader: exact match to cpu color.c palettes and mandelbrot.c smooth formula. */
+// gpu shader: exact match to cpu color.c palettes and mandelbrot.c smooth formula.
 static const char* fs_gpu_src =
     "#version 300 es\n"
     "precision highp float;\n"
@@ -42,9 +42,9 @@ static const char* fs_gpu_src =
     "out vec4 frag_color;\n"
 
     /* ---------------------------------------------------------------
-     * Optimization barrier for GLSL ES 3.0 (WebGL2).
+     * optimization barrier for GLSL ES 3.0 (WebGL2).
      *
-     * GLSL ES 3.0 has no 'precise' qualifier. The compiler is free to
+     * GLSL ES 3.0 has no 'precise' qualifier. the compiler is free to
      * algebraically simplify (a+b)-a → b, destroying the rounding-
      * error that TwoSum/Dekker arithmetic relies on.
      *
@@ -55,7 +55,7 @@ static const char* fs_gpu_src =
      * --------------------------------------------------------------- */
     "float B(float x) { return x + u_zero; }\n"
     "\n"
-    /* ds_add: Knuth TwoSum algorithm (DSFUN90).
+    /* ds_add: knuth TwoSum algorithm (DSFUN90).
      * B() barriers prevent the compiler from folding (a+b)-a → b. */
     "vec2 ds_add(vec2 dsa, vec2 dsb) {\n"
     "    float t1 = dsa.x + dsb.x;\n"
@@ -65,8 +65,8 @@ static const char* fs_gpu_src =
     "    return vec2(hi, t2 - (B(hi) - t1));\n"
     "}\n"
     "\n"
-    /* ds_mul: Dekker multiplication (DSFUN90 / Veltkamp split).
-     * Split constant = 4097 = 2^12+1, correct for 24-bit float mantissa.
+    /* ds_mul: dekker multiplication (DSFUN90 / Veltkamp split).
+     * split constant = 4097 = 2^12+1, correct for 24-bit float mantissa.
      * B() on c11/t1/hi prevents compiler from expanding a*b symbolically. */
     "vec2 ds_mul(vec2 dsa, vec2 dsb) {\n"
     "    float cona = dsa.x * 4097.0;\n"
@@ -88,39 +88,57 @@ static const char* fs_gpu_src =
     "vec3 lut_color(float fi, int pal) {\n"
     "    float i = fi;\n"
     "    vec3 a, b;\n"
-    "    if (pal == 0) {\n" /* sine wave: swapped phases (4,2,0) to match cpu mint appearance */
+    "    if (pal == 0) {\n"  // sine wave: swapped phases (4,2,0) to match cpu mint appearance
     "        a = vec3(sin(0.1*i+4.0)*127.0+128.0, sin(0.1*i+2.0)*127.0+128.0, "
     "sin(0.1*i+0.0)*127.0+128.0) / 255.0;\n"
     "        b = vec3(sin(0.1*(i+1.0)+4.0)*127.0+128.0, sin(0.1*(i+1.0)+2.0)*127.0+128.0, "
     "sin(0.1*(i+1.0)+0.0)*127.0+128.0) / 255.0;\n"
-    "    } else if (pal == 1) {\n" /* grayscale */
+    "    } else if (pal == 1) {\n"  // grayscale
     "        float v = mod(i, 256.0) / 255.0;\n"
     "        float v2 = mod(i+1.0, 256.0) / 255.0;\n"
     "        a = vec3(v); b = vec3(v2);\n"
-    "    } else if (pal == 2) {\n" /* fire (swapped to match cpu) */
-    "        a = vec3(255.0-abs(mod(i*1.0, 510.0)-255.0), 255.0-abs(mod(i*2.0, 510.0)-255.0), 255.0-abs(mod(i*4.0, 510.0)-255.0)) / 255.0;\n"
-    "        b = vec3(255.0-abs(mod((i+1.0)*1.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*2.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*4.0, 510.0)-255.0)) / 255.0;\n"
-    "    } else if (pal == 3) {\n" /* electric (swapped to match cpu) */
-    "        a = vec3(255.0-abs(mod(i*8.0, 510.0)-255.0), 255.0-abs(mod(i*4.0, 510.0)-255.0), 255.0-abs(mod(i*1.0, 510.0)-255.0)) / 255.0;\n"
-    "        b = vec3(255.0-abs(mod((i+1.0)*8.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*4.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*1.0, 510.0)-255.0)) / 255.0;\n"
-    "    } else if (pal == 4) {\n" /* ocean (swapped to match cpu) */
-    "        a = vec3(255.0-abs(mod(i*5.0, 510.0)-255.0), 255.0-abs(mod(i*2.0, 510.0)-255.0), 255.0-abs(mod(i*0.5, 510.0)-255.0)) / 255.0;\n"
-    "        b = vec3(255.0-abs(mod((i+1.0)*5.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*2.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*0.5, 510.0)-255.0)) / 255.0;\n"
-    "    } else if (pal == 5) {\n" /* inferno */
-    "        a = vec3(255.0-abs(mod(i*0.5, 510.0)-255.0), 255.0-abs(mod(i*2.0, 510.0)-255.0), 255.0-abs(mod(i*8.0, 510.0)-255.0)) / 255.0;\n"
-    "        b = vec3(255.0-abs(mod((i+1.0)*0.5, 510.0)-255.0), 255.0-abs(mod((i+1.0)*2.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*8.0, 510.0)-255.0)) / 255.0;\n"
-    "    } else if (pal == 6) {\n" /* viridis */
-    "        float t1 = fract(i/256.0); float t2 = fract((i+1.0)/256.0);\n"
-    "        a = vec3(0.267+t1*(0.993*t1-0.260), 0.004+t1*(1.490-t1*0.494), 0.329+t1*(1.268*t1*t1-0.680*t1-0.259));\n"
-    "        b = vec3(0.267+t2*(0.993*t2-0.260), 0.004+t2*(1.490-t2*0.494), 0.329+t2*(1.268*t2*t2-0.680*t2-0.259));\n"
-    "    } else if (pal == 7) {\n" /* plasma */
-    "        float t1 = fract(i/256.0); float t2 = fract((i+1.0)/256.0);\n"
-    "        a = vec3(0.050+t1*(2.735-t1*1.785), max(0.0,t1*(1.580*t1-0.580)), max(0.0,0.530+t1*(0.750-t1*1.280)));\n"
-    "        b = vec3(0.050+t2*(2.735-t2*1.785), max(0.0,t2*(1.580*t2-0.580)), max(0.0,0.530+t2*(0.750-t2*1.280)));\n"
-    "    } else {\n" /* twilight */
+    "    } else if (pal == 2) {\n"  // fire (swapped to match cpu)
+    "        a = vec3(255.0-abs(mod(i*1.0, 510.0)-255.0), 255.0-abs(mod(i*2.0, 510.0)-255.0), "
+    "255.0-abs(mod(i*4.0, 510.0)-255.0)) / 255.0;\n"
+    "        b = vec3(255.0-abs(mod((i+1.0)*1.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*2.0, "
+    "510.0)-255.0), 255.0-abs(mod((i+1.0)*4.0, 510.0)-255.0)) / 255.0;\n"
+    "    } else if (pal == 3) {\n"  // electric (swapped to match cpu)
+    "        a = vec3(255.0-abs(mod(i*8.0, 510.0)-255.0), 255.0-abs(mod(i*4.0, 510.0)-255.0), "
+    "255.0-abs(mod(i*1.0, 510.0)-255.0)) / 255.0;\n"
+    "        b = vec3(255.0-abs(mod((i+1.0)*8.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*4.0, "
+    "510.0)-255.0), 255.0-abs(mod((i+1.0)*1.0, 510.0)-255.0)) / 255.0;\n"
+    "    } else if (pal == 4) {\n"  // ocean (swapped to match cpu)
+    "        a = vec3(255.0-abs(mod(i*5.0, 510.0)-255.0), 255.0-abs(mod(i*2.0, 510.0)-255.0), "
+    "255.0-abs(mod(i*0.5, 510.0)-255.0)) / 255.0;\n"
+    "        b = vec3(255.0-abs(mod((i+1.0)*5.0, 510.0)-255.0), 255.0-abs(mod((i+1.0)*2.0, "
+    "510.0)-255.0), 255.0-abs(mod((i+1.0)*0.5, 510.0)-255.0)) / 255.0;\n"
+    "    } else if (pal == 5) {\n"  // inferno
+    "        a = vec3(255.0-abs(mod(i*0.5, 510.0)-255.0), 255.0-abs(mod(i*2.0, 510.0)-255.0), "
+    "255.0-abs(mod(i*8.0, 510.0)-255.0)) / 255.0;\n"
+    "        b = vec3(255.0-abs(mod((i+1.0)*0.5, 510.0)-255.0), 255.0-abs(mod((i+1.0)*2.0, "
+    "510.0)-255.0), 255.0-abs(mod((i+1.0)*8.0, 510.0)-255.0)) / 255.0;\n"
+    "    } else if (pal == 6) {\n"  // viridis
+    "        // use ping-pong wrap to avoid sharp edges\n"
+    "        float t1 = 1.0 - abs(mod(i/256.0, 2.0) - 1.0); float t2 = 1.0 - "
+    "abs(mod((i+1.0)/256.0, 2.0) - 1.0);\n"
+    "        a = vec3(0.267+t1*(0.993*t1-0.260), 0.004+t1*(1.490-t1*0.494), "
+    "0.329+t1*(1.268*t1*t1-0.680*t1-0.259));\n"
+    "        b = vec3(0.267+t2*(0.993*t2-0.260), 0.004+t2*(1.490-t2*0.494), "
+    "0.329+t2*(1.268*t2*t2-0.680*t2-0.259));\n"
+    "    } else if (pal == 7) {\n"  // plasma
+    "        // same ping-pong logic as above\n"
+    "        float t1 = 1.0 - abs(mod(i/256.0, 2.0) - 1.0); float t2 = 1.0 - "
+    "abs(mod((i+1.0)/256.0, 2.0) - 1.0);\n"
+    "        a = vec3(0.050+t1*(2.735-t1*1.785), max(0.0,t1*(1.580*t1-0.580)), "
+    "max(0.0,0.530+t1*(0.750-t1*1.280)));\n"
+    "        b = vec3(0.050+t2*(2.735-t2*1.785), max(0.0,t2*(1.580*t2-0.580)), "
+    "max(0.0,0.530+t2*(0.750-t2*1.280)));\n"
+    "    } else {\n"  // twilight
     "        float t1 = fract(i/128.0); float t2 = fract((i+1.0)/128.0);\n"
-    "        a = vec3(0.5+0.5*sin(6.283*t1), 0.3+0.2*sin(6.283*t1+2.094), 0.5+0.5*sin(6.283*t1+4.189));\n"
-    "        b = vec3(0.5+0.5*sin(6.283*t2), 0.3+0.2*sin(6.283*t2+2.094), 0.5+0.5*sin(6.283*t2+4.189));\n"
+    "        a = vec3(0.5+0.5*sin(6.283*t1), 0.3+0.2*sin(6.283*t1+2.094), "
+    "0.5+0.5*sin(6.283*t1+4.189));\n"
+    "        b = vec3(0.5+0.5*sin(6.283*t2), 0.3+0.2*sin(6.283*t2+2.094), "
+    "0.5+0.5*sin(6.283*t2+4.189));\n"
     "    }\n"
     "    return mix(a, b, fract(fi));\n"
     "}\n"
@@ -157,7 +175,8 @@ static const char* fs_gpu_src =
     "            if (u_fractal_type > 1.5) {\n"
     "                vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;\n"
     "                vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;\n"
-    "                vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), c_val_y);\n"
+    "                vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), "
+    "c_val_y);\n"
     "                vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
     "                zx = zx_new; zy = zy_new;\n"
     "            } else {\n"
@@ -178,7 +197,7 @@ static const char* fs_gpu_src =
     "            if (q * (q + cr) <= 0.25 * ci2) { i = m; }\n"
     "            else { float cr1 = p.x + 1.0; if (cr1*cr1 + ci2 <= 0.0625) i = m; }\n"
     "        }\n"
-    /* same cap applies to the standard 32-bit path */
+    // same cap applies to the standard 32-bit path
     "        for (i = i; i < 2000; i++) {\n"
     "            if (i >= m) break;\n"
     "            float x2 = z.x * z.x, y2 = z.y * z.y;\n"
