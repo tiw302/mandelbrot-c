@@ -6,9 +6,9 @@
 #include <math.h>
 #include <stdint.h>
 
-/* Scalar mandelbrot path:
- * Calculates iterations for a single pixel.
- * Uses early rejection to skip points inside the main cardioid and period-2 bulb. */
+/* scalar mandelbrot path:
+ * calculates iterations for a single pixel.
+ * uses early rejection to skip points inside the main cardioid and period-2 bulb. */
 double mandelbrot_check(complex_t c, int max_iterations) {
     /* early rejection for the main cardioid and period-2 bulb.
      * points in these regions are guaranteed to be in the set (infinite iterations).
