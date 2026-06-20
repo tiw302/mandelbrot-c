@@ -7,92 +7,94 @@
 #define BOOKMARKS_FILE "bookmarks.json"
 #define MAX_BOOKMARKS 1024
 
-/* very simple json writer to avoid pulling in a full json library for just one feature */
+static int scan_bookmarks(Bookmark* bookmarks, int max_count);
+
+// simple json writer that rewrites the whole file to avoid partial write corruption
 void save_bookmark(const Bookmark* b) {
-    FILE* f = fopen(BOOKMARKS_FILE, "r+");
-    if (!f) {
-        /* file does not exist, open in write mode to create it */
-        f = fopen(BOOKMARKS_FILE, "w");
-        if (!f) return;
-        fprintf(f, "[\n");
-    } else {
-        /* check if file is empty */
-        fseek(f, 0, SEEK_END);
-        long size = ftell(f);
-        if (size <= 2) {
-            fseek(f, 0, SEEK_SET);
-            fprintf(f, "[\n");
-        } else {
-            /* scan backwards for the closing ']' — handles crlf line endings
-             * and any trailing whitespace after manual edits. */
-            long pos = size;
-            int found = 0;
-            while (pos > 0) {
-                fseek(f, --pos, SEEK_SET);
-                int ch = fgetc(f);
-                if (ch == ']') {
-                    fseek(f, pos, SEEK_SET);
-                    fprintf(f, ",\n");
-                    found = 1;
-                    break;
-                }
-            }
-            if (!found) {
-                /* fallback: just seek to the end if no closing bracket is found */
-                fseek(f, 0, SEEK_END);
-            }
-        }
+    Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
+    if (!bookmarks) return;
+
+    int count = scan_bookmarks(bookmarks, MAX_BOOKMARKS);
+    if (count < MAX_BOOKMARKS) {
+        bookmarks[count++] = *b;
     }
 
-    fprintf(f, "  {\n");
-    fprintf(f, "    \"center_re\": %.15g,\n", b->center_re);
-    fprintf(f, "    \"center_im\": %.15g,\n", b->center_im);
-    fprintf(f, "    \"zoom\": %.15g,\n", b->zoom);
-    fprintf(f, "    \"max_iterations\": %d,\n", b->max_iterations);
-    fprintf(f, "    \"fractal_type\": %d,\n", b->fractal_type);
-    fprintf(f, "    \"julia_c_re\": %.15g,\n", b->julia_c.re);
-    fprintf(f, "    \"julia_c_im\": %.15g\n", b->julia_c.im);
-    fprintf(f, "  }\n]");
+    FILE* f = fopen(BOOKMARKS_FILE, "w");
+    if (!f) {
+        free(bookmarks);
+        return;
+    }
 
+    fprintf(f, "[\n");
+    for (int i = 0; i < count; i++) {
+        fprintf(f, "  {\n");
+        fprintf(f, "    \"center_re\": %.15g,\n", bookmarks[i].center_re);
+        fprintf(f, "    \"center_im\": %.15g,\n", bookmarks[i].center_im);
+        fprintf(f, "    \"zoom\": %.15g,\n", bookmarks[i].zoom);
+        fprintf(f, "    \"max_iterations\": %d,\n", bookmarks[i].max_iterations);
+        fprintf(f, "    \"fractal_type\": %d,\n", bookmarks[i].fractal_type);
+        fprintf(f, "    \"julia_c_re\": %.15g,\n", bookmarks[i].julia_c.re);
+        fprintf(f, "    \"julia_c_im\": %.15g\n", bookmarks[i].julia_c.im);
+        if (i < count - 1) {
+            fprintf(f, "  },\n");
+        } else {
+            fprintf(f, "  }\n");
+        }
+    }
+    fprintf(f, "]\n");
+
+    // ensure durable write
+    fflush(f);
     fclose(f);
+    free(bookmarks);
 }
 
-/* simple scanner for the json structure we write */
+// simple scanner for the json structure we write
 static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
     FILE* f = fopen(BOOKMARKS_FILE, "r");
     if (!f) return 0;
 
     int count = 0;
-    char line[256];
+    char line[512];
     Bookmark current = {0};
     int in_object = 0;
 
     while (fgets(line, sizeof(line), f) && count < max_count) {
         if (strstr(line, "{")) {
             in_object = 1;
-        } else if (strstr(line, "}")) {
-            if (in_object) {
-                bookmarks[count++] = current;
-                in_object = 0;
-                memset(&current, 0, sizeof(Bookmark));
-            }
-        } else if (in_object) {
+        }
+        if (in_object) {
             char* p;
             char* colon;
             if ((p = strstr(line, "\"center_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%lf", &current.center_re);
-            } else if ((p = strstr(line, "\"center_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+            }
+            if ((p = strstr(line, "\"center_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%lf", &current.center_im);
-            } else if ((p = strstr(line, "\"zoom\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+            }
+            if ((p = strstr(line, "\"zoom\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%lf", &current.zoom);
-            } else if ((p = strstr(line, "\"max_iterations\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+            }
+            if ((p = strstr(line, "\"max_iterations\"")) != NULL &&
+                (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%d", &current.max_iterations);
-            } else if ((p = strstr(line, "\"fractal_type\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+            }
+            if ((p = strstr(line, "\"fractal_type\"")) != NULL &&
+                (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%d", &current.fractal_type);
-            } else if ((p = strstr(line, "\"julia_c_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+            }
+            if ((p = strstr(line, "\"julia_c_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%lf", &current.julia_c.re);
-            } else if ((p = strstr(line, "\"julia_c_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
+            }
+            if ((p = strstr(line, "\"julia_c_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
                 sscanf(colon + 1, "%lf", &current.julia_c.im);
+            }
+        }
+        if (strstr(line, "}")) {
+            if (in_object) {
+                bookmarks[count++] = current;
+                in_object = 0;
+                memset(&current, 0, sizeof(Bookmark));
             }
         }
     }
@@ -102,25 +104,28 @@ static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
 }
 
 int load_bookmark(int index, Bookmark* b) {
-    Bookmark bookmarks[MAX_BOOKMARKS];
+    Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
+    if (!bookmarks) return 0;
+
     int count = scan_bookmarks(bookmarks, MAX_BOOKMARKS);
-    
+    int success = 0;
+
     if (index >= 0 && index < count) {
         *b = bookmarks[index];
-        return 1;
+        success = 1;
     }
-    return 0;
+
+    free(bookmarks);
+    return success;
 }
 
-/* lightweight counter — avoids deserializing all bookmarks onto the stack
- * just to return a count. scans for closing braces which delimit objects. */
+// scans the file and returns the actual count of correctly formatted objects
 int get_bookmark_count(void) {
-    FILE* f = fopen(BOOKMARKS_FILE, "r");
-    if (!f) return 0;
-    int count = 0;
-    char line[256];
-    while (fgets(line, sizeof(line), f))
-        if (strstr(line, "}")) count++;
-    fclose(f);
+    Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
+    if (!bookmarks) return 0;
+
+    int count = scan_bookmarks(bookmarks, MAX_BOOKMARKS);
+    free(bookmarks);
+
     return count;
 }
