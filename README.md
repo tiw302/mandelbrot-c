@@ -1,6 +1,7 @@
 # Mandelbrot-C
 
-[![Build Status](https://github.com/tiw302/mandelbrot-c/actions/workflows/build.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions)
+[![Linux](https://github.com/tiw302/mandelbrot-c/actions/workflows/linux.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/linux.yml) [![macOS](https://github.com/tiw302/mandelbrot-c/actions/workflows/macos.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/macos.yml) [![Windows](https://github.com/tiw302/mandelbrot-c/actions/workflows/windows.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/windows.yml) [![CodeQL](https://github.com/tiw302/mandelbrot-c/actions/workflows/codeql.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/codeql.yml) [![Memory Check](https://github.com/tiw302/mandelbrot-c/actions/workflows/memcheck.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/memcheck.yml) [![Formatting](https://github.com/tiw302/mandelbrot-c/actions/workflows/format.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/format.yml)
+
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![Language](https://img.shields.io/badge/Language-C99-00599C.svg)](https://en.wikipedia.org/wiki/C99)
 [![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Web-lightgrey.svg)](#platform-implementations)
@@ -20,11 +21,29 @@ A high-performance, multi-threaded Mandelbrot and Julia set explorer written in 
 
 | **Overview & UX** | **Engineering & Math** | **Dev & Ops** | **Project Lifecycle** |
 | :--- | :--- | :--- | :--- |
-| [Introduction](#introduction) | [The Mathematics](#the-mathematics) | [Prerequisites](#prerequisites) | [Roadmap](#roadmap) |
-| [Technical Preview](#technical-preview) | [Technical Architecture](#technical-architecture) | [Build & Installation](#build-and-installation) | [Contributing](#contributing) |
-| [Core Features](#core-features) | [Platform Implementations](#platform-implementations) | [Configuration](#configuration) | [License](#license) |
-| [Interactive Controls](#interactive-controls) | | [Running Tests](#running-tests) | |
-| | | [Project Structure](#project-structure) | |
+| [Quick Start](#quick-start) | [The Mathematics](#the-mathematics) | [Prerequisites](#prerequisites) | [Roadmap](#roadmap) |
+| [Introduction](#introduction) | [Technical Architecture](#technical-architecture) | [Build & Installation](#build-and-installation) | [Contributing](#contributing) |
+| [Technical Preview](#technical-preview) | [Platform Implementations](#platform-implementations) | [Configuration](#configuration) | [Development Methodology & AI Assistance](#development-methodology--ai-assistance) |
+| [Core Features](#core-features) | [Performance Benchmarks](#performance-benchmarks) | [Running Tests](#running-tests) | [Author's Note](#authors-note) |
+| [Interactive Controls](#interactive-controls) | | [Project Structure](#project-structure) | [License](#license) |
+
+---
+
+## Quick Start
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/tiw302/mandelbrot-c.git && cd mandelbrot-c
+
+# 2. Build (interactive menu — pick CPU, GPU, or Web)
+./build.sh
+
+# 3. Run
+./build_cpu/mandelbrot_cpu   # CPU engine
+./build_gpu/mandelbrot_gpu   # GPU engine (requires OpenGL 3.3+)
+```
+
+For the Web build, see [Build & Installation](#build-and-installation).
 
 ---
 
@@ -70,6 +89,7 @@ The URL format encodes the following parameters:
 | `jre` / `jim` | 14 decimal places | Julia set c-parameter (only present in Julia mode) |
 
 Example: `?re=-0.74364388797764&im=0.13182590414575&z=1.234568e+4&it=500&p=0`
+
 - **Hi-Lo Precision GPU Math:** 64-bit precision emulation in GLSL shaders for deep-zoom exploration without pixelation artifacts.
 - **Interactive Tour Mode:** Automated exploration with two independent tour systems. The Mandelbrot tour cycles through 10 hand-picked deep-zoom coordinates using a three-phase sequence — Pan (1.8s), Zoom In (4.0s), Zoom Out (3.2s) — with smoothstep easing between phases and a zoom depth of 6000x. Both tours pick the next target randomly without repeating the previous one. On desktop, the Julia tour interpolates between 12 preset c-parameter keyframes (3.0s move, 1.2s dwell). On web, the Julia tour uses a continuous circular orbit (`c = 0.7885 × e^(it)`) for smooth real-time animation.
 - **Professional Screenshot System:** Deferred capture logic that ensures high-fidelity PNG exports by synchronizing with the GPU rendering cycle. Both desktop and web save screenshots as `mandelbrot_YYYYMMDD_HHMMSS.png`. On desktop, stb_image_write handles PNG encoding with automatic ARGB-to-RGBA conversion. On web, the browser generates and downloads the file directly from the canvas.
@@ -85,12 +105,17 @@ Example: `?re=-0.74364388797764&im=0.13182590414575&z=1.234568e+4&it=500&p=0`
 | **Pan** | Right-Drag | Right-Drag | Two-Finger Drag |
 | **Undo** | `Ctrl + Z` | `Ctrl + Z` | "Undo" Button |
 | **Screenshot** | `S` | `S` | "Screenshot" Button |
+| **Mega Screenshot (8K)** | `X` | - | - |
+| **Record Video** | `V` | - | - |
 | **Tour Mode** | `T` | `T` | "Tour" Button |
 | **GPU/CPU Toggle** | `G` | `G` | "GPU" Button |
-| **64-bit Precision** | - | `E` | "32-bit / 64-bit" Button (GPU only) |
+| **Precision Toggle** | `E` (CPU: 64/128-bit, GPU: 32/64-bit) | `E` | "32-bit / 64-bit" Button |
 | **Julia Toggle** | `J` | `J` | "Julia" Button |
+| **Burning Ship Toggle** | `B` | `B` | - |
 | **Palette Cycle** | `P` | `P` | "Palette" Button |
-| **Iterations** | `Up/Down` | `Up/Down` | `Iter+/Iter-` |
+| **Iterations** | `Up/Down` (`Shift` ×100) | `Up/Down` | `Iter+/Iter-` |
+| **Save Bookmark** | `M` | - | - |
+| **Load Bookmark** | `L` | - | - |
 | **Reset View** | `R` | `R` | "Reset" Button |
 | **Copy Link** | - | - | "Copy Link" Button |
 | **Quit** | `Esc` / `Q` | - | - |
@@ -133,9 +158,9 @@ The WASM implementation utilizes `SharedArrayBuffer` to enable real multi-thread
 
 | Platform | Renderer | SIMD | Status |
 | :--- | :--- | :--- | :--- |
-| Linux | CPU / GPU (OpenGL) | AVX2 | Supported |
-| macOS | CPU / GPU (OpenGL) | AVX2 | Supported |
-| Windows | CPU / GPU (OpenGL) | AVX2 | Supported |
+| Linux | CPU / GPU (OpenGL) | AVX-512 / AVX2 | Supported |
+| macOS | CPU / GPU (OpenGL) | AVX-512 / AVX2 | Supported |
+| Windows | CPU / GPU (OpenGL) | AVX-512 / AVX2 | Supported |
 | Web (Browser) | CPU / GPU (WebGL 2.0) | SIMD128 | Supported |
 
 ### CPU Rendering (Native Desktop)
@@ -169,6 +194,34 @@ The GPU path offloads all calculations to the graphics card for real-time smooth
 
 ---
 
+## Performance Benchmarks
+
+The following numbers were measured on a Linux system with an Intel CPU (AVX2-capable) and an integrated GPU. Results will vary by hardware.
+
+### CPU Engine (Multi-threaded, 8 cores)
+
+| Mode | Resolution | Avg FPS | Throughput |
+| :--- | :--- | :--- | :--- |
+| 64-bit scalar (no SIMD) | 1920×1080 | ~30 fps | ~62 Mpx/s |
+| 64-bit AVX2 (4× SIMD) | 1920×1080 | ~115 fps | ~239 Mpx/s |
+| 128-bit `simd-f128` (AVX2 double-double) | 1920×1080 | ~16 fps | ~33 Mpx/s |
+| 64-bit AVX2 | 3840×2160 (4K) | ~30 fps | ~249 Mpx/s |
+
+> [!NOTE]
+> 128-bit mode uses software-emulated double-double arithmetic via AVX2. The ~7× slowdown versus 64-bit is expected and still significantly faster than a naive `__float128` implementation (~20–30× slower).
+
+### GPU Engine (Sokol GL / OpenGL 3.3)
+
+| Mode | Resolution | Avg FPS | Throughput |
+| :--- | :--- | :--- | :--- |
+| 32-bit shader (native float) | 1920×1080 | ~79 fps | ~163 Mpx/s |
+| 64-bit emulation (Hi-Lo Dekker) | 1920×1080 | ~60 fps | ~124 Mpx/s |
+
+> [!TIP]
+> To reproduce these numbers, build with `-DBUILD_CPU=ON` or `-DBUILD_GPU=ON` and run the benchmarks in `benchmarks/cpu/` or `benchmarks/gpu/` respectively.
+
+---
+
 ## Prerequisites
 
 Before building, ensure the following tools and libraries are installed on your system.
@@ -184,11 +237,13 @@ Before building, ensure the following tools and libraries are installed on your 
 | libGL / OpenGL | 3.3+ | Required for Sokol GFX |
 
 **Linux (Debian/Ubuntu):**
+
 ```bash
 sudo apt install cmake libsdl2-dev libsdl2-ttf-dev libgl1-mesa-dev
 ```
 
 **macOS (Homebrew):**
+
 ```bash
 brew install cmake sdl2 sdl2_ttf
 ```
@@ -204,11 +259,13 @@ brew install cmake sdl2 sdl2_ttf
 > The GPU engine does not depend on SDL2 or SDL2_ttf.
 
 **Linux (Debian/Ubuntu):**
+
 ```bash
 sudo apt install cmake libgl1-mesa-dev
 ```
 
 **macOS (Homebrew):**
+
 ```bash
 brew install cmake
 ```
@@ -229,6 +286,7 @@ Follow the [Emscripten installation guide](https://emscripten.org/docs/getting_s
 ### Interactive TUI Build (Recommended)
 
 Run `./build.sh` without arguments for a numbered menu:
+
 ```bash
 ./build.sh
 ```
@@ -267,9 +325,11 @@ cmake --build build_web
 ### Running the Web Build Locally
 
 The web build requires specific HTTP security headers (`COOP`/`COEP`) to enable `SharedArrayBuffer`. Use the included server script:
+
 ```bash
 python3 scripts/server.py
 ```
+
 Then open `http://localhost:8081` in your browser.
 
 Optional arguments:
@@ -321,27 +381,24 @@ All palettes use fractional iteration interpolation to eliminate color banding a
 
 ## Running Tests
 
-The test suite covers core mathematical correctness and AVX2 vs scalar consistency. Tests are located in the `tests/` directory and use a standalone Makefile.
+The test suite covers core mathematical correctness, AVX2 vs scalar consistency, threading correctness, and I/O validation. Tests are integrated into the CMake build system and run via `ctest`.
 
 ```bash
-cd tests
-make
+cmake -S . -B build_cpu -DBUILD_CPU=ON
+cmake --build build_cpu
+ctest --test-dir build_cpu --output-on-failure
 ```
-
-Running `make` will compile and execute the tests automatically. On machines with AVX2 support, the compiler detects it at build time and includes additional vectorization consistency tests.
 
 | Test | Description |
 | :--- | :--- |
-| `mandelbrot_check basics` | Verifies cardioid, period-2 bulb, and escape behavior |
-| `julia_check basics` | Verifies bounded and divergent Julia set points |
-| `avx2 vs scalar consistency` | Confirms AVX2 results match scalar output within `1e-7` |
+| `test_math` | Verifies Mandelbrot/Julia/Burning Ship escape math, cardioid/period-2 bulb rejection, and AVX2 vs scalar consistency within `1e-7` |
+| `test_renderer` | Validates the persistent thread pool dispatch — ensures pixel output is correctly produced across all worker threads |
+| `test_color` | Confirms all 6 palette functions produce valid ARGB values and gradient continuity |
+| `test_bookmark` | Tests bookmark serialization and round-trip load/save correctness |
+| `test_tour` | Validates tour phase state machine transitions and coordinate interpolation |
+| `test_config` | Verifies `settings.txt` parsing and default fallback values |
 
-To clean up the test binary:
-```bash
-make clean
-```
-
-> AVX2 tests are compiled and run automatically if the host CPU supports it. On machines without AVX2, those tests are skipped and reported as such.
+> AVX2 tests are compiled and run automatically if the host CPU supports it. On machines without AVX2, the scalar path is used and consistency tests are skipped.
 
 ---
 
@@ -358,7 +415,15 @@ make clean
 ├── web/                 # Web Frontend (HTML, CSS, JS)
 ├── assets/              # Shared Typography and Media
 ├── tests/               # Automated Unit Testing Suite
-├── third_party/         # External Abstractions (Sokol, stb, etc.)
+├── benchmarks/
+│   ├── cpu/            # CPU benchmarks (math kernels, renderer throughput, I/O)
+│   └── gpu/            # GPU benchmarks (Sokol shader throughput)
+├── third_party/         # Vendored external libraries
+│   ├── sokol/          # Sokol headers (GFX, App, GL, Time, Fontstash)
+│   ├── stb/            # stb_image_write for PNG/TGA export
+│   ├── fons/           # Fontstash for HUD text rendering
+│   └── simd-f128/      # AVX2-accelerated 128-bit double-double precision
+├── scripts/             # Utility scripts (local dev server, etc.)
 ├── deploy/              # Generated by web build — ready-to-serve package
 ├── CMakeLists.txt       # Unified Cross-platform Build System
 └── build.sh             # Interactive TUI Build Wrapper
@@ -369,6 +434,7 @@ make clean
 ## Roadmap
 
 ### Performance Optimization
+
 - [x] Implement dynamic load balancing using atomic row-counters to maximize CPU utilization.
 - [x] Integrate a pre-calculated Look-Up Table (LUT) for color mapping.
 - [x] Implement smooth coloring algorithms using fractional iteration counts.
@@ -377,6 +443,7 @@ make clean
 - [x] Optimize Julia set calculation using hardware-specific vectorization.
 
 ### Features and Exploration
+
 - [x] Add interactive runtime controls for iteration depth and palette switching.
 - [x] Implement automated "camera path" and "tour" modes.
 - [x] Connect HTML5 Frontend APIs to the web-engine for a responsive experience.
@@ -384,11 +451,16 @@ make clean
 - [x] Add mobile touch support (pinch-to-zoom and gesture-based panning).
 
 ### Engineering and Quality
+
 - [x] Establish a strict Engine-Centric Monorepo architecture.
 - [x] Implement a high-performance CMake build system.
-- [x] Expand unit testing coverage to ensure mathematical consistency.
+- [x] Expand unit testing coverage to ensure mathematical consistency (math, renderer, color, bookmark, tour, config).
 - [x] Implement automatic CPU core detection for dynamic thread pool allocation.
 - [x] Implement Hi-Lo 64-bit precision emulation for GPU shaders.
+- [x] Implement 128-bit software double-double precision via `simd-f128` (AVX2-accelerated) for deep CPU zoom.
+- [x] Build a comprehensive benchmark suite covering CPU math kernels, multi-threaded renderer throughput (64-bit and 128-bit), image I/O, and GPU shader throughput.
+- [x] Integrate automated performance benchmarks into all CI pipelines (Linux, macOS, Windows) with GitHub Step Summary reports.
+- [x] Add Enterprise CI workflows: Code Formatter Enforcement (`clang-format`), Memory Safety (`Valgrind`), and Static Security Analysis (`CodeQL`).
 - [ ] Research and implement arbitrary-precision arithmetic for infinite zoom.
 
 ---
@@ -398,9 +470,31 @@ make clean
 Contributions, bug reports, and suggestions are welcome. Areas of particular interest include memory safety, SIMD optimization, and GPGPU improvements.
 
 To contribute:
+
 1. Open an **issue** to discuss bugs or proposed changes.
 2. **Fork** the repository and open a **pull request** with your changes.
 3. Descriptive commit messages and clear explanations are appreciated.
+
+---
+
+## Development Methodology & AI Assistance
+
+Building a high-performance fractal engine in C involves navigating complex engineering tradeoffs — from SIMD vectorization strategies and IEEE 754 floating-point precision limits, to lock-free thread pool design and cross-platform shader compatibility.
+
+To achieve this level of stability and performance, this project was architected and rigorously verified in collaboration with **Advanced Agentic AI**. AI was specifically utilized to:
+
+- Validate AVX2 intrinsic correctness and ensure scalar/SIMD result consistency within `1e-7` tolerance.
+- Assist in designing the persistent thread pool architecture (condition variable signalling, atomic row counter load balancing).
+- Verify Hi-Lo double-single arithmetic in GLSL shaders for 64-bit precision emulation without hardware double support.
+- Automate the generation of robust cross-platform CI/CD pipelines (Linux, macOS, Windows, WASM) including memory safety checks and static analysis.
+
+However, **human agency remains at the core of this project**. Every line of code generated or suggested was manually inspected, audited, and verified. The core architecture, algorithms, and mathematical implementation were human-planned. This hybrid approach — combining human architectural vision with AI-driven debugging and verification — allowed this project to reach a level of engineering quality well beyond what a solo developer could achieve alone.
+
+---
+
+## Author's Note
+
+I'm just a kid building projects as a hobby. Thank you for showing interest in my little library! It really means a lot to me. :)
 
 ---
 
