@@ -43,7 +43,7 @@ macro(find_system_libs target)
     elseif(APPLE)
         target_link_libraries(${target} PRIVATE "-framework Cocoa -framework QuartzCore -framework Metal -framework MetalKit -framework OpenGL")
     elseif(WIN32)
-        target_link_libraries(${target} PRIVATE user32 gdi32 shell32)
+        target_link_libraries(${target} PRIVATE user32 gdi32 shell32 opengl32)
     endif()
 endmacro()
 
