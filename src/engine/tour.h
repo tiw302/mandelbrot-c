@@ -5,35 +5,52 @@
 
 #include "renderer.h"
 
-typedef enum { TOUR_IDLE = 0, TOUR_PANNING, TOUR_ZOOMING_IN, TOUR_ZOOMING_OUT } TourPhase;
+// tour phase enumeration for the mandelbrot/burning ship tour
+typedef enum {
+    TOUR_IDLE = 0,
+    TOUR_PANNING,     // moving the camera to the next target
+    TOUR_ZOOMING_IN,  // performing a deep zoom into the fractal
+    TOUR_ZOOMING_OUT  // pulling back to the original view
+} TourPhase;
 
-typedef enum { JULIA_TOUR_IDLE = 0, JULIA_TOUR_MOVING, JULIA_TOUR_DWELLING } JuliaTourPhase;
+// phase enumeration for the julia set parameter tour
+typedef enum {
+    JULIA_TOUR_IDLE = 0,
+    JULIA_TOUR_MOVING,   // interpolating between two c-parameters
+    JULIA_TOUR_DWELLING  // pausing at a specific c-parameter coordinate
+} JuliaTourPhase;
 
+// state tracking for the main fractal tour (mandelbrot/burning ship)
 typedef struct {
     TourPhase phase;
-    double home_re, home_im, home_zoom;
-    double target_re, target_im, deep_zoom;
-    uint32_t phase_start;
-    int last_zoom_idx;
+    double home_re, home_im, home_zoom;      // the starting view to return to
+    double target_re, target_im, deep_zoom;  // the point of interest to zoom into
+    uint32_t phase_start;                    // timestamp of current phase beginning
+    int last_zoom_idx;                       // index of the target in the target array
 } TourState;
 
+// state tracking for the julia parameter tour
 typedef struct {
     JuliaTourPhase phase;
-    double from_re, from_im;
-    double to_re, to_im;
-    uint32_t phase_start;
-    int last_julia_idx;
+    double from_re, from_im;  // starting c-parameter
+    double to_re, to_im;      // target c-parameter
+    uint32_t phase_start;     // timestamp of current phase beginning
+    int last_julia_idx;       // index of current keyframe
 } JuliaTourState;
 
+// core update logic — called once per frame to advance animations
 void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning_ship);
 void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now);
 
+// lifecycle management for mandelbrot tours
 void start_tour(TourState* state, ViewState* view);
 void stop_tour(TourState* state);
 
+// lifecycle management for julia parameter tours
 void start_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now);
 void stop_julia_tour(JuliaTourState* state);
 
+// utility helpers for ui feedback and state inspection
 const char* get_tour_phase_name(TourPhase phase);
 int get_tour_target_idx(const TourState* state);
 int get_num_tour_targets(int is_burning_ship);
