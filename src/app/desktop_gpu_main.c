@@ -32,6 +32,12 @@
 #include "sokol/sokol_fontstash.h"
 // clang-format on
 
+#if defined(__APPLE__)
+#include <OpenGL/gl.h>
+#else
+#include <GL/gl.h>
+#endif
+
 #include <math.h>
 #include <signal.h>
 #include <stdio.h>

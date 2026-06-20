@@ -49,11 +49,17 @@ endmacro()
 
 # --- 1. CPU Engine ---
 if(BUILD_CPU)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(SDL2 REQUIRED sdl2)
+    pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
+
     add_executable(mandelbrot_cpu ${CORE_SRC} src/engine/renderer.c src/engine/tour.c src/engine/screenshot.c src/engine/bookmark.c src/engine/ini_config.c src/app/desktop_cpu_main.c)
     target_compile_definitions(mandelbrot_cpu PRIVATE SOKOL_GLCORE USE_SIMD_F128)
     target_compile_options(mandelbrot_cpu PRIVATE ${ARCH_FLAGS} -pthread)
+    target_include_directories(mandelbrot_cpu PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS})
+    target_link_directories(mandelbrot_cpu PRIVATE ${SDL2_LIBRARY_DIRS} ${SDL2_TTF_LIBRARY_DIRS})
     find_system_libs(mandelbrot_cpu)
-    target_link_libraries(mandelbrot_cpu PRIVATE SDL2 SDL2_ttf m)
+    target_link_libraries(mandelbrot_cpu PRIVATE ${SDL2_LIBRARIES} ${SDL2_TTF_LIBRARIES} m)
 endif()
 
 

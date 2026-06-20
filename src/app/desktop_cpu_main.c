@@ -4,8 +4,8 @@
  * uses a modular context-based architecture for clean state management.
  */
 
-#include <SDL2/SDL.h>
-#include <SDL2/SDL_ttf.h>
+#include <SDL.h>
+#include <SDL_ttf.h>
 #include <math.h>
 #include <signal.h>
 #include <stdio.h>

@@ -38,6 +38,7 @@
 #include <GLES3/gl3.h>
 #include <emscripten.h>
 
+// clang-format off
 /* javascript interop: updates the web hud with engine telemetry.
  * passes internal state directly to a globally defined js function. */
 EM_JS(void, update_debug_info_js,
@@ -46,7 +47,7 @@ EM_JS(void, update_debug_info_js,
        double julia_im, int high_precision, int tour_target_idx, int tour_total_targets,
        double tour_target_re, double tour_target_im),
       {
-          if (typeof updateDebugInfo == = 'function') {
+          if (typeof updateDebugInfo === 'function') {
               updateDebugInfo(gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re,
                               center_im, palette_idx, tour_phase, julia_re, julia_im,
                               high_precision, tour_target_idx, tour_total_targets, tour_target_re,
@@ -56,7 +57,7 @@ EM_JS(void, update_debug_info_js,
 
 /* javascript interop: synchronizes the visual zoom selection box. */
 EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
-    if (typeof updateZoomBox == = 'function') {
+    if (typeof updateZoomBox === 'function') {
         updateZoomBox(is_zooming, x, y, w, h);
     }
 });
@@ -64,10 +65,11 @@ EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
 /* javascript interop: triggers a browser download of the captured frame.
  * utilizes the browser's native blob and url object APIs. */
 EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
-    if (typeof downloadScreenshotData == = 'function') {
+    if (typeof downloadScreenshotData === 'function') {
         downloadScreenshotData(ptr, w, h, HEAPU8);
     }
 });
+// clang-format on
 #else
 #define update_debug_info_js(...)
 #define update_zoom_box_js(...)
