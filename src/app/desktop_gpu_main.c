@@ -32,14 +32,21 @@
 #include "sokol/sokol_fontstash.h"
 // clang-format on
 
+// clang-format off
 #if defined(__APPLE__)
 #include <OpenGL/gl.h>
 #elif defined(_WIN32)
-#include <windows.h>
-#include <GL/gl.h>
+#ifndef APIENTRY
+#define APIENTRY __stdcall
+#endif
+#ifndef GLAPI
+#define GLAPI __declspec(dllimport)
+#endif
+GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned int format, unsigned int type, void *pixels);
 #else
 #include <GL/gl.h>
 #endif
+// clang-format on
 
 #include <math.h>
 #include <signal.h>
