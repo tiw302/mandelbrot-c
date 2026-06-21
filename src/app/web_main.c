@@ -39,8 +39,8 @@
 #include <emscripten.h>
 
 // clang-format off
-/* javascript interop: updates the web hud with engine telemetry.
- * passes internal state directly to a globally defined js function. */
+// javascript interop: updates the web hud with engine telemetry.
+// passes internal state directly to a globally defined js function.
 EM_JS(void, update_debug_info_js,
       (int gpu_mode, int julia_mode, int burning_ship_mode, int max_iters, double zoom,
        double center_re, double center_im, int palette_idx, int tour_phase, double julia_re,
@@ -55,15 +55,15 @@ EM_JS(void, update_debug_info_js,
           }
       });
 
-/* javascript interop: synchronizes the visual zoom selection box. */
+// javascript interop: synchronizes the visual zoom selection box.
 EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
     if (typeof updateZoomBox === 'function') {
         updateZoomBox(is_zooming, x, y, w, h);
     }
 });
 
-/* javascript interop: triggers a browser download of the captured frame.
- * utilizes the browser's native blob and url object APIs. */
+// javascript interop: triggers a browser download of the captured frame.
+// utilizes the browser's native blob and url object APIs.
 EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
     if (typeof downloadScreenshotData === 'function') {
         downloadScreenshotData(ptr, w, h, HEAPU8);
@@ -245,6 +245,7 @@ static void init(void) {
     ctx.needs_redraw = 1;
     ctx.gpu_mode = 1;
 
+    init_fractal_registry();
     init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
     ctx.palette_idx = DEFAULT_PALETTE;
 }
@@ -370,8 +371,8 @@ static void frame(void) {
                          tour_idx, tour_total, tour_re, tour_im);
 }
 
-// maps browser-driven input events to engine state
-static void event(const sapp_event* ev) {
+// handles mouse input events
+static void handle_mouse_event(const sapp_event* ev) {
     if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
         if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
             ctx.is_panning = 1;
@@ -447,7 +448,12 @@ static void event(const sapp_event* ev) {
             ctx.view.center_im = mim - (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
-    } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
+    }
+}
+
+// handles keyboard input events
+static void handle_keyboard_event(const sapp_event* ev) {
+    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         if (ev->key_code == SAPP_KEYCODE_G) {
             ctx.gpu_mode = !ctx.gpu_mode;
             ctx.needs_redraw = 1;
@@ -476,7 +482,12 @@ static void event(const sapp_event* ev) {
             ctx.m_tour.phase = TOUR_IDLE;
             ctx.needs_redraw = 1;
         }
-    } else if (ev->type == SAPP_EVENTTYPE_RESIZED) {
+    }
+}
+
+// maps browser-driven input events to engine state
+static void event(const sapp_event* ev) {
+    if (ev->type == SAPP_EVENTTYPE_RESIZED) {
         ctx.win_w = (int)ev->framebuffer_width;
         ctx.win_h = (int)ev->framebuffer_height;
         if (ctx.pixels) free(ctx.pixels);
@@ -490,6 +501,11 @@ static void event(const sapp_event* ev) {
         ctx.img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.img});
         ctx.bind.views[0] = ctx.img_view;
         ctx.needs_redraw = 1;
+    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
+               ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
+        handle_mouse_event(ev);
+    } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
+        handle_keyboard_event(ev);
     }
 }
 
