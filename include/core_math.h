@@ -40,8 +40,8 @@ typedef enum { RENDER_MANDELBROT = 0, RENDER_JULIA = 1, RENDER_BURNING_SHIP = 2 
 
 // pull in individual kernel headers — they depend on complex_t above
 #include "burning_ship.h"
+#include "fractal.h"
 #include "julia.h"
 #include "mandelbrot.h"
-#include "fractal.h"
 
 #endif
