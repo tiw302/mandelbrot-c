@@ -14,8 +14,6 @@
 #include "config.h"
 #include "core_math.h"
 
-typedef enum { RENDER_MANDELBROT = 0, RENDER_JULIA = 1, RENDER_BURNING_SHIP = 2 } RenderMode;
-
 // thread pool lifecycle
 void init_renderer(int max_iterations, int palette_idx);
 void cleanup_renderer(void);
@@ -23,6 +21,7 @@ void cleanup_renderer(void);
 // query thread pool state
 int get_optimal_thread_count(void);
 int get_actual_thread_count(void);
+void set_renderer_thread_count(int count);
 
 // high-level render dispatch — blocks until all rows are painted
 void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,

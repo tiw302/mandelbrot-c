@@ -9,6 +9,7 @@
 #include <string.h>
 
 #include "config.h"
+#include "ini_config.h"
 #include "core_math.h"
 
 #if defined(__EMSCRIPTEN__)
@@ -66,6 +67,7 @@ typedef struct {
 static RenderPool pool = {0};
 static pthread_t* threads_pool = NULL;
 static int actual_thread_count = 0;
+static int preset_thread_count = 0;
 static int requested_128bit = 0;
 
 // cpu core detection
@@ -84,8 +86,10 @@ static int get_cpu_cores(void) {
 }
 
 static int detect_thread_count(void) {
+    if (preset_thread_count > 0) return preset_thread_count;
     int cores = get_cpu_cores();
-    int count = (DEFAULT_THREAD_COUNT > 0) ? DEFAULT_THREAD_COUNT : cores;
+    int config_threads = get_config_default_thread_count();
+    int count = (config_threads > 0) ? config_threads : cores;
     if (count < 1) count = 1;
     if (count > 64) count = 64;
     return count;
@@ -100,6 +104,9 @@ int get_actual_thread_count(void) {
 
 // row processing — called from worker threads (and directly on wasm)
 static void process_rows(void) {
+    const FractalDefinition* fd = get_fractal_by_mode(pool.mode);
+    if (!fd) return;
+
 #ifdef USE_SIMD_F128
     if (pool.use_128bit) {
         simd_f128 re_min = simd_f128_from_double(pool.re_min);
@@ -144,13 +151,7 @@ static void process_rows(void) {
                                                            (double)(x + 2), (double)(x + 3));
                 simd_f128x4 v_re = simd_f128x4_add(v_re_min, simd_f128x4_mul(v_x, v_re_fac));
 
-                if (pool.mode == RENDER_JULIA)
-                    julia_check_f128x4(v_re, v_im_val, v_julia_cre, v_julia_cim,
-                                       pool.max_iterations, iterations);
-                else if (pool.mode == RENDER_BURNING_SHIP)
-                    burning_ship_check_f128x4(v_re, v_im_val, pool.max_iterations, iterations);
-                else
-                    mandelbrot_check_f128x4(v_re, v_im_val, pool.max_iterations, iterations);
+                fd->check_avx2_f128(v_re, v_im_val, v_julia_cre, v_julia_cim, pool.max_iterations, iterations);
 
                 for (int i = 0; i < 4; i++) {
                     uint8_t r, g, b;
@@ -166,19 +167,12 @@ static void process_rows(void) {
             }
 #endif
 
-            /* scalar tail for 128bit */
+            // scalar tail for 128bit
             for (; x < pool.window_width; x++) {
                 simd_f128 x_128 = simd_f128_from_double((double)x);
                 simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
 
-                double iterations;
-                if (pool.mode == RENDER_JULIA)
-                    iterations =
-                        julia_check_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
-                else if (pool.mode == RENDER_BURNING_SHIP)
-                    iterations = burning_ship_check_f128(x_re, y_im, pool.max_iterations);
-                else
-                    iterations = mandelbrot_check_f128(x_re, y_im, pool.max_iterations);
+                double iterations = fd->check_scalar_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
 
                 uint8_t r, g, b;
                 get_color(iterations, pool.max_iterations, &r, &g, &b);
@@ -217,13 +211,7 @@ static void process_rows(void) {
                 __m512d v_x = _mm512_add_pd(_mm512_set1_pd((double)x), v_offsets);
                 __m512d v_re = _mm512_add_pd(v_re_min, _mm512_mul_pd(v_x, v_re_fac));
 
-                if (pool.mode == RENDER_JULIA)
-                    julia_check_avx512(v_re, v_im_val, pool.julia_c, pool.max_iterations,
-                                       iterations);
-                else if (pool.mode == RENDER_BURNING_SHIP)
-                    burning_ship_check_avx512(v_re, v_im_val, pool.max_iterations, iterations);
-                else
-                    mandelbrot_check_avx512(v_re, v_im_val, pool.max_iterations, iterations);
+                fd->check_avx512(v_re, v_im_val, pool.julia_c, pool.max_iterations, iterations);
 
                 for (int i = 0; i < 8; i++) {
                     uint8_t r, g, b;
@@ -250,22 +238,15 @@ static void process_rows(void) {
                 __m256d v_x = _mm256_add_pd(_mm256_set1_pd((double)x), v_offsets);
                 __m256d v_re = _mm256_add_pd(v_re_min, _mm256_mul_pd(v_x, v_re_fac));
 
-                if (pool.mode == RENDER_JULIA)
-                    julia_check_avx2(v_re, v_im_val, pool.julia_c, pool.max_iterations, iterations);
-                else if (pool.mode == RENDER_BURNING_SHIP)
-                    burning_ship_check_avx2(v_re, v_im_val, pool.max_iterations, iterations);
-                else
-                    mandelbrot_check_avx2(v_re, v_im_val, pool.max_iterations, iterations);
+                fd->check_avx2(v_re, v_im_val, pool.julia_c, pool.max_iterations, iterations);
 
                 for (int i = 0; i < 4; i++) {
                     uint8_t r, g, b;
                     get_color(iterations[i], pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-                    // web/wasm expects rgba (red at byte 0)
                     pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
                         (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-                    // desktop sdl argb8888 on little endian is bgra (blue at byte 0)
                     pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
                         (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
@@ -279,17 +260,11 @@ static void process_rows(void) {
                                           pool.re_min + (double)(x + 1) * re_factor);
             v128_t v_im = wasm_f64x2_splat(pool.im_top + (double)y * im_factor);
 
-            if (pool.mode == RENDER_JULIA)
-                julia_check_wasm_simd128(v_re, v_im, pool.julia_c, pool.max_iterations, iterations);
-            else if (pool.mode == RENDER_BURNING_SHIP)
-                burning_ship_check_wasm_simd128(v_re, v_im, pool.max_iterations, iterations);
-            else
-                mandelbrot_check_wasm_simd128(v_re, v_im, pool.max_iterations, iterations);
+            fd->check_wasm_simd128(v_re, v_im, pool.julia_c, pool.max_iterations, iterations);
 
             for (int i = 0; i < 2; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-                // web/wasm expects rgba
                 pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
                     (0xFF << 24) | (b << 16) | (g << 8) | r;
             }
@@ -300,13 +275,7 @@ static void process_rows(void) {
         for (; x < pool.window_width; x++) {
             complex_t point = {pool.re_min + (double)x * re_factor,
                                pool.im_top + (double)y * im_factor};
-            double iterations;
-            if (pool.mode == RENDER_JULIA)
-                iterations = julia_check(point, pool.julia_c, pool.max_iterations);
-            else if (pool.mode == RENDER_BURNING_SHIP)
-                iterations = burning_ship_check(point, pool.max_iterations);
-            else
-                iterations = mandelbrot_check(point, pool.max_iterations);
+            double iterations = fd->check_scalar(point, pool.julia_c, pool.max_iterations);
 
             uint8_t r, g, b;
             get_color(iterations, pool.max_iterations, &r, &g, &b);
@@ -349,7 +318,7 @@ static void* worker_thread(void* arg) {
 void init_renderer(int max_iterations, int palette_idx) {
     if (actual_thread_count == 0) {
         actual_thread_count = detect_thread_count();
-        pool.thread_count = actual_thread_count;
+        pool.thread_count = (actual_thread_count > 1) ? actual_thread_count - 1 : 0;
         pool.shutdown = 0;
         pool.frame_id = 0;
         pool.threads_idle = 0;
@@ -366,7 +335,7 @@ void init_renderer(int max_iterations, int palette_idx) {
         }
 
 #if !defined(__EMSCRIPTEN__)
-        for (int i = 0; i < actual_thread_count; i++) {
+        for (int i = 0; i < pool.thread_count; i++) {
             if (pthread_create(&threads_pool[i], NULL, worker_thread, NULL) != 0) {
                 fprintf(stderr, "fatal: failed to spawn worker thread %d\n", i);
                 exit(1);
@@ -385,7 +354,7 @@ void cleanup_renderer(void) {
         pthread_cond_broadcast(&pool.work_ready);
         pthread_mutex_unlock(&pool.mutex);
 
-        for (int i = 0; i < actual_thread_count; i++) pthread_join(threads_pool[i], NULL);
+        for (int i = 0; i < pool.thread_count; i++) pthread_join(threads_pool[i], NULL);
 
         pthread_mutex_destroy(&pool.mutex);
         pthread_cond_destroy(&pool.work_ready);
@@ -397,7 +366,51 @@ void cleanup_renderer(void) {
     actual_thread_count = 0;
 }
 
-// dispatch a render job — returns only after all rows are painted
+void set_renderer_thread_count(int count) {
+#if !defined(__EMSCRIPTEN__)
+    if (count < 1) count = 1;
+    if (count > 64) count = 64;
+
+    preset_thread_count = count;
+    if (actual_thread_count == 0) return;
+    if (actual_thread_count == count) return;
+
+    // stop existing worker threads safely
+    pthread_mutex_lock(&pool.mutex);
+    pool.shutdown = 1;
+    pthread_cond_broadcast(&pool.work_ready);
+    pthread_mutex_unlock(&pool.mutex);
+
+    for (int i = 0; i < pool.thread_count; i++) {
+        pthread_join(threads_pool[i], NULL);
+    }
+    free(threads_pool);
+    threads_pool = NULL;
+
+    actual_thread_count = count;
+    pool.thread_count = (actual_thread_count > 1) ? actual_thread_count - 1 : 0;
+    pool.shutdown = 0;
+    pool.threads_idle = 0;
+    atomic_store(&pool.next_row, 0);
+
+    threads_pool = malloc(sizeof(pthread_t) * actual_thread_count);
+    if (!threads_pool) {
+        fprintf(stderr, "fatal: failed to allocate thread pool\n");
+        exit(1);
+    }
+
+    for (int i = 0; i < pool.thread_count; i++) {
+        if (pthread_create(&threads_pool[i], NULL, worker_thread, NULL) != 0) {
+            fprintf(stderr, "fatal: failed to spawn worker thread %d\n", i);
+            exit(1);
+        }
+    }
+    printf("thread pool dynamically resized to %d threads.\n", actual_thread_count);
+#else
+    (void)count;
+#endif
+}
+
 // dispatch a render job — returns only after all rows are painted
 static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_height,
                      double re_min, double re_max, double im_top, double im_bottom, RenderMode mode,
@@ -426,9 +439,9 @@ static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_h
     pthread_cond_broadcast(&pool.work_ready);
     pthread_mutex_unlock(&pool.mutex);  // release lock to let workers start
 
-    // let main thread participate in rendering instead of just idling.
-    // note: main thread doesn't increment pool.threads_idle, so thread_count
-    // is exactly the number of workers we need to wait for.
+    /* let main thread participate in rendering instead of just idling.
+     * note: main thread doesn't increment pool.threads_idle, so thread_count
+     * is exactly the number of workers we need to wait for. */
     process_rows();
 
     pthread_mutex_lock(&pool.mutex);
