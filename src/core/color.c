@@ -12,7 +12,7 @@ typedef struct {
     uint8_t r, g, b;
 } rgb_t;
 
-/* Global state for the color palette
+/* global state for the color palette
  * including the current palette index,
  * lookup table pointer, and allocated size. */
 static int current_palette = 0;
