@@ -47,7 +47,7 @@ target_link_libraries(test_tour PRIVATE m)
 add_test(NAME tour_state_machine COMMAND test_tour)
 
 # 7. test_renderer (thread pool dispatch logic)
-add_executable(test_renderer test_renderer.c ../src/engine/renderer.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c ../src/core/color.c)
+add_executable(test_renderer test_renderer.c ../src/engine/renderer.c ../src/engine/ini_config.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c ../src/core/color.c ../src/core/fractal.c)
 target_compile_options(test_renderer PRIVATE ${TEST_FLAGS} -pthread)
 target_link_libraries(test_renderer PRIVATE m pthread)
 add_test(NAME renderer_pool COMMAND test_renderer)
