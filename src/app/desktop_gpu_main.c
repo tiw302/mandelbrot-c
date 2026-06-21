@@ -94,6 +94,7 @@ typedef struct {
 typedef struct {
     // sokol gfx resources
     sg_pipeline pip_cpu, pip_gpu;
+    sg_shader shd_cpu, shd_gpu;
     sg_bindings bind;
     sg_pass_action pass_action;
     sg_image img;
@@ -121,6 +122,7 @@ typedef struct {
     // bookmark tracking
     int current_bookmark_idx;
     int needs_redraw;
+    int screenshot_requested;
 
     // mouse and interaction state
     int is_panning, is_zooming;
@@ -162,6 +164,108 @@ static double mouse_im(void) {
     return ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
 }
 
+static char* read_shader_file(const char* path) {
+    FILE* f = fopen(path, "rb");
+    if (!f) return NULL;
+    fseek(f, 0, SEEK_END);
+    long size = ftell(f);
+    if (size <= 0) {
+        fclose(f);
+        return NULL;
+    }
+    fseek(f, 0, SEEK_SET);
+    char* buf = malloc(size + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+    size_t read_bytes = fread(buf, 1, size, f);
+    buf[read_bytes] = '\0';
+    fclose(f);
+    return buf;
+}
+
+static void reload_shaders(void) {
+    // try to load shaders from files
+    char* vs_src = read_shader_file("shaders/desktop_gpu_vs.glsl");
+    char* fs_cpu_src = read_shader_file("shaders/desktop_gpu_fs_cpu.glsl");
+    char* fs_gpu_src = read_shader_file("shaders/desktop_gpu_fs_gpu.glsl");
+
+    const char* vs_ptr = vs_src ? vs_src : dg_vs;
+    const char* fs_cpu_ptr = fs_cpu_src ? fs_cpu_src : dg_fs_cpu;
+    const char* fs_gpu_ptr = fs_gpu_src ? fs_gpu_src : dg_fs_gpu;
+
+    // compile shader programs
+    sg_shader shd_cpu = sg_make_shader(
+        &(sg_shader_desc){.attrs[0].glsl_name = "pos",
+                          .attrs[1].glsl_name = "uv_in",
+                          .vertex_func.source = vs_ptr,
+                          .fragment_func.source = fs_cpu_ptr,
+                          .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
+                          .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
+                          .texture_sampler_pairs[0] = {.stage = SG_SHADERSTAGE_FRAGMENT,
+                                                       .view_slot = 0,
+                                                       .sampler_slot = 0,
+                                                       .glsl_name = "tex"}});
+
+    sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
+        .attrs[0].glsl_name = "pos",
+        .attrs[1].glsl_name = "uv_in",
+        .vertex_func.source = vs_ptr,
+        .fragment_func.source = fs_gpu_ptr,
+        .uniform_blocks[0] = {
+            .stage = SG_SHADERSTAGE_FRAGMENT,
+            .size = sizeof(params_t),
+            .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
+                              {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
+                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
+
+    if (sg_query_shader_state(shd_cpu) != SG_RESOURCESTATE_VALID ||
+        sg_query_shader_state(shd_gpu) != SG_RESOURCESTATE_VALID) {
+        printf("error: failed to compile shaders from files. keeping existing shaders.\n");
+        sg_destroy_shader(shd_cpu);
+        sg_destroy_shader(shd_gpu);
+        free(vs_src);
+        free(fs_cpu_src);
+        free(fs_gpu_src);
+        return;
+    }
+
+    // safely destroy previous assets to prevent leaks
+    if (ctx.pip_cpu.id) sg_destroy_pipeline(ctx.pip_cpu);
+    if (ctx.pip_gpu.id) sg_destroy_pipeline(ctx.pip_gpu);
+    if (ctx.shd_cpu.id) sg_destroy_shader(ctx.shd_cpu);
+    if (ctx.shd_gpu.id) sg_destroy_shader(ctx.shd_gpu);
+
+    ctx.shd_cpu = shd_cpu;
+    ctx.shd_gpu = shd_gpu;
+
+    // generate pipelines linked to new shaders
+    ctx.pip_cpu =
+        sg_make_pipeline(&(sg_pipeline_desc){.shader = ctx.shd_cpu,
+                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .index_type = SG_INDEXTYPE_UINT16});
+
+    ctx.pip_gpu =
+        sg_make_pipeline(&(sg_pipeline_desc){.shader = ctx.shd_gpu,
+                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
+                                             .index_type = SG_INDEXTYPE_UINT16});
+
+    free(vs_src);
+    free(fs_cpu_src);
+    free(fs_gpu_src);
+    printf("shaders loaded/reloaded successfully.\n");
+}
+
 // initializes graphics API, shaders, and application state
 static void init(void) {
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
@@ -201,48 +305,7 @@ static void init(void) {
     ctx.bind.samplers[0] = ctx.smp;
     rebuild_texture();
 
-    // build cpu fallback pipeline (sampling a texture)
-    sg_shader shd_cpu = sg_make_shader(
-        &(sg_shader_desc){.attrs[0].glsl_name = "pos",
-                          .attrs[1].glsl_name = "uv_in",
-                          .vertex_func.source = dg_vs,
-                          .fragment_func.source = dg_fs_cpu,
-                          .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
-                          .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
-                          .texture_sampler_pairs[0] = {.stage = SG_SHADERSTAGE_FRAGMENT,
-                                                       .view_slot = 0,
-                                                       .sampler_slot = 0,
-                                                       .glsl_name = "tex"}});
-    ctx.pip_cpu =
-        sg_make_pipeline(&(sg_pipeline_desc){.shader = shd_cpu,
-                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .index_type = SG_INDEXTYPE_UINT16});
-
-    // build gpu compute pipeline (calculating per-pixel in shader)
-    sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos",
-        .attrs[1].glsl_name = "uv_in",
-        .vertex_func.source = dg_vs,
-        .fragment_func.source = dg_fs_gpu,
-        .uniform_blocks[0] = {
-            .stage = SG_SHADERSTAGE_FRAGMENT,
-            .size = sizeof(params_t),
-            .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
-    ctx.pip_gpu =
-        sg_make_pipeline(&(sg_pipeline_desc){.shader = shd_gpu,
-                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .index_type = SG_INDEXTYPE_UINT16});
+    reload_shaders();
 
     ctx.pass_action = (sg_pass_action){
         .colors[0] = {.load_action = SG_LOADACTION_CLEAR, .clear_value = {0, 0, 0, 1}}};
@@ -256,6 +319,7 @@ static void init(void) {
     ctx.cpu_precision_128 = 0;
     ctx.m_tour = (TourState){TOUR_IDLE, 0, 0, 0, 0, 0, 0, 0, -1};
     ctx.j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0, 0, 0, 0, 0, -1};
+    init_fractal_registry();
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     set_cpu_precision(ctx.cpu_precision_128);
     ctx.needs_redraw = 1;
@@ -272,6 +336,7 @@ static void init(void) {
     puts("  b           : burning ship     | s           : screenshot");
     puts("  m           : save bookmark    | l           : load bookmark");
     puts("  x           : mega screenshot  | v           : record video");
+    puts("  [ / ]       : scale threads    | f5          : reload shaders");
     puts("  q / esc     : quit");
 }
 
@@ -286,6 +351,11 @@ static void frame(void) {
     }
     if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
         update_julia_tour(&ctx.j_tour, &ctx.julia_c, now);
+        ctx.needs_redraw = 1;
+    }
+
+    // force redraw to maintain steady frame pacing during video export
+    if (is_video_recording()) {
         ctx.needs_redraw = 1;
     }
 
@@ -448,18 +518,64 @@ static void frame(void) {
     }
 
     sgl_draw();
+
+    // capture video frame or screenshot if requested
+    if (is_video_recording()) {
+        uint32_t* ss = malloc((size_t)ctx.win_w * ctx.win_h * 4);
+        if (ss) {
+            glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ss);
+            uint32_t* flipped = malloc((size_t)ctx.win_w * ctx.win_h * 4);
+            if (flipped) {
+                for (int y = 0; y < ctx.win_h; y++) {
+                    int src_y = ctx.win_h - 1 - y;
+                    for (int x = 0; x < ctx.win_w; x++) {
+                        uint32_t p = ss[src_y * ctx.win_w + x];
+                        uint8_t r = (p >> 0) & 0xFF;
+                        uint8_t g = (p >> 8) & 0xFF;
+                        uint8_t b = (p >> 16) & 0xFF;
+                        uint8_t a = (p >> 24) & 0xFF;
+                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) | ((uint32_t)r << 16) | ((uint32_t)a << 24);
+                    }
+                }
+                append_video_frame(flipped, ctx.win_w, ctx.win_h);
+                free(flipped);
+            }
+            free(ss);
+        }
+    }
+
+    if (ctx.screenshot_requested) {
+        uint32_t* ss = malloc((size_t)ctx.win_w * ctx.win_h * 4);
+        if (ss) {
+            glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ss);
+            uint32_t* flipped = malloc((size_t)ctx.win_w * ctx.win_h * 4);
+            if (flipped) {
+                for (int y = 0; y < ctx.win_h; y++) {
+                    int src_y = ctx.win_h - 1 - y;
+                    for (int x = 0; x < ctx.win_w; x++) {
+                        uint32_t p = ss[src_y * ctx.win_w + x];
+                        uint8_t r = (p >> 0) & 0xFF;
+                        uint8_t g = (p >> 8) & 0xFF;
+                        uint8_t b = (p >> 16) & 0xFF;
+                        uint8_t a = (p >> 24) & 0xFF;
+                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) | ((uint32_t)r << 16) | ((uint32_t)a << 24);
+                    }
+                }
+                save_screenshot(flipped, ctx.win_w, ctx.win_h);
+                free(flipped);
+            }
+            free(ss);
+        }
+        ctx.screenshot_requested = 0;
+    }
+
     sg_end_pass();
     sg_commit();
 }
 
-// handles window events and input mapping
-static void event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_RESIZED) {
-        ctx.win_w = ev->window_width;
-        ctx.win_h = ev->window_height;
-        rebuild_texture();
-        ctx.needs_redraw = 1;
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
+// handles mouse input events
+static void handle_mouse_event(const sapp_event* ev) {
+    if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
         // user interaction cancels automated navigation
         if (ctx.m_tour.phase != TOUR_IDLE) {
             stop_tour(&ctx.m_tour);
@@ -539,7 +655,12 @@ static void event(const sapp_event* ev) {
             ctx.view.center_im = mim - (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
             ctx.needs_redraw = 1;
         }
-    } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
+    }
+}
+
+// handles keyboard input events
+static void handle_keyboard_event(const sapp_event* ev) {
+    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
         int mod_ctrl = ev->modifiers & SAPP_MODIFIER_CTRL;
         if (ev->key_code == SAPP_KEYCODE_ESCAPE || ev->key_code == SAPP_KEYCODE_Q) {
             sapp_quit();
@@ -600,15 +721,7 @@ static void event(const sapp_event* ev) {
             init_renderer(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_S) {
-            uint32_t* ss = malloc((size_t)ctx.win_w * ctx.win_h * 4);
-            if (ss) {
-                // unfortunately glReadPixels is tricky in sokol's frame loop,
-                // we'd normally use a flag and read in frame(), but for simplicity
-                // in this desktop-only code we can use glReadPixels if we know the context.
-                glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ss);
-                save_screenshot(ss, ctx.win_w, ctx.win_h);
-                free(ss);
-            }
+            ctx.screenshot_requested = 1;
         } else if (ev->key_code == SAPP_KEYCODE_X) {
             double aspect = (double)ctx.win_w / ctx.win_h;
             double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2.0;
@@ -673,7 +786,30 @@ static void event(const sapp_event* ev) {
                 }
                 ctx.history_count = 0;
             }
+        } else if (ev->key_code == SAPP_KEYCODE_LEFT_BRACKET || ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
+            int threads = get_actual_thread_count();
+            threads += (ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) ? 1 : -1;
+            set_renderer_thread_count(threads);
+            ctx.needs_redraw = 1;
+        } else if (ev->key_code == SAPP_KEYCODE_F5) {
+            reload_shaders();
+            ctx.needs_redraw = 1;
         }
+    }
+}
+
+// handles window events and input mapping
+static void event(const sapp_event* ev) {
+    if (ev->type == SAPP_EVENTTYPE_RESIZED) {
+        ctx.win_w = ev->window_width;
+        ctx.win_h = ev->window_height;
+        rebuild_texture();
+        ctx.needs_redraw = 1;
+    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
+               ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
+        handle_mouse_event(ev);
+    } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
+        handle_keyboard_event(ev);
     }
 }
 
@@ -682,6 +818,8 @@ static void cleanup(void) {
     cleanup_renderer();
     cleanup_color_palette();
     sfons_destroy(ctx.fons);
+    if (ctx.shd_cpu.id) sg_destroy_shader(ctx.shd_cpu);
+    if (ctx.shd_gpu.id) sg_destroy_shader(ctx.shd_gpu);
     sgl_shutdown();
     sg_shutdown();
 }

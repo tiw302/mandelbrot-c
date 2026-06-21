@@ -26,9 +26,9 @@ static const char* dg_vs =
     "out vec2 uv;"
     "void main() { gl_Position = vec4(pos,0.0,1.0); uv = uv_in; }";
 
-// cpu-mode fragment shader — used when rendering on the cpu thread pool.
-// the cpu fills a buffer with argb8888 pixels; this shader simply
-// samples that texture and outputs it to the screen.
+/* cpu-mode fragment shader — used when rendering on the cpu thread pool.
+ * the cpu fills a buffer with argb8888 pixels; this shader simply
+ * samples that texture and outputs it to the screen. */
 static const char* dg_fs_cpu =
     "#version 330\n"
     "uniform sampler2D tex; in vec2 uv; out vec4 color;"
@@ -81,6 +81,23 @@ static const char* dg_fs_gpu =
     "  precise float t1  = c11 + c2;\n"
     "  precise float e   = t1 - c11;\n"
     "  precise float t2  = dsa.y * dsb.y + ((c2 - e) + (c11 - (t1 - e))) + c21;\n"
+    "  precise float t3  = t1 + t2;\n"
+    "  return vec2(t3, t2 - (t3 - t1));\n"
+    "}\n"
+    "\n"
+    "/* dekker double-single squaring.\n"
+    " * splits the operand only once to save multiple float operations\n"
+    " * compared to general double-single multiplication. */\n"
+    "vec2 ds_sqr(vec2 dsa) {\n"
+    "  precise float cona = dsa.x * 4097.0;\n"
+    "  precise float a1 = cona - (cona - dsa.x);\n"
+    "  precise float a2 = dsa.x - a1;\n"
+    "  precise float c11 = dsa.x * dsa.x;\n"
+    "  precise float c21 = a2*a2 + (2.0 * a1*a2 + (a1*a1 - c11));\n"
+    "  precise float c2  = 2.0 * dsa.x * dsa.y;\n"
+    "  precise float t1  = c11 + c2;\n"
+    "  precise float e   = t1 - c11;\n"
+    "  precise float t2  = dsa.y * dsa.y + ((c2 - e) + (c11 - (t1 - e))) + c21;\n"
     "  precise float t3  = t1 + t2;\n"
     "  return vec2(t3, t2 - (t3 - t1));\n"
     "}\n"
@@ -165,10 +182,10 @@ static const char* dg_fs_gpu =
     "      if (q*(q+cr) <= 0.25*ci2) { i = m; }\n"
     "      else { float cr1 = px.x+1.0; if (cr1*cr1+ci2 <= 0.0625) i = m; }\n"
     "    }\n"
-    "    for (i=0; i<2000; i++) {\n"
+    "    for (; i<2000; i++) {\n"
     "      if (i>=m) break;\n"
-    "      vec2 x2 = ds_mul(zx, zx);\n"
-    "      vec2 y2 = ds_mul(zy, zy);\n"
+    "      vec2 x2 = ds_sqr(zx);\n"
+    "      vec2 y2 = ds_sqr(zy);\n"
     "      mag2 = x2.x + y2.x;\n"
     "      if (mag2 > 100.0) break;\n"
     "      if (u_fractal_type > 1.5) {\n"  // burning ship
@@ -185,8 +202,8 @@ static const char* dg_fs_gpu =
     "      }\n"
     "    }\n"
 
-    /* path 2: standard float precision.
-     * high-speed path for low zoom levels where 32-bit float mantissa is enough. */
+    // path 2: standard float precision.
+    // high-speed path for low zoom levels where 32-bit float mantissa is enough.
     "  } else {\n"
     "    vec2 center = u_center_hi + u_center_lo;\n"
     "    vec2 p = vec2((uv.x-0.5)*u_zoom*u_aspect+center.x, (0.5-uv.y)*u_zoom+center.y);\n"
@@ -210,7 +227,7 @@ static const char* dg_fs_gpu =
     "    }\n"
     "  }\n"
 
-    /* final output coloring */
+    // final output coloring
     "  if (i>=m) { color=vec4(0,0,0,1); }\n"
     "  else {\n"
     "    float s = float(i)+2.0-log2(log(max(1.0,mag2)));\n"

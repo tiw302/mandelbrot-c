@@ -55,8 +55,8 @@ static const char* fs_gpu_src =
      * --------------------------------------------------------------- */
     "float B(float x) { return x + u_zero; }\n"
     "\n"
-    /* ds_add: knuth TwoSum algorithm (DSFUN90).
-     * B() barriers prevent the compiler from folding (a+b)-a → b. */
+    // ds_add: knuth twosum algorithm (dsfun90).
+    // b() barriers prevent the compiler from folding (a+b)-a → b.
     "vec2 ds_add(vec2 dsa, vec2 dsb) {\n"
     "    float t1 = dsa.x + dsb.x;\n"
     "    float e  = B(t1) - dsa.x;\n"
@@ -81,6 +81,23 @@ static const char* fs_gpu_src =
     "    float t1  = c11 + c2;\n"
     "    float e   = B(t1) - c11;\n"
     "    float t2  = dsa.y * dsb.y + ((c2 - e) + (c11 - (B(t1) - e))) + c21;\n"
+    "    float hi  = t1 + t2;\n"
+    "    return vec2(hi, t2 - (B(hi) - t1));\n"
+    "}\n"
+    "\n"
+    "/* dekker double-single squaring.\n"
+    " * splits the operand only once to save multiple float operations\n"
+    " * compared to general double-single multiplication. */\n"
+    "vec2 ds_sqr(vec2 dsa) {\n"
+    "    float cona = dsa.x * 4097.0;\n"
+    "    float a1 = cona - (B(cona) - dsa.x);\n"
+    "    float a2 = dsa.x - a1;\n"
+    "    float c11 = dsa.x * dsa.x;\n"
+    "    float c21 = a2*a2 + (2.0 * a1*a2 + (a1*a1 - B(c11)));\n"
+    "    float c2  = 2.0 * dsa.x * dsa.y;\n"
+    "    float t1  = c11 + c2;\n"
+    "    float e   = B(t1) - c11;\n"
+    "    float t2  = dsa.y * dsa.y + ((c2 - e) + (c11 - (B(t1) - e))) + c21;\n"
     "    float hi  = t1 + t2;\n"
     "    return vec2(hi, t2 - (B(hi) - t1));\n"
     "}\n"
@@ -164,12 +181,12 @@ static const char* fs_gpu_src =
     "            if (q * (q + cr) <= 0.25 * ci2) { i = m; }\n"
     "            else { float cr1 = px.x + 1.0; if (cr1*cr1 + ci2 <= 0.0625) i = m; }\n"
     "        }\n"
-    /* gpu loop cap: glsl needs a compile-time constant bound on many drivers.
-     * 2000 is safe for broad compatibility. for deeper counts use cpu mode. */
+    // gpu loop cap: glsl needs a compile-time constant bound on many drivers.
+    // 2000 is safe for broad compatibility. for deeper counts use cpu mode.
     "        for (i = i; i < 2000; i++) {\n"
     "            if (i >= m) break;\n"
-    "            vec2 x2 = ds_mul(zx, zx);\n"
-    "            vec2 y2 = ds_mul(zy, zy);\n"
+    "            vec2 x2 = ds_sqr(zx);\n"
+    "            vec2 y2 = ds_sqr(zy);\n"
     "            mag_sq = x2.x + y2.x;\n"
     "            if (mag_sq > 100.0) break;\n"
     "            if (u_fractal_type > 1.5) {\n"
