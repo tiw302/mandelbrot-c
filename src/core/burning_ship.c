@@ -95,8 +95,8 @@ void burning_ship_check_avx2(__m256d cre, __m256d cim, int max_iterations, doubl
 #endif
 
 #ifdef __AVX512F__
-/* avx-512 vectorized burning ship path:
- * processes 8 pixels simultaneously. */
+// avx-512 vectorized burning ship path:
+// processes 8 pixels simultaneously.
 void burning_ship_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* results) {
     __m512d zre = _mm512_setzero_pd();
     __m512d zim = _mm512_setzero_pd();
@@ -213,8 +213,8 @@ double burning_ship_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations)
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_mul(zre, zre);
-        simd_f128 zim2 = simd_f128_mul(zim, zim);
+        simd_f128 zre2 = simd_f128_sqr(zre);
+        simd_f128 zim2 = simd_f128_sqr(zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
