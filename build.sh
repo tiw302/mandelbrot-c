@@ -63,12 +63,40 @@ build_deep() {
     echo " "
 }
 
+run_tests() {
+    cmake -S . -B build_test -DBUILD_CPU=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+    cmake --build build_test --parallel
+    echo ""
+    echo "Running tests..."
+    ctest --test-dir build_test --output-on-failure
+    echo "===================================================================================="
+    echo " tests complete!"
+    echo "===================================================================================="
+    echo " "
+}
+
+run_benchmarks() {
+    cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
+    cmake --build build_bench --parallel
+    echo ""
+    echo "Running math benchmark..."
+    ./build_bench/benchmarks/benchmark_math
+    echo ""
+    echo "Running renderer benchmark..."
+    ./build_bench/benchmarks/benchmark_renderer
+    echo ""
+    echo "===================================================================================="
+    echo " benchmarks complete!"
+    echo "===================================================================================="
+    echo " "
+}
+
 build_all() {
     build_cpu && build_gpu && build_web && build_deep
 }
 
 clean() {
-    rm -rf build_cpu build_gpu build_web build_deep build deploy
+    rm -rf build_cpu build_gpu build_web build_deep build_test build_bench build deploy
     echo "clean complete!"
 }
 
@@ -78,9 +106,11 @@ if [ $# -gt 0 ]; then
         gpu)   build_gpu ;;
         web)   build_web ;;
         deep)  build_deep ;;
+        test)  run_tests ;;
+        bench) run_benchmarks ;;
         all)   build_all ;;
         clean) clean ;;
-        *)     echo "error: unknown option '$1'. usage: $0 {cpu|gpu|web|deep|all|clean}" ;;
+        *)     echo "error: unknown option '$1'. usage: $0 {cpu|gpu|web|deep|test|bench|all|clean}" ;;
     esac
     exit 0
 fi
@@ -92,8 +122,10 @@ echo "  1) cpu (combined 64/128-bit)"
 echo "  2) gpu (combined 32/64-bit)"
 echo "  3) web"
 echo "  4) deep zoom (perturbation theory)"
-echo "  5) build all"
-echo "  6) clean"
+echo "  5) run tests"
+echo "  6) run benchmarks"
+echo "  7) build all"
+echo "  8) clean"
 echo "  q) quit"
 echo "===================================================================================="
 echo " "
@@ -104,11 +136,13 @@ case $choice in
     2) build_gpu ;;
     3) build_web ;;
     4) build_deep ;;
-    5) build_all ;;
-    6) clean ;;
+    5) run_tests ;;
+    6) run_benchmarks ;;
+    7) build_all ;;
+    8) clean ;;
     q|Q) exit 0 ;;
     *)
-        echo "error: invalid choice '$choice'. please enter a number between 1-6, or 'q' to quit."
+        echo "error: invalid choice '$choice'. please enter a number between 1-8, or 'q' to quit."
         exit 1
         ;;
 esac
