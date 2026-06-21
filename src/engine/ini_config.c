@@ -73,6 +73,26 @@ int load_config_from_file(const char* filepath) {
         }
     }
 
+    // clamp parsed parameters to safe bounds
+    if (current_max_iterations_limit < 10) current_max_iterations_limit = 10;
+    if (current_max_iterations_limit > 100000) current_max_iterations_limit = 100000;
+
+    if (current_window_width < 320) current_window_width = 320;
+    if (current_window_width > 8192) current_window_width = 8192;
+
+    if (current_window_height < 240) current_window_height = 240;
+    if (current_window_height > 8192) current_window_height = 8192;
+
+    if (current_default_iterations < 10) current_default_iterations = 10;
+    if (current_default_iterations > current_max_iterations_limit)
+        current_default_iterations = current_max_iterations_limit;
+
+    if (current_default_thread_count < 0) current_default_thread_count = 0;
+    if (current_default_thread_count > 64) current_default_thread_count = 64;
+
+    if (current_default_palette < 0) current_default_palette = 0;
+    if (current_default_palette > 8) current_default_palette = 8;
+
     fclose(file);
     return 1;
 }
