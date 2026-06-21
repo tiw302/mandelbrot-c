@@ -534,7 +534,8 @@ static void frame(void) {
                         uint8_t g = (p >> 8) & 0xFF;
                         uint8_t b = (p >> 16) & 0xFF;
                         uint8_t a = (p >> 24) & 0xFF;
-                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) | ((uint32_t)r << 16) | ((uint32_t)a << 24);
+                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) |
+                                                     ((uint32_t)r << 16) | ((uint32_t)a << 24);
                     }
                 }
                 append_video_frame(flipped, ctx.win_w, ctx.win_h);
@@ -558,7 +559,8 @@ static void frame(void) {
                         uint8_t g = (p >> 8) & 0xFF;
                         uint8_t b = (p >> 16) & 0xFF;
                         uint8_t a = (p >> 24) & 0xFF;
-                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) | ((uint32_t)r << 16) | ((uint32_t)a << 24);
+                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) |
+                                                     ((uint32_t)r << 16) | ((uint32_t)a << 24);
                     }
                 }
                 save_screenshot(flipped, ctx.win_w, ctx.win_h);
@@ -786,7 +788,8 @@ static void handle_keyboard_event(const sapp_event* ev) {
                 }
                 ctx.history_count = 0;
             }
-        } else if (ev->key_code == SAPP_KEYCODE_LEFT_BRACKET || ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
+        } else if (ev->key_code == SAPP_KEYCODE_LEFT_BRACKET ||
+                   ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
             int threads = get_actual_thread_count();
             threads += (ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) ? 1 : -1;
             set_renderer_thread_count(threads);
