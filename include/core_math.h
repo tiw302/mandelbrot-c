@@ -23,6 +23,8 @@ typedef struct {
     double im;
 } complex_t;
 
+typedef enum { RENDER_MANDELBROT = 0, RENDER_JULIA = 1, RENDER_BURNING_SHIP = 2 } RenderMode;
+
 // 128-bit double-double type for extreme zoom precision.
 // only available when building with -DUSE_SIMD_F128.
 #ifdef USE_SIMD_F128
@@ -40,5 +42,6 @@ typedef struct {
 #include "burning_ship.h"
 #include "julia.h"
 #include "mandelbrot.h"
+#include "fractal.h"
 
 #endif
