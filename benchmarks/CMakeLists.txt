@@ -15,10 +15,12 @@ target_link_libraries(benchmark_math PRIVATE m)
 # 2. benchmark_renderer (performance benchmarking for multithreaded rendering)
 add_executable(benchmark_renderer cpu/benchmark_renderer.c
     ../src/engine/renderer.c
+    ../src/engine/ini_config.c
     ../src/core/color.c
     ../src/core/mandelbrot.c
     ../src/core/julia.c
     ../src/core/burning_ship.c
+    ../src/core/fractal.c
 )
 target_compile_definitions(benchmark_renderer PRIVATE USE_SIMD_F128)
 target_compile_options(benchmark_renderer PRIVATE ${BENCHMARK_FLAGS} -O3 -ffast-math)
@@ -28,10 +30,12 @@ target_link_libraries(benchmark_renderer PRIVATE m pthread)
 add_executable(benchmark_screenshot cpu/benchmark_screenshot.c
     ../src/engine/screenshot.c
     ../src/engine/renderer.c
+    ../src/engine/ini_config.c
     ../src/core/color.c
     ../src/core/mandelbrot.c
     ../src/core/julia.c
     ../src/core/burning_ship.c
+    ../src/core/fractal.c
 )
 target_compile_definitions(benchmark_screenshot PRIVATE USE_SIMD_F128)
 target_compile_options(benchmark_screenshot PRIVATE ${BENCHMARK_FLAGS} -O3 -ffast-math)
@@ -47,6 +51,7 @@ if(BUILD_GPU)
         ../src/core/mandelbrot.c
         ../src/core/julia.c
         ../src/core/burning_ship.c
+        ../src/core/fractal.c
         ../src/engine/ini_config.c
     )
     target_compile_definitions(benchmark_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE USE_SIMD_F128)
