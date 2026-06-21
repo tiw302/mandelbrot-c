@@ -12,9 +12,11 @@ if not "%~1"=="" (
     if /i "%~1"=="gpu" goto build_gpu
     if /i "%~1"=="web" goto build_web
     if /i "%~1"=="deep" goto build_deep
+    if /i "%~1"=="test" goto run_tests
+    if /i "%~1"=="bench" goto run_benchmarks
     if /i "%~1"=="all" goto build_all
     if /i "%~1"=="clean" goto clean
-    echo error: unknown option '%~1'. usage: %0 {cpu^|gpu^|web^|deep^|all^|clean}
+    echo error: unknown option '%~1'. usage: %0 {cpu^|gpu^|web^|deep^|test^|bench^|all^|clean}
     exit /b 1
 )
 
@@ -26,8 +28,10 @@ echo   1^) cpu (combined 64/128-bit)
 echo   2^) gpu (combined 32/64-bit)
 echo   3^) web
 echo   4^) deep zoom (perturbation theory)
-echo   5^) build all
-echo   6^) clean
+echo   5^) run tests
+echo   6^) run benchmarks
+echo   7^) build all
+echo   8^) clean
 echo   q^) quit
 echo ====================================================================================
 echo.
@@ -37,11 +41,13 @@ if /i "%choice%"=="1" goto build_cpu
 if /i "%choice%"=="2" goto build_gpu
 if /i "%choice%"=="3" goto build_web
 if /i "%choice%"=="4" goto build_deep
-if /i "%choice%"=="5" goto build_all
-if /i "%choice%"=="6" goto clean
+if /i "%choice%"=="5" goto run_tests
+if /i "%choice%"=="6" goto run_benchmarks
+if /i "%choice%"=="7" goto build_all
+if /i "%choice%"=="8" goto clean
 if /i "%choice%"=="q" exit /b 0
 
-echo error: invalid choice '%choice%'. please enter a number between 1-6, or 'q' to quit.
+echo error: invalid choice '%choice%'. please enter a number between 1-8, or 'q' to quit.
 echo.
 goto menu
 
@@ -130,6 +136,52 @@ echo ===========================================================================
 echo.
 goto end
 
+:run_tests
+echo.
+echo Configuring tests...
+cmake -S . -B build_test -DBUILD_CPU=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo Building tests...
+cmake --build build_test --parallel --config Release
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo.
+echo Running tests...
+ctest --test-dir build_test -C Release --output-on-failure
+echo ====================================================================================
+echo  tests complete!
+echo ====================================================================================
+echo.
+goto end
+
+:run_benchmarks
+echo.
+echo Configuring benchmarks...
+cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo Building benchmarks...
+cmake --build build_bench --parallel --config Release
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo.
+echo Running math benchmark...
+if exist build_bench\benchmarks\Release\benchmark_math.exe (
+    build_bench\benchmarks\Release\benchmark_math.exe
+) else (
+    build_bench\benchmarks\benchmark_math.exe
+)
+echo.
+echo Running renderer benchmark...
+if exist build_bench\benchmarks\Release\benchmark_renderer.exe (
+    build_bench\benchmarks\Release\benchmark_renderer.exe
+) else (
+    build_bench\benchmarks\benchmark_renderer.exe
+)
+echo.
+echo ====================================================================================
+echo  benchmarks complete!
+echo ====================================================================================
+echo.
+goto end
+
 :build_all
 call :build_cpu
 call :build_gpu
@@ -144,6 +196,8 @@ if exist build_cpu rmdir /s /q build_cpu
 if exist build_gpu rmdir /s /q build_gpu
 if exist build_web rmdir /s /q build_web
 if exist build_deep rmdir /s /q build_deep
+if exist build_test rmdir /s /q build_test
+if exist build_bench rmdir /s /q build_bench
 if exist build rmdir /s /q build
 if exist deploy rmdir /s /q deploy
 echo clean complete!
