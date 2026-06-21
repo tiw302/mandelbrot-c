@@ -33,8 +33,8 @@ void save_mega_screenshot(int target_width, int target_height, double re_min, do
     header[17] = 0x20;  // top-down origin
     fwrite(header, 1, 18, file);
 
-    /* we render in chunks (strips) to save memory.
-     * say, 256 lines at a time. */
+    // we render in chunks (strips) to save memory.
+    // say, 256 lines at a time.
     int chunk_height = 256;
     if (chunk_height > target_height) chunk_height = target_height;
 
@@ -138,8 +138,8 @@ int start_video_recording(int width, int height, int fps) {
     strftime(filename, sizeof(filename), "mandelbrot_video_%Y%m%d_%H%M%S.mp4", t);
 
     char command[512];
-    /* we pipe raw rgb32 (bgra on little endian) data to ffmpeg.
-     * using ultrafast preset and crf 18 for good quality without bottlenecking the app too much. */
+    // we pipe raw rgb32 (bgra on little endian) data to ffmpeg.
+    // using ultrafast preset and crf 18 for good quality without bottlenecking the app too much.
     snprintf(command, sizeof(command),
              "ffmpeg -y -f rawvideo -vcodec rawvideo -s %dx%d -pix_fmt bgra -r %d "
              "-i - -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 -preset ultrafast -crf 18 "
@@ -205,6 +205,9 @@ void append_video_frame(uint32_t* pixels, int width, int height) {
 void stop_video_recording(void) {
     if (!is_recording || !ffmpeg_pipe) return;
 
+    // mark as not recording immediately to prevent new frames from being appended
+    is_recording = 0;
+
     // signal worker to stop and wait for it to clear the queue
     pthread_mutex_lock(&video_mutex);
     video_shutdown = 1;
@@ -222,7 +225,6 @@ void stop_video_recording(void) {
 #endif
 
     ffmpeg_pipe = NULL;
-    is_recording = 0;
     printf("stopped video recording.\n");
 }
 
