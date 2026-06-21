@@ -28,6 +28,10 @@ void test_bookmark_io(void) {
                       .fractal_type = 1,
                       .julia_c = {-0.8, 0.156}};
 
+    // redirect bookmarks to a temp file for isolated testing
+    const char* temp_file = "test_bookmarks.json";
+    set_bookmarks_file(temp_file);
+
     // save to temp file
     save_bookmark(&b_out);
 
@@ -48,6 +52,9 @@ void test_bookmark_io(void) {
     EXPECT(b_out.fractal_type == b_in.fractal_type);
     EXPECT(approx_eq(b_out.julia_c.re, b_in.julia_c.re));
     EXPECT(approx_eq(b_out.julia_c.im, b_in.julia_c.im));
+
+    // clean up temporary test file
+    remove(temp_file);
 
     TEST_END();
 }
