@@ -107,8 +107,7 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
             ctx->julia_mode = 1;
             SDL_SetWindowTitle(ctx->window, "Julia Explorer");
         } else {
-            if (ctx->julia_session.active)
-                ctx->view = ctx->julia_session.mandelbrot_view;
+            if (ctx->julia_session.active) ctx->view = ctx->julia_session.mandelbrot_view;
             ctx->julia_mode = 0;
             SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer");
         }
@@ -119,8 +118,8 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         ctx->julia_mode = ctx->julia_session.active = 0;
         ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
         ctx->history_count = 0;
-        SDL_SetWindowTitle(ctx->window, ctx->burning_ship_mode ? "Burning Ship Explorer"
-                                                               : "Mandelbrot Explorer");
+        SDL_SetWindowTitle(
+            ctx->window, ctx->burning_ship_mode ? "Burning Ship Explorer" : "Mandelbrot Explorer");
         ctx->needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_p) {
         ctx->palette_idx = (ctx->palette_idx + 1) % PALETTE_COUNT;
@@ -170,18 +169,17 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
     } else if (event->key.keysym.sym == SDLK_s) {
         uint32_t* ss = malloc((size_t)ctx->win_w * ctx->win_h * 4);
         if (ss) {
-            SDL_RenderReadPixels(ctx->renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss,
-                                 ctx->win_w * 4);
+            SDL_RenderReadPixels(ctx->renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss, ctx->win_w * 4);
             save_screenshot(ss, ctx->win_w, ctx->win_h);
             free(ss);
         }
     } else if (event->key.keysym.sym == SDLK_x) {
         double rmin, rmax, imin, imax;
-        calculate_boundaries(ctx->view.center_re, ctx->view.center_im, ctx->view.zoom,
-                             ctx->win_w, ctx->win_h, &rmin, &rmax, &imin, &imax);
-        save_mega_screenshot(
-            8192, 8192, rmin, rmax, imin, imax, ctx->max_iterations, ctx->palette_idx,
-            ctx->julia_mode ? 1 : (ctx->burning_ship_mode ? 2 : 0), ctx->julia_c);
+        calculate_boundaries(ctx->view.center_re, ctx->view.center_im, ctx->view.zoom, ctx->win_w,
+                             ctx->win_h, &rmin, &rmax, &imin, &imax);
+        save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx->max_iterations,
+                             ctx->palette_idx,
+                             ctx->julia_mode ? 1 : (ctx->burning_ship_mode ? 2 : 0), ctx->julia_c);
         ctx->needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_v) {
         if (is_video_recording())
@@ -202,20 +200,19 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
             if (ctx->m_tour.phase == TOUR_IDLE) {
                 ctx->julia_mode = ctx->julia_session.active = 0;
                 ctx->history_count = 0;
-                ctx->view =
-                    (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+                ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                 start_tour(&ctx->m_tour, &ctx->view);
                 SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer  [Auto-Zoom]");
             } else {
                 stop_tour(&ctx->m_tour);
-                ctx->view =
-                    (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+                ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
                 ctx->history_count = 0;
                 SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer");
                 ctx->needs_redraw = 1;
             }
         }
-    } else if (event->key.keysym.sym == SDLK_LEFTBRACKET || event->key.keysym.sym == SDLK_RIGHTBRACKET) {
+    } else if (event->key.keysym.sym == SDLK_LEFTBRACKET ||
+               event->key.keysym.sym == SDLK_RIGHTBRACKET) {
         int threads = get_actual_thread_count();
         threads += (event->key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1;
         set_renderer_thread_count(threads);
