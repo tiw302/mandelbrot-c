@@ -12,20 +12,25 @@ typedef struct {
     // standard 64-bit precision kernels
     double (*check_scalar)(complex_t c, complex_t julia_c, int max_iterations);
 #ifdef __AVX2__
-    void (*check_avx2)(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations, double* results);
+    void (*check_avx2)(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations,
+                       double* results);
 #endif
 #ifdef __AVX512F__
-    void (*check_avx512)(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations, double* results);
+    void (*check_avx512)(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations,
+                         double* results);
 #endif
 #ifdef __wasm_simd128__
-    void (*check_wasm_simd128)(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations, double* results);
+    void (*check_wasm_simd128)(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations,
+                               double* results);
 #endif
 
     // high-precision 128-bit kernels
 #ifdef USE_SIMD_F128
-    double (*check_scalar_f128)(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations);
+    double (*check_scalar_f128)(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre,
+                                simd_f128 julia_cim, int max_iterations);
 #ifdef __AVX2__
-    void (*check_avx2_f128)(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results);
+    void (*check_avx2_f128)(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre,
+                            simd_f128x4 julia_cim, int max_iterations, double* results);
 #endif
 #endif
 } FractalDefinition;
