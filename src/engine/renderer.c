@@ -9,8 +9,8 @@
 #include <string.h>
 
 #include "config.h"
-#include "ini_config.h"
 #include "core_math.h"
+#include "ini_config.h"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -151,7 +151,8 @@ static void process_rows(void) {
                                                            (double)(x + 2), (double)(x + 3));
                 simd_f128x4 v_re = simd_f128x4_add(v_re_min, simd_f128x4_mul(v_x, v_re_fac));
 
-                fd->check_avx2_f128(v_re, v_im_val, v_julia_cre, v_julia_cim, pool.max_iterations, iterations);
+                fd->check_avx2_f128(v_re, v_im_val, v_julia_cre, v_julia_cim, pool.max_iterations,
+                                    iterations);
 
                 for (int i = 0; i < 4; i++) {
                     uint8_t r, g, b;
@@ -172,7 +173,8 @@ static void process_rows(void) {
                 simd_f128 x_128 = simd_f128_from_double((double)x);
                 simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
 
-                double iterations = fd->check_scalar_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
+                double iterations =
+                    fd->check_scalar_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
 
                 uint8_t r, g, b;
                 get_color(iterations, pool.max_iterations, &r, &g, &b);
