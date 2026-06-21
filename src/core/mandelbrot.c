@@ -263,8 +263,8 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_mul(zre, zre);
-        simd_f128 zim2 = simd_f128_mul(zim, zim);
+        simd_f128 zre2 = simd_f128_sqr(zre);
+        simd_f128 zim2 = simd_f128_sqr(zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
@@ -284,7 +284,7 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
 }
 
 #ifdef __AVX2__
-/* AVX2 high-precision 128-bit mandelbrot path:
+/* avx2 high-precision 128-bit mandelbrot path:
  * processes 4 pixels simultaneously with double-double precision.
  * prevents pixelation for extremely deep zooms with high throughput. */
 void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations,
