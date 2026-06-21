@@ -14,6 +14,9 @@ typedef struct {
 } Bookmark;
 
 // saves a bookmark to bookmarks.json in the current directory
+// configures the target file for saving/loading bookmarks
+void set_bookmarks_file(const char* filepath);
+
 void save_bookmark(const Bookmark* b);
 
 /* loads a bookmark from bookmarks.json by index.

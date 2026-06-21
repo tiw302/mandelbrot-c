@@ -4,8 +4,16 @@
 #include <stdlib.h>
 #include <string.h>
 
-#define BOOKMARKS_FILE "bookmarks.json"
+static char bookmarks_file_path[256] = "bookmarks.json";
 #define MAX_BOOKMARKS 1024
+
+// sets the active bookmark filename
+void set_bookmarks_file(const char* filepath) {
+    if (filepath) {
+        strncpy(bookmarks_file_path, filepath, sizeof(bookmarks_file_path) - 1);
+        bookmarks_file_path[sizeof(bookmarks_file_path) - 1] = '\0';
+    }
+}
 
 static int scan_bookmarks(Bookmark* bookmarks, int max_count);
 
@@ -19,7 +27,7 @@ void save_bookmark(const Bookmark* b) {
         bookmarks[count++] = *b;
     }
 
-    FILE* f = fopen(BOOKMARKS_FILE, "w");
+    FILE* f = fopen(bookmarks_file_path, "w");
     if (!f) {
         free(bookmarks);
         return;
@@ -51,7 +59,7 @@ void save_bookmark(const Bookmark* b) {
 
 // simple scanner for the json structure we write
 static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
-    FILE* f = fopen(BOOKMARKS_FILE, "r");
+    FILE* f = fopen(bookmarks_file_path, "r");
     if (!f) return 0;
 
     int count = 0;
