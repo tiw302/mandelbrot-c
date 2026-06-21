@@ -258,7 +258,7 @@ SIMD_F128_INLINE void simd_f128_sincos(simd_f128 x, simd_f128* s, simd_f128* c) 
     long long k = (long long)k_double;
 
     simd_f128 r = simd_f128_sub(x, simd_f128_mul(simd_f128_from_double(k_double), SIMD_F128_PI_OVER_2));
-    simd_f128 rsq = simd_f128_mul(r, r);
+    simd_f128 rsq = simd_f128_sqr(r);
 
     // evaluate chebyshev minimax polynomial approximations for sin(r) and cos(r)
     // sin(r) ~ r * (1 + rsq * s_sin)
@@ -390,7 +390,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_asin(simd_f128 x) {
     // compute asin using stable identity: asin(x) = atan(x / sqrt(1 - x^2))
     // this avoids cancellation issues in newton-raphson near boundaries
     simd_f128 one = simd_f128_from_double(1.0);
-    simd_f128 denom = simd_f128_sqrt(simd_f128_sub(one, simd_f128_mul(x, x)));
+    simd_f128 denom = simd_f128_sqrt(simd_f128_sub(one, simd_f128_sqr(x)));
     return simd_f128_atan(simd_f128_div(x, denom));
 }
 
@@ -411,7 +411,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_acos(simd_f128 x) {
     // acos(x) = pi - acos(-x) for x < 0
     // this avoids cancellation issues near endpoints
     simd_f128 one = simd_f128_from_double(1.0);
-    simd_f128 num = simd_f128_sqrt(simd_f128_sub(one, simd_f128_mul(x, x)));
+    simd_f128 num = simd_f128_sqrt(simd_f128_sub(one, simd_f128_sqr(x)));
     
     if (hi > 0.0 || (hi == 0.0 && lo > 0.0)) {
         return simd_f128_atan(simd_f128_div(num, x));
@@ -502,7 +502,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_sinh(simd_f128 x) {
     // taylor series fallback for small x to avoid catastrophic cancellation
     // sinh(x) ~ x + x^3/6 + x^5/120
     if (fabs(hi) < 1e-4) {
-        simd_f128 x2 = simd_f128_mul(x, x);
+        simd_f128 x2 = simd_f128_sqr(x);
         simd_f128 x3 = simd_f128_mul(x2, x);
         simd_f128 x5 = simd_f128_mul(x3, x2);
         simd_f128 term2 = simd_f128_div(x3, simd_f128_from_double(6.0));
@@ -536,7 +536,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_tanh(simd_f128 x) {
     // taylor series fallback for small x to avoid catastrophic cancellation
     // tanh(x) ~ x - x^3/3 + 2x^5/15
     if (fabs(hi) < 1e-4) {
-        simd_f128 x2 = simd_f128_mul(x, x);
+        simd_f128 x2 = simd_f128_sqr(x);
         simd_f128 x3 = simd_f128_mul(x2, x);
         simd_f128 x5 = simd_f128_mul(x3, x2);
         simd_f128 term2 = simd_f128_div(x3, simd_f128_from_double(-3.0));

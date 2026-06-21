@@ -113,7 +113,28 @@ SIMD_F128_INLINE simd_f128x4 simd_f128x4_mul2(simd_f128x4 a) {
 
 // square all four double-double elements in parallel (a * a)
 SIMD_F128_INLINE simd_f128x4 simd_f128x4_sqr(simd_f128x4 a) {
-    return simd_f128x4_mul(a, a);
+    __m256d hi_prod = _mm256_mul_pd(a.hi, a.hi);
+    
+    // exact multiplication error estimation for squaring
+#if defined(__FMA__)
+    __m256d err = _mm256_fmsub_pd(a.hi, a.hi, hi_prod);
+#else
+    // vector split using dekker's constant (2^27 + 1)
+    __m256d c = _mm256_set1_pd(134217729.0);
+    __m256d up = _mm256_mul_pd(a.hi, c);
+    __m256d u1 = _mm256_sub_pd(up, _mm256_sub_pd(up, a.hi));
+    __m256d u2 = _mm256_sub_pd(a.hi, u1);
+    __m256d err = _mm256_add_pd(_mm256_add_pd(_mm256_sub_pd(_mm256_mul_pd(u1, u1), hi_prod), _mm256_mul_pd(_mm256_add_pd(u1, u1), u2)), _mm256_mul_pd(u2, u2));
+#endif
+
+    // accumulate cross-terms (2.0 * a.hi * a.lo) and squaring roundoff error
+    __m256d cross = _mm256_mul_pd(a.hi, a.lo);
+    __m256d lo_prod = _mm256_add_pd(_mm256_add_pd(cross, cross), err);
+    
+    simd_f128x4 res;
+    res.hi = _mm256_add_pd(hi_prod, lo_prod);
+    res.lo = _mm256_sub_pd(lo_prod, _mm256_sub_pd(res.hi, hi_prod));
+    return res;
 }
 
 // compute absolute values of all four double-double elements in parallel
@@ -234,7 +255,7 @@ SIMD_F128_INLINE simd_f128x4 simd_f128x4_mul2(simd_f128x4 a) {
 SIMD_F128_INLINE simd_f128x4 simd_f128x4_sqr(simd_f128x4 a) {
     simd_f128x4 res;
     for (int i = 0; i < 4; i++) {
-        res.val[i] = simd_f128_mul(a.val[i], a.val[i]);
+        res.val[i] = simd_f128_sqr(a.val[i]);
     }
     return res;
 }

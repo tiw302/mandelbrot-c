@@ -160,6 +160,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_neg(simd_f128 x);
 SIMD_F128_INLINE simd_f128 simd_f128_add(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_sub(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_mul(simd_f128 a, simd_f128 b);
+SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a);
 SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_sqrt(simd_f128 x);
 SIMD_F128_INLINE simd_f128 simd_f128_rsqrt(simd_f128 x);
@@ -234,6 +235,19 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
         // compute product error using dekker's formula
         return ((ahi * bhi - p) + ahi * blo + alo * bhi) + alo * blo;
+#endif
+    }
+
+    // dekker's split method to estimate the roundoff error of a double squaring.
+    // used as a fallback when hardware fma instruction is not present.
+    SIMD_F128_INLINE double simd_f128_exact_sqr_err(double a, double p) {
+#ifdef FP_FAST_FMA
+        return fma(a, a, -p);
+#else
+        double c = 134217729.0 * a;
+        double ahi = c - (c - a);
+        double alo = a - ahi;
+        return ((ahi * ahi - p) + 2.0 * ahi * alo) + alo * alo;
 #endif
     }
 
@@ -320,6 +334,31 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         __m128d c1 = _mm_mul_sd(ahi, blo);
         __m128d c2 = _mm_mul_sd(alo, bhi);
         e = _mm_add_sd(e, _mm_add_sd(c1, c2));
+
+        // normalize the final hi and lo parts
+        __m128d final_hi = _mm_add_sd(p, e);
+        __m128d final_lo = _mm_sub_sd(e, _mm_sub_sd(final_hi, p));
+
+        return _mm_unpacklo_pd(final_hi, final_lo);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        // squaring using hardware fused multiply-accumulate (fma):
+        // fma computes (a * a) + c with only a single rounding step.
+        // therefore, fma(a, a, - (a * a)) computes the exact roundoff error.
+        __m128d ahi = _mm_unpacklo_pd(a, a);
+        __m128d p = _mm_mul_sd(ahi, ahi);
+
+        // overflow guard: return early on infinite product to avoid nan propagation
+        if (__builtin_expect(isinf(_mm_cvtsd_f64(p)), 0))
+            return _mm_unpacklo_pd(p, _mm_setzero_pd());
+
+        __m128d e = _mm_fmsub_sd(ahi, ahi, p);
+
+        // integrate the cross-terms from the low part
+        __m128d alo = _mm_unpackhi_pd(a, a);
+        __m128d c = _mm_mul_sd(ahi, alo);
+        e = _mm_add_sd(e, _mm_add_sd(c, c));
 
         // normalize the final hi and lo parts
         __m128d final_hi = _mm_add_sd(p, e);
@@ -486,6 +525,26 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         return _mm_set_pd(final_lo, final_hi);
     }
 
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double ahi, alo;
+        simd_f128_extract(a, &ahi, &alo);
+
+        // compute primary product and get exact error using split fallback
+        double p = ahi * ahi;
+
+        if (__builtin_expect(isinf(p), 0))
+            return _mm_set_pd(0.0, p);
+
+        double e = simd_f128_exact_sqr_err(ahi, p);
+        e += 2.0 * ahi * alo;
+
+        // normalize the final hi/lo parts
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+
+        return _mm_set_pd(final_lo, final_hi);
+    }
+
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
         double ahi, alo, bhi, blo;
         simd_f128_extract(a, &ahi, &alo);
@@ -622,6 +681,23 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
         double e = simd_f128_exact_mul_err(ahi, bhi, p);
         e += (ahi * blo + alo * bhi);
+
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+
+        return wasm_f64x2_make(final_hi, final_lo);
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double ahi, alo;
+        simd_f128_extract(a, &ahi, &alo);
+
+        double p = ahi * ahi;
+        if (__builtin_expect(isinf(p), 0))
+            return wasm_f64x2_make(p, 0.0);
+
+        double e = simd_f128_exact_sqr_err(ahi, p);
+        e += 2.0 * ahi * alo;
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);
@@ -787,6 +863,26 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         return vsetq_lane_f64(final_hi, r, 0);
     }
 
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        double xhi = vgetq_lane_f64(a, 0);
+        double xlo = vgetq_lane_f64(a, 1);
+
+        double z = xhi * xhi;
+        if (__builtin_expect(isinf(z), 0)) {
+            float64x2_t r_res = vdupq_n_f64(0.0);
+            return vsetq_lane_f64(z, r_res, 0);
+        }
+
+        double e = simd_f128_exact_sqr_err(xhi, z);
+        e += 2.0 * xhi * xlo;
+
+        double final_hi = z + e;
+        double final_lo = e - (final_hi - z);
+
+        float64x2_t r_final = vdupq_n_f64(final_lo);
+        return vsetq_lane_f64(final_hi, r_final, 0);
+    }
+
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
         double ahi = vgetq_lane_f64(a, 0);
         double alo = vgetq_lane_f64(a, 1);
@@ -928,6 +1024,25 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
         double e = simd_f128_exact_mul_err(a.hi, b.hi, p);
         e += (a.hi * b.lo + a.lo * b.hi);
+
+        double final_hi = p + e;
+        double final_lo = e - (final_hi - p);
+
+        simd_f128 res = {final_hi, final_lo};
+        return res;
+    }
+
+    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
+        // scalar double-double squaring:
+        // compute base product, estimate its exact error, add cross-term, and normalize
+        double p = a.hi * a.hi;
+        if (__builtin_expect(isinf(p), 0)) {
+            simd_f128 res = {p, 0.0};
+            return res;
+        }
+
+        double e = simd_f128_exact_sqr_err(a.hi, p);
+        e += 2.0 * a.hi * a.lo;
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);

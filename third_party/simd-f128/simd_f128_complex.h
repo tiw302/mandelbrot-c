@@ -77,7 +77,7 @@ SIMD_F128_INLINE simd_f128_complex simd_f128_complex_div(simd_f128_complex a, si
 // calculate absolute square magnitude: |z|^2 = real^2 + imag^2
 // optimized for fractal rendering escape time checks (saves a square root)
 SIMD_F128_INLINE simd_f128 simd_f128_complex_abs_sqr(simd_f128_complex a) {
-    return simd_f128_add(simd_f128_mul(a.real, a.real), simd_f128_mul(a.imag, a.imag));
+    return simd_f128_add(simd_f128_sqr(a.real), simd_f128_sqr(a.imag));
 }
 
 // calculate the magnitude (absolute value) of a complex number
