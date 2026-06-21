@@ -1,6 +1,7 @@
 #include "fractal.h"
-#include <string.h>
+
 #include <stdio.h>
+#include <string.h>
 
 // centralized registry for all fractal math kernels
 // ensures pluggable registration of new fractals
@@ -39,35 +40,40 @@ static double mandelbrot_scalar_wrap(complex_t c, complex_t julia_c, int max_ite
 }
 
 #ifdef __AVX2__
-static void mandelbrot_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations, double* results) {
+static void mandelbrot_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations,
+                                 double* results) {
     (void)julia_c;
     mandelbrot_check_avx2(cre, cim, max_iterations, results);
 }
 #endif
 
 #ifdef __AVX512F__
-static void mandelbrot_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations, double* results) {
+static void mandelbrot_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations,
+                                   double* results) {
     (void)julia_c;
     mandelbrot_check_avx512(cre, cim, max_iterations, results);
 }
 #endif
 
 #ifdef __wasm_simd128__
-static void mandelbrot_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations, double* results) {
+static void mandelbrot_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations,
+                                 double* results) {
     (void)julia_c;
     mandelbrot_check_wasm_simd128(cre, cim, max_iterations, results);
 }
 #endif
 
 #ifdef USE_SIMD_F128
-static double mandelbrot_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations) {
+static double mandelbrot_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre,
+                                   simd_f128 julia_cim, int max_iterations) {
     (void)julia_cre;
     (void)julia_cim;
     return mandelbrot_check_f128(cre, cim, max_iterations);
 }
 
 #ifdef __AVX2__
-static void mandelbrot_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results) {
+static void mandelbrot_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre,
+                                   simd_f128x4 julia_cim, int max_iterations, double* results) {
     (void)julia_cre;
     (void)julia_cim;
     mandelbrot_check_f128x4(cre, cim, max_iterations, results);
@@ -81,30 +87,35 @@ static double julia_scalar_wrap(complex_t z, complex_t julia_c, int max_iteratio
 }
 
 #ifdef __AVX2__
-static void julia_avx2_wrap(__m256d zre, __m256d zim, complex_t julia_c, int max_iterations, double* results) {
+static void julia_avx2_wrap(__m256d zre, __m256d zim, complex_t julia_c, int max_iterations,
+                            double* results) {
     julia_check_avx2(zre, zim, julia_c, max_iterations, results);
 }
 #endif
 
 #ifdef __AVX512F__
-static void julia_avx512_wrap(__m512d zre, __m512d zim, complex_t julia_c, int max_iterations, double* results) {
+static void julia_avx512_wrap(__m512d zre, __m512d zim, complex_t julia_c, int max_iterations,
+                              double* results) {
     julia_check_avx512(zre, zim, julia_c, max_iterations, results);
 }
 #endif
 
 #ifdef __wasm_simd128__
-static void julia_wasm_wrap(v128_t zre, v128_t zim, complex_t julia_c, int max_iterations, double* results) {
+static void julia_wasm_wrap(v128_t zre, v128_t zim, complex_t julia_c, int max_iterations,
+                            double* results) {
     julia_check_wasm_simd128(zre, zim, julia_c, max_iterations, results);
 }
 #endif
 
 #ifdef USE_SIMD_F128
-static double julia_f128_wrap(simd_f128 zre, simd_f128 zim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations) {
+static double julia_f128_wrap(simd_f128 zre, simd_f128 zim, simd_f128 julia_cre,
+                              simd_f128 julia_cim, int max_iterations) {
     return julia_check_f128(zre, zim, julia_cre, julia_cim, max_iterations);
 }
 
 #ifdef __AVX2__
-static void julia_f128x4_wrap(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results) {
+static void julia_f128x4_wrap(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 julia_cre,
+                              simd_f128x4 julia_cim, int max_iterations, double* results) {
     julia_check_f128x4(zre, zim, julia_cre, julia_cim, max_iterations, results);
 }
 #endif
@@ -117,35 +128,40 @@ static double burning_ship_scalar_wrap(complex_t c, complex_t julia_c, int max_i
 }
 
 #ifdef __AVX2__
-static void burning_ship_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations, double* results) {
+static void burning_ship_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations,
+                                   double* results) {
     (void)julia_c;
     burning_ship_check_avx2(cre, cim, max_iterations, results);
 }
 #endif
 
 #ifdef __AVX512F__
-static void burning_ship_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations, double* results) {
+static void burning_ship_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c,
+                                     int max_iterations, double* results) {
     (void)julia_c;
     burning_ship_check_avx512(cre, cim, max_iterations, results);
 }
 #endif
 
 #ifdef __wasm_simd128__
-static void burning_ship_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations, double* results) {
+static void burning_ship_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations,
+                                   double* results) {
     (void)julia_c;
     burning_ship_check_wasm_simd128(cre, cim, max_iterations, results);
 }
 #endif
 
 #ifdef USE_SIMD_F128
-static double burning_ship_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations) {
+static double burning_ship_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre,
+                                     simd_f128 julia_cim, int max_iterations) {
     (void)julia_cre;
     (void)julia_cim;
     return burning_ship_check_f128(cre, cim, max_iterations);
 }
 
 #ifdef __AVX2__
-static void burning_ship_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results) {
+static void burning_ship_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre,
+                                     simd_f128x4 julia_cim, int max_iterations, double* results) {
     (void)julia_cre;
     (void)julia_cim;
     burning_ship_check_f128x4(cre, cim, max_iterations, results);
