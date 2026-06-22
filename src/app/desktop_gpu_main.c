@@ -378,6 +378,14 @@ static void frame(void) {
             render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                        im_top, im_bot, ctx.max_iterations);
         ctx.render_time_ms = (uint32_t)stm_ms(stm_now()) - t0;
+        // swap red and blue channels for sokol sg_pixelformat_rgba8 texture upload
+        int pixel_count = ctx.win_w * ctx.win_h;
+        for (int i = 0; i < pixel_count; i++) {
+            uint32_t pix = ctx.pixels[i];
+            uint32_t r = (pix >> 16) & 0xFF;
+            uint32_t b = pix & 0xFF;
+            ctx.pixels[i] = (pix & 0xFF00FF00) | (b << 16) | r;
+        }
         // upload staging buffer to gpu texture
         sg_update_image(ctx.img, &(sg_image_data){
                                      .mip_levels[0] = {.ptr = ctx.pixels,
@@ -804,10 +812,12 @@ static void handle_keyboard_event(const sapp_event* ev) {
 // handles window events and input mapping
 static void event(const sapp_event* ev) {
     if (ev->type == SAPP_EVENTTYPE_RESIZED) {
-        ctx.win_w = ev->window_width;
-        ctx.win_h = ev->window_height;
-        rebuild_texture();
-        ctx.needs_redraw = 1;
+        if (ev->window_width > 0 && ev->window_height > 0) {
+            ctx.win_w = ev->window_width;
+            ctx.win_h = ev->window_height;
+            rebuild_texture();
+            ctx.needs_redraw = 1;
+        }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
                ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
         handle_mouse_event(ev);
