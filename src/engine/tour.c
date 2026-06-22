@@ -80,6 +80,9 @@ static inline double smoothstep(double t) {
 
 // random target selection that guarantees we never pick the same target twice in a row
 static int pick_idx(int last, int count) {
+    if (count <= 0) {
+        return 0; // prevent division by zero
+    }
     int idx;
     do {
         idx = rand() % count;
