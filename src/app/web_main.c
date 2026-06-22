@@ -488,19 +488,21 @@ static void handle_keyboard_event(const sapp_event* ev) {
 // maps browser-driven input events to engine state
 static void event(const sapp_event* ev) {
     if (ev->type == SAPP_EVENTTYPE_RESIZED) {
-        ctx.win_w = (int)ev->framebuffer_width;
-        ctx.win_h = (int)ev->framebuffer_height;
-        if (ctx.pixels) free(ctx.pixels);
-        ctx.pixels = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
-        sg_destroy_image(ctx.img);
-        ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w,
-                                                 .height = ctx.win_h,
-                                                 .pixel_format = SG_PIXELFORMAT_RGBA8,
-                                                 .usage = {.dynamic_update = true}});
-        sg_destroy_view(ctx.img_view);
-        ctx.img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.img});
-        ctx.bind.views[0] = ctx.img_view;
-        ctx.needs_redraw = 1;
+        if (ev->framebuffer_width > 0 && ev->framebuffer_height > 0) {
+            ctx.win_w = (int)ev->framebuffer_width;
+            ctx.win_h = (int)ev->framebuffer_height;
+            if (ctx.pixels) free(ctx.pixels);
+            ctx.pixels = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
+            sg_destroy_image(ctx.img);
+            ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w,
+                                                     .height = ctx.win_h,
+                                                     .pixel_format = SG_PIXELFORMAT_RGBA8,
+                                                     .usage = {.dynamic_update = true}});
+            sg_destroy_view(ctx.img_view);
+            ctx.img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.img});
+            ctx.bind.views[0] = ctx.img_view;
+            ctx.needs_redraw = 1;
+        }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
                ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
         handle_mouse_event(ev);
