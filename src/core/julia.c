@@ -48,7 +48,7 @@ void julia_check_wasm_simd128(v128_t zre, v128_t zim, complex_t c, int max_itera
     wasm_v128_store(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 2; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
@@ -96,7 +96,7 @@ void julia_check_avx512(__m512d zre, __m512d zim, complex_t c, int max_iteration
     _mm512_storeu_pd(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 8; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
@@ -168,7 +168,7 @@ void julia_check_avx2(__m256d zre, __m256d zim, complex_t c, int max_iterations,
     _mm256_storeu_pd(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 4; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
@@ -246,7 +246,7 @@ void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_
     _mm256_storeu_pd(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 4; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
