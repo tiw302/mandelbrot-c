@@ -64,7 +64,7 @@ jobs:
         if [ "${{ runner.os }}" == "Windows" ]; then
           cp build_${{ matrix.engine }}/mandelbrot_*.exe package/
           cd package
-          zip -r ../mandelbrot-${{ matrix.os }}-${{ matrix.engine }}.zip .
+          7z a -tzip ../mandelbrot-${{ matrix.os }}-${{ matrix.engine }}.zip .
         else
           cp build_${{ matrix.engine }}/mandelbrot_* package/
           cd package
