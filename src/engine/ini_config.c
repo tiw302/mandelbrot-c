@@ -93,6 +93,10 @@ int load_config_from_file(const char* filepath) {
     if (current_default_palette < 0) current_default_palette = 0;
     if (current_default_palette > 8) current_default_palette = 8;
 
+    // clamp escape radius to positive and reasonable range
+    if (current_escape_radius <= 0.0) current_escape_radius = ESCAPE_RADIUS;
+    if (current_escape_radius > 1000.0) current_escape_radius = 1000.0;
+
     fclose(file);
     return 1;
 }
