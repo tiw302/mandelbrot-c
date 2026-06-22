@@ -36,13 +36,13 @@ void save_bookmark(const Bookmark* b) {
     fprintf(f, "[\n");
     for (int i = 0; i < count; i++) {
         fprintf(f, "  {\n");
-        fprintf(f, "    \"center_re\": %.15g,\n", bookmarks[i].center_re);
-        fprintf(f, "    \"center_im\": %.15g,\n", bookmarks[i].center_im);
-        fprintf(f, "    \"zoom\": %.15g,\n", bookmarks[i].zoom);
+        fprintf(f, "    \"center_re\": %.17g,\n", bookmarks[i].center_re);
+        fprintf(f, "    \"center_im\": %.17g,\n", bookmarks[i].center_im);
+        fprintf(f, "    \"zoom\": %.17g,\n", bookmarks[i].zoom);
         fprintf(f, "    \"max_iterations\": %d,\n", bookmarks[i].max_iterations);
         fprintf(f, "    \"fractal_type\": %d,\n", bookmarks[i].fractal_type);
-        fprintf(f, "    \"julia_c_re\": %.15g,\n", bookmarks[i].julia_c.re);
-        fprintf(f, "    \"julia_c_im\": %.15g\n", bookmarks[i].julia_c.im);
+        fprintf(f, "    \"julia_c_re\": %.17g,\n", bookmarks[i].julia_c.re);
+        fprintf(f, "    \"julia_c_im\": %.17g\n", bookmarks[i].julia_c.im);
         if (i < count - 1) {
             fprintf(f, "  },\n");
         } else {
