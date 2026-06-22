@@ -273,6 +273,47 @@ void test_f128x4_vs_scalar(void) {
 #endif
 #endif
 
+#ifdef __AVX2__
+void test_boundary_escaping_consistency(void) {
+    TEST_START("boundary escaping consistency");
+
+    // scan a line to find a point that escapes at exactly max_iterations - 1
+    int max_iters = 15;
+    complex_t target_c = {0.0, 0.0};
+    int found = 0;
+
+    complex_t c_in = {0.25, 0.0};
+    complex_t c_out = {2.0, 0.0};
+
+    for (int step = 0; step < 50; step++) {
+        complex_t mid = {(c_in.re + c_out.re) * 0.5, 0.0};
+        double val_14 = mandelbrot_check(mid, max_iters - 1);
+        double val_15 = mandelbrot_check(mid, max_iters);
+        if (val_14 >= 14.0 && val_15 < 15.0) {
+            target_c = mid;
+            found = 1;
+            break;
+        } else if (val_15 >= 15.0) {
+            c_in = mid;
+        } else {
+            c_out = mid;
+        }
+    }
+
+    EXPECT(found == 1);
+
+    double val_scalar = mandelbrot_check(target_c, max_iters);
+    double results_avx[4];
+    __m256d v_re = _mm256_set1_pd(target_c.re);
+    __m256d v_im = _mm256_set1_pd(target_c.im);
+
+    mandelbrot_check_avx2(v_re, v_im, max_iters, results_avx);
+    EXPECT(approx_eq(results_avx[0], val_scalar));
+
+    TEST_END();
+}
+#endif
+
 int main(void) {
     printf("--- starting core math tests ---\n");
 
@@ -282,6 +323,7 @@ int main(void) {
 
 #ifdef __AVX2__
     test_avx2_consistency();
+    test_boundary_escaping_consistency();
 #else
     printf("skipped avx2 tests (not compiled with avx2)\n");
 #endif
@@ -306,3 +348,4 @@ int main(void) {
     printf("--- all tests passed! ---\n");
     return 0;
 }
+
