@@ -85,7 +85,7 @@ void burning_ship_check_avx2(__m256d cre, __m256d cim, int max_iterations, doubl
     int escaped_bits = _mm256_movemask_pd(escaped_mask);
 
     for (int i = 0; i < 4; i++) {
-        if (!(escaped_bits & (1 << i)) || res_iters[i] >= max_iterations - 1) {
+        if (!(escaped_bits & (1 << i)) || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
@@ -139,7 +139,7 @@ void burning_ship_check_avx512(__m512d cre, __m512d cim, int max_iterations, dou
     _mm512_storeu_pd(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 8; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
@@ -194,7 +194,7 @@ void burning_ship_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations,
     wasm_v128_store(res_escaped, escaped_mask);
 
     for (int i = 0; i < 2; i++) {
-        if (!res_escaped[i] || res_iters[i] >= max_iterations - 1) {
+        if (!res_escaped[i] || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
@@ -279,7 +279,7 @@ void burning_ship_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterati
     _mm256_storeu_pd(res_mag_sq, final_mag_sq);
 
     for (int i = 0; i < 4; i++) {
-        if (res_iters[i] >= max_iterations - 1) {
+        if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
