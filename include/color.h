@@ -3,17 +3,23 @@
 
 #include <stdint.h>
 
-// total count of built-in color palettes
-#define PALETTE_COUNT 9
-
-// human-readable names for palette selection ui
-extern const char* PALETTE_NAMES[PALETTE_COUNT];
-
-// prepares the color look-up table or interpolation state.
-// returns 1 on success, 0 on memory allocation failure.
+// initializes the color palette lookup table from palettes.json.
+// returns 1 on success, 0 on failure.
 int init_color_palette(int max_iterations, int palette_idx);
 
-// calculates the smooth rgb color for a given fractional iteration count
+// gets the number of available palettes loaded from json
+int get_palette_count(void);
+
+// gets the name of the given palette index
+const char* get_palette_name(int idx);
+
+// gets the active pre-interpolated ARGB lookup table
+uint32_t* get_palette_lut(void);
+
+// gets the size of the lookup table
+int get_palette_lut_size(void);
+
+// calculates the smooth rgb color for a given fractional iteration count (legacy scalar)
 void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, uint8_t* b);
 
 // releases resources allocated for palette management
