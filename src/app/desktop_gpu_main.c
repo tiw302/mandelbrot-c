@@ -14,6 +14,7 @@
 #define SOKOL_FONTSTASH_IMPL
 
 #include "bookmark.h"
+#include "camera.h"
 #include "color.h"
 #include "config.h"
 #include "ini_config.h"
@@ -21,6 +22,7 @@
 #include "mandelbrot.h"
 #include "renderer.h"
 #include "screenshot.h"
+#include "tour.h"
 
 // clang-format off
 #include "sokol/sokol_app.h"
@@ -56,7 +58,6 @@ GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned i
 #include <time.h>
 
 #include "desktop_gpu_shaders.h"
-#include "tour.h"
 
 #define JULIA_ZOOM 4.0
 
@@ -104,9 +105,7 @@ typedef struct {
     int win_w, win_h;
 
     // navigation state
-    ViewState view;
-    ViewState history[MAX_HISTORY_SIZE];
-    int history_count;
+    Camera cam;
 
     // runtime mode flags
     TourState m_tour;
@@ -124,13 +123,6 @@ typedef struct {
     int needs_redraw;
     int screenshot_requested;
 
-    // mouse and interaction state
-    int is_panning, is_zooming;
-    int last_mouse_x, last_mouse_y;
-    int mouse_x, mouse_y;
-    struct {
-        int x, y, w, h;
-    } zoom_rect;
     uint32_t render_time_ms;
 
     // debug ui and text rendering
@@ -157,11 +149,14 @@ static void rebuild_texture(void) {
 
 // transforms current mouse coordinates to the complex plane
 static double mouse_re(void) {
-    return ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom *
-                                    ((double)ctx.win_w / ctx.win_h);
+    precise_float re, im;
+    camera_screen_to_complex(&ctx.cam, ctx.cam.mouse_x, ctx.cam.mouse_y, &re, &im);
+    return (double)re;
 }
 static double mouse_im(void) {
-    return ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
+    precise_float re, im;
+    camera_screen_to_complex(&ctx.cam, ctx.cam.mouse_x, ctx.cam.mouse_y, &re, &im);
+    return (double)im;
 }
 
 static char* read_shader_file(const char* path) {
@@ -311,7 +306,7 @@ static void init(void) {
         .colors[0] = {.load_action = SG_LOADACTION_CLEAR, .clear_value = {0, 0, 0, 1}}};
 
     // application state init
-    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    camera_init(&ctx.cam, ctx.win_w, ctx.win_h);
     ctx.julia_c = (complex_t){-0.7, 0.27};
     ctx.max_iterations = get_config_default_iterations();
     ctx.palette_idx = get_config_default_palette();
@@ -346,7 +341,7 @@ static void frame(void) {
 
     // step animation state machines
     if (ctx.m_tour.phase != TOUR_IDLE) {
-        update_tour(&ctx.m_tour, &ctx.view, now, ctx.burning_ship_mode);
+        update_tour(&ctx.m_tour, &ctx.cam.view, now, ctx.burning_ship_mode);
         ctx.needs_redraw = 1;
     }
     if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
@@ -362,11 +357,11 @@ static void frame(void) {
     // fallback: execute multi-threaded cpu render if gpu path is disabled
     if (!ctx.gpu_mode && ctx.needs_redraw) {
         set_cpu_precision(ctx.cpu_precision_128);
-        double aspect = (double)ctx.win_w / ctx.win_h;
-        double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2;
-        double rmax = ctx.view.center_re + ctx.view.zoom * aspect / 2;
-        double im_top = ctx.view.center_im + ctx.view.zoom / 2;
-        double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
+        precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
+        precise_float rmin = ctx.cam.view.center_re - ctx.cam.view.zoom * aspect / 2.0;
+        precise_float rmax = ctx.cam.view.center_re + ctx.cam.view.zoom * aspect / 2.0;
+        precise_float im_top = ctx.cam.view.center_im + ctx.cam.view.zoom / 2.0;
+        precise_float im_bot = ctx.cam.view.center_im - ctx.cam.view.zoom / 2.0;
         uint32_t t0 = (uint32_t)stm_ms(stm_now());
         if (ctx.julia_mode)
             render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
@@ -400,11 +395,11 @@ static void frame(void) {
     sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
 
     // render interactive zoom box
-    if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
-        float x1 = (float)ctx.zoom_rect.x;
-        float y1 = (float)ctx.zoom_rect.y;
-        float x2 = (float)(ctx.zoom_rect.x + ctx.zoom_rect.w);
-        float y2 = (float)(ctx.zoom_rect.y + ctx.zoom_rect.h);
+    if (ctx.cam.is_zooming && ctx.cam.zoom_rect.w != 0 && ctx.cam.zoom_rect.h != 0) {
+        float x1 = (float)ctx.cam.zoom_rect.x;
+        float y1 = (float)ctx.cam.zoom_rect.y;
+        float x2 = (float)(ctx.cam.zoom_rect.x + ctx.cam.zoom_rect.w);
+        float y2 = (float)(ctx.cam.zoom_rect.y + ctx.cam.zoom_rect.h);
         sgl_begin_lines();
         sgl_c3b(255, 255, 0);
         sgl_v2f(x1, y1);
@@ -427,18 +422,18 @@ static void frame(void) {
         sg_apply_bindings(&ctx.bind);
         // build uniform data for gpu path
         if (ctx.gpu_mode) {
-            float chi_re = (float)ctx.view.center_re;
-            float chi_im = (float)ctx.view.center_im;
+            float chi_re = (float)ctx.cam.view.center_re;
+            float chi_im = (float)ctx.cam.view.center_im;
             float jc_re = (float)ctx.julia_c.re;
             float jc_im = (float)ctx.julia_c.im;
             params_t p = {
                 // hi-lo split for simulated 64-bit precision
                 .center_hi = {chi_re, chi_im},
-                .center_lo = {(float)(ctx.view.center_re - chi_re),
-                              (float)(ctx.view.center_im - chi_im)},
+                .center_lo = {(float)(ctx.cam.view.center_re - chi_re),
+                              (float)(ctx.cam.view.center_im - chi_im)},
                 .julia_c_hi = {jc_re, jc_im},
                 .julia_c_lo = {(float)(ctx.julia_c.re - jc_re), (float)(ctx.julia_c.im - jc_im)},
-                .zoom = (float)ctx.view.zoom,
+                .zoom = (float)ctx.cam.view.zoom,
                 .iters = (float)ctx.max_iterations,
                 .aspect = (float)ctx.win_w / ctx.win_h,
                 .fractal_type = ctx.julia_mode ? 1.0f : (ctx.burning_ship_mode ? 2.0f : 0.0f),
@@ -498,15 +493,15 @@ static void frame(void) {
             snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx.julia_c.re,
                      ctx.julia_c.im);
         } else {
-            snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", ctx.view.center_re,
-                     ctx.view.center_im);
+            snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", ctx.cam.view.center_re,
+                     ctx.cam.view.center_im);
         }
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
         // telemetry line 3
-        snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", ctx.view.zoom,
-                 ctx.max_iterations, PALETTE_NAMES[ctx.palette_idx % PALETTE_COUNT]);
+        snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", ctx.cam.view.zoom,
+                 ctx.max_iterations, get_palette_name(ctx.palette_idx % get_palette_count()));
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
@@ -583,229 +578,182 @@ static void frame(void) {
     sg_commit();
 }
 
-// handles mouse input events
-static void handle_mouse_event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
-        // user interaction cancels automated navigation
-        if (ctx.m_tour.phase != TOUR_IDLE) {
-            stop_tour(&ctx.m_tour);
-            sapp_set_window_title("Mandelbrot GPU Explorer");
+static void handle_mouse(const sapp_event* event) {
+    switch (event->type) {
+        case SAPP_EVENTTYPE_MOUSE_SCROLL:
+            camera_handle_wheel(&ctx.cam, (double)event->scroll_y, ctx.cam.mouse_x, ctx.cam.mouse_y);
             ctx.needs_redraw = 1;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_DOWN: {
+            int btn = (event->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
+            camera_handle_mouse_down(&ctx.cam, btn, (int)event->mouse_x, (int)event->mouse_y);
+            break;
         }
-        if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
-            stop_julia_tour(&ctx.j_tour);
-            sapp_set_window_title("Julia Explorer");
-            ctx.needs_redraw = 1;
-        }
-        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
-            ctx.is_panning = 1;
-            ctx.last_mouse_x = (int)ev->mouse_x;
-            ctx.last_mouse_y = (int)ev->mouse_y;
-        } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
-            ctx.is_zooming = 1;
-            ctx.zoom_rect.x = (int)ev->mouse_x;
-            ctx.zoom_rect.y = (int)ev->mouse_y;
-            ctx.zoom_rect.w = ctx.zoom_rect.h = 0;
-        }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
-        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
-            ctx.is_panning = 0;
-        } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
-            // apply box zoom
-            if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
-                if (ctx.history_count < MAX_HISTORY_SIZE)
-                    ctx.history[ctx.history_count++] = ctx.view;
-                double aspect = (double)ctx.win_w / ctx.win_h;
-                double re_pp = ctx.view.zoom * aspect / ctx.win_w;
-                double im_pp = ctx.view.zoom / ctx.win_h;
-                int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
-                int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
-                int zw = abs(ctx.zoom_rect.w), zh = abs(ctx.zoom_rect.h);
-                double re_min = ctx.view.center_re - ctx.view.zoom * aspect / 2.0;
-                double im_max = ctx.view.center_im + ctx.view.zoom / 2.0;
-                ctx.view.center_re = re_min + (zx + zw / 2.0) * re_pp;
-                ctx.view.center_im = im_max - (zy + zh / 2.0) * im_pp;
-                double target_zoom = fmax(zw * re_pp, zh * im_pp);
-                double min_zoom = (ctx.gpu_mode ? 1e-15 : (ctx.cpu_precision_128 ? 1e-30 : 1e-15));
-                ctx.view.zoom = fmax(target_zoom, min_zoom);
+
+        case SAPP_EVENTTYPE_MOUSE_MOVE:
+            camera_handle_mouse_motion(&ctx.cam, (int)event->mouse_x, (int)event->mouse_y);
+            if (ctx.cam.is_panning) {
+                ctx.needs_redraw = 1;
+            } else if (ctx.julia_mode && !ctx.cam.is_zooming) {
+                ctx.julia_c.re = mouse_re();
+                ctx.julia_c.im = mouse_im();
                 ctx.needs_redraw = 1;
             }
-            ctx.is_zooming = 0;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_UP: {
+            int btn = (event->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
+            if (camera_handle_mouse_up(&ctx.cam, btn)) {
+                ctx.needs_redraw = 1;
+            }
+            break;
         }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
-        ctx.mouse_x = (int)ev->mouse_x;
-        ctx.mouse_y = (int)ev->mouse_y;
-        if (ctx.is_panning) {
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            ctx.view.center_re -=
-                (ev->mouse_x - ctx.last_mouse_x) * ctx.view.zoom * aspect / ctx.win_w;
-            ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
-            ctx.last_mouse_x = (int)ev->mouse_x;
-            ctx.last_mouse_y = (int)ev->mouse_y;
-            ctx.needs_redraw = 1;
-        } else if (ctx.is_zooming) {
-            ctx.zoom_rect.w = (int)ev->mouse_x - ctx.zoom_rect.x;
-            ctx.zoom_rect.h = (int)ev->mouse_y - ctx.zoom_rect.y;
-        } else if (ctx.julia_mode && ctx.j_tour.phase == JULIA_TOUR_IDLE) {
-            // update julia parameter c based on mouse position
-            ctx.julia_c.re = mouse_re();
-            ctx.julia_c.im = mouse_im();
-            ctx.needs_redraw = 1;
-        }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        if (ev->scroll_y != 0.0f) {
-            if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
-            double factor = ev->scroll_y > 0 ? 0.9 : 1.1;
-            double mre = mouse_re(), mim = mouse_im();
-            ctx.view.zoom *= factor;
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            // scale view relative to the cursor focal point
-            ctx.view.center_re =
-                mre - ((double)ctx.mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
-            ctx.view.center_im = mim - (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
-            ctx.needs_redraw = 1;
-        }
+
+        default:
+            break;
     }
 }
 
-// handles keyboard input events
-static void handle_keyboard_event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        int mod_ctrl = ev->modifiers & SAPP_MODIFIER_CTRL;
-        if (ev->key_code == SAPP_KEYCODE_ESCAPE || ev->key_code == SAPP_KEYCODE_Q) {
-            sapp_quit();
-        } else if (ev->key_code == SAPP_KEYCODE_Z && mod_ctrl) {
-            if (ctx.history_count > 0) ctx.view = ctx.history[--ctx.history_count];
+static void handle_keydown(const sapp_event* event) {
+    if (event->key_code == SAPP_KEYCODE_ESCAPE || event->key_code == SAPP_KEYCODE_Q) {
+        sapp_request_quit();
+    } else if (event->key_code == SAPP_KEYCODE_Z && (event->modifiers & SAPP_MODIFIER_CTRL)) {
+        if (camera_pop_history(&ctx.cam)) {
             ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_R) {
-            ctx.julia_mode = 0;
-            ctx.m_tour.phase = TOUR_IDLE;
-            ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-            ctx.history_count = 0;
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_G) {
-            ctx.gpu_mode = !ctx.gpu_mode;
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_E) {
-            if (ctx.gpu_mode)
-                ctx.high_precision_mode = !ctx.high_precision_mode;
-            else {
+        }
+    } else if (event->key_code == SAPP_KEYCODE_R) {
+        ctx.julia_mode = ctx.julia_session.active = 0;
+        ctx.m_tour.phase = TOUR_IDLE;
+        ctx.max_iterations = get_config_default_iterations();
+        init_renderer(ctx.max_iterations, ctx.palette_idx);
+        camera_reset(&ctx.cam);
+        sapp_set_window_title("Mandelbrot Explorer");
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_G) {
+        ctx.gpu_mode = !ctx.gpu_mode;
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_E) {
+        if (ctx.gpu_mode)
+            ctx.high_precision_mode = !ctx.high_precision_mode;
+        else {
 #ifdef USE_SIMD_F128
-                ctx.cpu_precision_128 = !ctx.cpu_precision_128;
-                set_cpu_precision(ctx.cpu_precision_128);
+            ctx.cpu_precision_128 = !ctx.cpu_precision_128;
+            set_cpu_precision(ctx.cpu_precision_128);
 #endif
-            }
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_P) {
-            ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
-            init_renderer(ctx.max_iterations, ctx.palette_idx);
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_J) {
-            if (!ctx.julia_mode) {
-                ctx.julia_session.mandelbrot_view = ctx.view;
-                ctx.julia_session.active = 1;
-                ctx.julia_c.re = mouse_re();
-                ctx.julia_c.im = mouse_im();
-                ctx.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
-                ctx.julia_mode = 1;
-                ctx.history_count = 0;
-            } else {
-                if (ctx.julia_session.active) ctx.view = ctx.julia_session.mandelbrot_view;
-                ctx.julia_mode = 0;
-            }
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_B) {
-            ctx.burning_ship_mode = !ctx.burning_ship_mode;
-            ctx.julia_mode = ctx.julia_session.active = 0;
-            ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-            ctx.history_count = 0;
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_UP || ev->key_code == SAPP_KEYCODE_DOWN) {
-            int step = ctx.max_iterations / 10;
-            if (step < 10) step = 10;
-            if (ev->modifiers & SAPP_MODIFIER_SHIFT) step *= 10;
-            ctx.max_iterations += (ev->key_code == SAPP_KEYCODE_UP) ? step : -step;
-            if (ctx.max_iterations < 10) ctx.max_iterations = 10;
-            if (ctx.max_iterations > get_config_max_iterations_limit())
-                ctx.max_iterations = get_config_max_iterations_limit();
-            init_renderer(ctx.max_iterations, ctx.palette_idx);
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_S) {
-            ctx.screenshot_requested = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_X) {
+        }
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_P) {
+        ctx.palette_idx = (ctx.palette_idx + 1) % get_palette_count();
+        init_renderer(ctx.max_iterations, ctx.palette_idx);
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_J) {
+        if (!ctx.julia_mode) {
+            ctx.julia_session.mandelbrot_view = ctx.cam.view;
+            ctx.julia_session.active = 1;
+            ctx.julia_c.re = mouse_re();
+            ctx.julia_c.im = mouse_im();
+            ctx.cam.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
+            ctx.julia_mode = 1;
+            sapp_set_window_title("Julia Explorer");
+        } else {
+            if (ctx.julia_session.active) ctx.cam.view = ctx.julia_session.mandelbrot_view;
+            ctx.julia_mode = 0;
+            sapp_set_window_title("Mandelbrot Explorer");
+        }
+        ctx.cam.history_count = 0;
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_B) {
+        ctx.burning_ship_mode = !ctx.burning_ship_mode;
+        ctx.julia_mode = ctx.julia_session.active = 0;
+        camera_reset(&ctx.cam);
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_UP || event->key_code == SAPP_KEYCODE_DOWN) {
+        int step = ctx.max_iterations / 10;
+        if (step < 10) step = 10;
+        if (event->modifiers & SAPP_MODIFIER_SHIFT) step *= 10;
+        ctx.max_iterations += (event->key_code == SAPP_KEYCODE_UP) ? step : -step;
+        if (ctx.max_iterations < 10) ctx.max_iterations = 10;
+        if (ctx.max_iterations > get_config_max_iterations_limit())
+            ctx.max_iterations = get_config_max_iterations_limit();
+        init_renderer(ctx.max_iterations, ctx.palette_idx);
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_S) {
+        ctx.screenshot_requested = 1;
+    } else if (event->key_code == SAPP_KEYCODE_X) {
+        if (!ctx.gpu_mode) {
+            double rmin, rmax, imin, imax;
             double aspect = (double)ctx.win_w / ctx.win_h;
-            double rmin = ctx.view.center_re - ctx.view.zoom * aspect / 2.0;
-            double rmax = ctx.view.center_re + ctx.view.zoom * aspect / 2.0;
-            double im_top = ctx.view.center_im + ctx.view.zoom / 2.0;
-            double im_bot = ctx.view.center_im - ctx.view.zoom / 2.0;
-            save_mega_screenshot(8192, 8192, rmin, rmax, im_bot, im_top, ctx.max_iterations,
+            rmin = ctx.cam.view.center_re - ctx.cam.view.zoom * aspect / 2;
+            rmax = ctx.cam.view.center_re + ctx.cam.view.zoom * aspect / 2;
+            imin = ctx.cam.view.center_im - ctx.cam.view.zoom / 2;
+            imax = ctx.cam.view.center_im + ctx.cam.view.zoom / 2;
+            save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx.max_iterations,
                                  ctx.palette_idx,
                                  ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0), ctx.julia_c);
             ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_V) {
-            if (is_video_recording())
-                stop_video_recording();
-            else
-                start_video_recording(ctx.win_w, ctx.win_h, 60);
-        } else if (ev->key_code == SAPP_KEYCODE_M) {
-            Bookmark b = {ctx.view.center_re,
-                          ctx.view.center_im,
-                          ctx.view.zoom,
-                          ctx.max_iterations,
-                          ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0),
-                          ctx.julia_c};
-            save_bookmark(&b);
-        } else if (ev->key_code == SAPP_KEYCODE_L) {
-            Bookmark b;
-            int count = get_bookmark_count();
-            if (count > 0) {
-                if (ctx.history_count < MAX_HISTORY_SIZE)
-                    ctx.history[ctx.history_count++] = ctx.view;
-                ctx.current_bookmark_idx = (ctx.current_bookmark_idx + 1) % count;
-                if (load_bookmark(ctx.current_bookmark_idx, &b)) {
-                    ctx.view = (ViewState){b.center_re, b.center_im, b.zoom};
-                    ctx.max_iterations = b.max_iterations;
-                    ctx.julia_mode = (b.fractal_type == 1);
-                    ctx.burning_ship_mode = (b.fractal_type == 2);
-                    ctx.julia_c = b.julia_c;
-                    init_renderer(ctx.max_iterations, ctx.palette_idx);
-                    ctx.needs_redraw = 1;
-                }
-            }
-        } else if (ev->key_code == SAPP_KEYCODE_T) {
-            if (ctx.julia_mode) {
-                if (ctx.j_tour.phase == JULIA_TOUR_IDLE) {
-                    start_julia_tour(&ctx.j_tour, &ctx.julia_c, (uint32_t)stm_ms(stm_now()));
-                    sapp_set_window_title("Julia Explorer [Auto-c]");
-                } else {
-                    stop_julia_tour(&ctx.j_tour);
-                    sapp_set_window_title("Julia Explorer");
-                    ctx.needs_redraw = 1;
-                }
-            } else {
-                if (ctx.m_tour.phase == TOUR_IDLE) {
-                    ctx.julia_mode = ctx.julia_session.active = 0;
-                    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-                    start_tour(&ctx.m_tour, &ctx.view);
-                    sapp_set_window_title("Mandelbrot Explorer [Auto-Zoom]");
-                } else {
-                    stop_tour(&ctx.m_tour);
-                    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-                    sapp_set_window_title("Mandelbrot Explorer");
-                    ctx.needs_redraw = 1;
-                }
-                ctx.history_count = 0;
-            }
-        } else if (ev->key_code == SAPP_KEYCODE_LEFT_BRACKET ||
-                   ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
-            int threads = get_actual_thread_count();
-            threads += (ev->key_code == SAPP_KEYCODE_RIGHT_BRACKET) ? 1 : -1;
-            set_renderer_thread_count(threads);
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_F5) {
-            reload_shaders();
-            ctx.needs_redraw = 1;
         }
+    } else if (event->key_code == SAPP_KEYCODE_V) {
+        if (is_video_recording())
+            stop_video_recording();
+        else
+            start_video_recording(ctx.win_w, ctx.win_h, 60);
+    } else if (event->key_code == SAPP_KEYCODE_M) {
+        Bookmark b = {ctx.cam.view.center_re,
+                      ctx.cam.view.center_im,
+                      ctx.cam.view.zoom,
+                      ctx.max_iterations,
+                      ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0),
+                      ctx.julia_c};
+        save_bookmark(&b);
+    } else if (event->key_code == SAPP_KEYCODE_L) {
+        Bookmark b;
+        int count = get_bookmark_count();
+        if (count > 0) {
+            camera_push_history(&ctx.cam);
+            ctx.current_bookmark_idx = (ctx.current_bookmark_idx + 1) % count;
+            if (load_bookmark(ctx.current_bookmark_idx, &b)) {
+                ctx.cam.view = (ViewState){b.center_re, b.center_im, b.zoom};
+                ctx.max_iterations = b.max_iterations;
+                ctx.julia_mode = (b.fractal_type == 1);
+                ctx.burning_ship_mode = (b.fractal_type == 2);
+                ctx.julia_c = b.julia_c;
+                init_renderer(ctx.max_iterations, ctx.palette_idx);
+                ctx.needs_redraw = 1;
+            }
+        }
+    } else if (event->key_code == SAPP_KEYCODE_T) {
+        if (ctx.julia_mode) {
+            if (ctx.j_tour.phase == JULIA_TOUR_IDLE) {
+                start_julia_tour(&ctx.j_tour, &ctx.julia_c, (uint32_t)stm_ms(stm_now()));
+                sapp_set_window_title("Julia Explorer [Auto-c]");
+            } else {
+                stop_julia_tour(&ctx.j_tour);
+                sapp_set_window_title("Julia Explorer");
+                ctx.needs_redraw = 1;
+            }
+        } else {
+            if (ctx.m_tour.phase == TOUR_IDLE) {
+                ctx.julia_mode = ctx.julia_session.active = 0;
+                camera_reset(&ctx.cam);
+                start_tour(&ctx.m_tour, &ctx.cam.view);
+                sapp_set_window_title("Mandelbrot Explorer [Auto-Zoom]");
+            } else {
+                stop_tour(&ctx.m_tour);
+                camera_reset(&ctx.cam);
+                sapp_set_window_title("Mandelbrot Explorer");
+                ctx.needs_redraw = 1;
+            }
+        }
+    } else if (event->key_code == SAPP_KEYCODE_LEFT_BRACKET ||
+               event->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
+        int threads = get_actual_thread_count();
+        threads += (event->key_code == SAPP_KEYCODE_RIGHT_BRACKET) ? 1 : -1;
+        set_renderer_thread_count(threads);
+        ctx.needs_redraw = 1;
+    } else if (event->key_code == SAPP_KEYCODE_F5) {
+        reload_shaders();
+        ctx.needs_redraw = 1;
     }
 }
 
@@ -813,16 +761,17 @@ static void handle_keyboard_event(const sapp_event* ev) {
 static void event(const sapp_event* ev) {
     if (ev->type == SAPP_EVENTTYPE_RESIZED) {
         if (ev->window_width > 0 && ev->window_height > 0) {
-            ctx.win_w = ev->window_width;
-            ctx.win_h = ev->window_height;
+            ctx.win_w = ev->framebuffer_width;
+            ctx.win_h = ev->framebuffer_height;
+            camera_resize(&ctx.cam, ctx.win_w, ctx.win_h);
             rebuild_texture();
             ctx.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
                ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        handle_mouse_event(ev);
+        handle_mouse(ev);
     } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        handle_keyboard_event(ev);
+        handle_keydown(ev);
     }
 }
 
