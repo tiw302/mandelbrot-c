@@ -42,8 +42,8 @@ typedef struct {
     int pitch;
     int window_width;
     int window_height;
-    double re_min, re_max;
-    double im_top, im_bottom;
+    precise_float re_min, re_max;
+    precise_float im_top, im_bottom;
     RenderMode mode;
     complex_t julia_c;
     int max_iterations;
@@ -53,7 +53,8 @@ typedef struct {
 
     // pool metadata
     int thread_count;
-    volatile int shutdown;
+    // thread pool shutdown flag. using stdatomic ensures cross-core visibility.
+    atomic_int shutdown;
     int use_128bit;
 
     // synchronization
@@ -109,19 +110,21 @@ static void process_rows(void) {
 
 #ifdef USE_SIMD_F128
     if (pool.use_128bit) {
-        simd_f128 re_min = simd_f128_from_double(pool.re_min);
-        simd_f128 im_min = simd_f128_from_double(pool.im_top);
-        simd_f128 re_factor = simd_f128_from_double(
-            (pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0);
-        simd_f128 im_factor = simd_f128_from_double(
-            (pool.window_height > 0) ? (pool.im_bottom - pool.im_top) / pool.window_height : 0.0);
+        simd_f128 re_min = simd_f128_from_hi_lo((double)pool.re_min, (double)(pool.re_min - (precise_float)(double)pool.re_min));
+        simd_f128 im_min = simd_f128_from_hi_lo((double)pool.im_top, (double)(pool.im_top - (precise_float)(double)pool.im_top));
+        
+        precise_float pref = (pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0;
+        simd_f128 re_factor = simd_f128_from_hi_lo((double)pref, (double)(pref - (precise_float)(double)pref));
+        
+        precise_float pimf = (pool.window_height > 0) ? (pool.im_bottom - pool.im_top) / pool.window_height : 0.0;
+        simd_f128 im_factor = simd_f128_from_hi_lo((double)pimf, (double)(pimf - (precise_float)(double)pimf));
 
         simd_f128 julia_cre = simd_f128_from_double(pool.julia_c.re);
         simd_f128 julia_cim = simd_f128_from_double(pool.julia_c.im);
 
         int y;
         while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
-            if (pool.shutdown) break;
+            if (atomic_load(&pool.shutdown)) break;
             simd_f128 y_128 = simd_f128_from_double((double)y);
             simd_f128 y_im = simd_f128_add(im_min, simd_f128_mul(y_128, im_factor));
 
@@ -144,6 +147,7 @@ static void process_rows(void) {
             simd_f128x4 v_im_val = {_mm256_set1_pd(y_im_hi), _mm256_set1_pd(y_im_lo)};
             simd_f128x4 v_julia_cre = {_mm256_set1_pd(julia_cre_hi), _mm256_set1_pd(julia_cre_lo)};
             simd_f128x4 v_julia_cim = {_mm256_set1_pd(julia_cim_hi), _mm256_set1_pd(julia_cim_lo)};
+            int pitch_words = pool.pitch / sizeof(uint32_t);
 
             for (; x <= pool.window_width - 4; x += 4) {
                 double iterations[4];
@@ -158,10 +162,10 @@ static void process_rows(void) {
                     uint8_t r, g, b;
                     get_color(iterations[i], pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-                    pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
+                    pool.pixels[y * (pitch_words) + (x + i)] =
                         (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-                    pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
+                    pool.pixels[y * (pitch_words) + (x + i)] =
                         (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
                 }
@@ -179,10 +183,10 @@ static void process_rows(void) {
                 uint8_t r, g, b;
                 get_color(iterations, pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-                pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] =
+                pool.pixels[y * (pitch_words) + x] =
                     (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-                pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] =
+                pool.pixels[y * (pitch_words) + x] =
                     (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
             }
@@ -192,21 +196,28 @@ static void process_rows(void) {
 #endif
 
     double re_factor =
-        (pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0;
+        (pool.window_width > 0) ? (double)((pool.re_max - pool.re_min) / pool.window_width) : 0.0;
     double im_factor =
-        (pool.window_height > 0) ? (pool.im_bottom - pool.im_top) / pool.window_height : 0.0;
+        (pool.window_height > 0) ? (double)((pool.im_bottom - pool.im_top) / pool.window_height) : 0.0;
 
     int y;
+    int pitch_words = pool.pitch / sizeof(uint32_t);
     while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
-        if (pool.shutdown) break;
+        if (atomic_load(&pool.shutdown)) break;
         int x = 0;
 
 #if defined(__AVX512F__)
         {
-            __m512d v_re_min = _mm512_set1_pd(pool.re_min);
+            __m512d v_re_min = _mm512_set1_pd((double)pool.re_min);
             __m512d v_re_fac = _mm512_set1_pd(re_factor);
-            __m512d v_im_val = _mm512_set1_pd(pool.im_top + (double)y * im_factor);
+            __m512d v_im_val = _mm512_set1_pd((double)pool.im_top + (double)y * im_factor);
             __m512d v_offsets = _mm512_set_pd(7.0, 6.0, 5.0, 4.0, 3.0, 2.0, 1.0, 0.0);
+
+            uint32_t* lut = get_palette_lut();
+            int max_idx = get_palette_lut_size() - 1;
+            __m256i v_zero = _mm256_setzero_si256();
+            __m256i v_max_idx = _mm256_set1_epi32(max_idx);
+            __m512d v_mult = _mm512_set1_pd(256.0);
 
             for (; x <= pool.window_width - 8; x += 8) {
                 double iterations[8];
@@ -215,25 +226,53 @@ static void process_rows(void) {
 
                 fd->check_avx512(v_re, v_im_val, pool.julia_c, pool.max_iterations, iterations);
 
-                for (int i = 0; i < 8; i++) {
-                    uint8_t r, g, b;
-                    get_color(iterations[i], pool.max_iterations, &r, &g, &b);
+                if (lut) {
+                    __m512d v_iters = _mm512_loadu_pd(iterations);
+                    __m512d v_idx_pd = _mm512_mul_pd(v_iters, v_mult);
+                    __m256i v_idx = _mm512_cvttpd_epi32(v_idx_pd);
+                    v_idx = _mm256_max_epi32(v_zero, v_idx);
+                    v_idx = _mm256_min_epi32(v_idx, v_max_idx);
+                    __m256i v_colors = _mm256_i32gather_epi32((const int*)lut, v_idx, 4);
+                    
+                    __m256i v_iters_int = _mm512_cvttpd_epi32(v_iters);
+                    __m256i v_max_iters_int = _mm256_set1_epi32(pool.max_iterations);
+                    __m256i v_mask = _mm256_cmpgt_epi32(v_max_iters_int, v_iters_int);
+                    v_colors = _mm256_and_si256(v_colors, v_mask);
+                    
 #if defined(__EMSCRIPTEN__)
-                    pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
-                        (0xFF << 24) | (b << 16) | (g << 8) | r;
-#else
-                    pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
-                        (0xFF << 24) | (r << 16) | (g << 8) | b;
+                    __m256i r = _mm256_and_si256(_mm256_srli_epi32(v_colors, 16), _mm256_set1_epi32(0xFF));
+                    __m256i b = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF));
+                    __m256i g_alpha = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF00FF00));
+                    v_colors = _mm256_or_si256(_mm256_or_si256(g_alpha, _mm256_slli_epi32(b, 16)), r);
 #endif
+                    _mm256_storeu_si256((__m256i*)&pool.pixels[y * pitch_words + x], v_colors);
+                } else {
+                    for (int i = 0; i < 8; i++) {
+                        uint8_t r, g, b;
+                        get_color(iterations[i], pool.max_iterations, &r, &g, &b);
+#if defined(__EMSCRIPTEN__)
+                        pool.pixels[y * pitch_words + (x + i)] =
+                            (0xFF << 24) | (b << 16) | (g << 8) | r;
+#else
+                        pool.pixels[y * pitch_words + (x + i)] =
+                            (0xFF << 24) | (r << 16) | (g << 8) | b;
+#endif
+                    }
                 }
             }
         }
 #elif defined(__AVX2__)
         {
-            __m256d v_re_min = _mm256_set1_pd(pool.re_min);
+            __m256d v_re_min = _mm256_set1_pd((double)pool.re_min);
             __m256d v_re_fac = _mm256_set1_pd(re_factor);
-            __m256d v_im_val = _mm256_set1_pd(pool.im_top + (double)y * im_factor);
+            __m256d v_im_val = _mm256_set1_pd((double)pool.im_top + (double)y * im_factor);
             __m256d v_offsets = _mm256_set_pd(3.0, 2.0, 1.0, 0.0);
+
+            uint32_t* lut = get_palette_lut();
+            int max_idx = get_palette_lut_size() - 1;
+            __m128i v_zero = _mm_setzero_si128();
+            __m128i v_max_idx = _mm_set1_epi32(max_idx);
+            __m256d v_mult = _mm256_set1_pd(256.0);
 
             for (; x <= pool.window_width - 4; x += 4) {
                 double iterations[4];
@@ -242,32 +281,54 @@ static void process_rows(void) {
 
                 fd->check_avx2(v_re, v_im_val, pool.julia_c, pool.max_iterations, iterations);
 
-                for (int i = 0; i < 4; i++) {
-                    uint8_t r, g, b;
-                    get_color(iterations[i], pool.max_iterations, &r, &g, &b);
+                if (lut) {
+                    __m256d v_iters = _mm256_loadu_pd(iterations);
+                    __m256d v_idx_pd = _mm256_mul_pd(v_iters, v_mult);
+                    __m128i v_idx = _mm256_cvttpd_epi32(v_idx_pd);
+                    v_idx = _mm_max_epi32(v_zero, v_idx);
+                    v_idx = _mm_min_epi32(v_idx, v_max_idx);
+                    __m128i v_colors = _mm_i32gather_epi32((const int*)lut, v_idx, 4);
+                    
+                    __m128i v_iters_int = _mm256_cvttpd_epi32(v_iters);
+                    __m128i v_max_iters_int = _mm_set1_epi32(pool.max_iterations);
+                    __m128i v_mask = _mm_cmpgt_epi32(v_max_iters_int, v_iters_int);
+                    v_colors = _mm_and_si128(v_colors, v_mask);
+                    
 #if defined(__EMSCRIPTEN__)
-                    pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
-                        (0xFF << 24) | (b << 16) | (g << 8) | r;
-#else
-                    pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
-                        (0xFF << 24) | (r << 16) | (g << 8) | b;
+                    __m128i r = _mm_and_si128(_mm_srli_epi32(v_colors, 16), _mm_set1_epi32(0xFF));
+                    __m128i b = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF));
+                    __m128i g_alpha = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF00FF00));
+                    v_colors = _mm_or_si128(_mm_or_si128(g_alpha, _mm_slli_epi32(b, 16)), r);
 #endif
+                    _mm_storeu_si128((__m128i*)&pool.pixels[y * pitch_words + x], v_colors);
+                } else {
+                    for (int i = 0; i < 4; i++) {
+                        uint8_t r, g, b;
+                        get_color(iterations[i], pool.max_iterations, &r, &g, &b);
+#if defined(__EMSCRIPTEN__)
+                        pool.pixels[y * pitch_words + (x + i)] =
+                            (0xFF << 24) | (b << 16) | (g << 8) | r;
+#else
+                        pool.pixels[y * pitch_words + (x + i)] =
+                            (0xFF << 24) | (r << 16) | (g << 8) | b;
+#endif
+                    }
                 }
             }
         }
 #elif defined(__wasm_simd128__)
         for (; x <= pool.window_width - 2; x += 2) {
             double iterations[2];
-            v128_t v_re = wasm_f64x2_make(pool.re_min + (double)x * re_factor,
-                                          pool.re_min + (double)(x + 1) * re_factor);
-            v128_t v_im = wasm_f64x2_splat(pool.im_top + (double)y * im_factor);
+            v128_t v_re = wasm_f64x2_make((double)pool.re_min + (double)x * re_factor,
+                                          (double)pool.re_min + (double)(x + 1) * re_factor);
+            v128_t v_im = wasm_f64x2_splat((double)pool.im_top + (double)y * im_factor);
 
             fd->check_wasm_simd128(v_re, v_im, pool.julia_c, pool.max_iterations, iterations);
 
             for (int i = 0; i < 2; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-                pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + (x + i)] =
+                pool.pixels[y * pitch_words + (x + i)] =
                     (0xFF << 24) | (b << 16) | (g << 8) | r;
             }
         }
@@ -275,17 +336,17 @@ static void process_rows(void) {
 
         // scalar tail — handles remaining pixels not covered by simd
         for (; x < pool.window_width; x++) {
-            complex_t point = {pool.re_min + (double)x * re_factor,
-                               pool.im_top + (double)y * im_factor};
+            complex_t point = {(double)pool.re_min + (double)x * re_factor,
+                               (double)pool.im_top + (double)y * im_factor};
             double iterations = fd->check_scalar(point, pool.julia_c, pool.max_iterations);
 
             uint8_t r, g, b;
             get_color(iterations, pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-            pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] =
+            pool.pixels[y * pitch_words + x] =
                 (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-            pool.pixels[y * (pool.pitch / sizeof(uint32_t)) + x] =
+            pool.pixels[y * pitch_words + x] =
                 (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
         }
@@ -299,10 +360,10 @@ static void* worker_thread(void* arg) {
 
     pthread_mutex_lock(&pool.mutex);
     while (1) {
-        while (!pool.shutdown && pool.frame_id == last_frame)
+        while (!atomic_load(&pool.shutdown) && pool.frame_id == last_frame)
             pthread_cond_wait(&pool.work_ready, &pool.mutex);
 
-        if (pool.shutdown) {
+        if (atomic_load(&pool.shutdown)) {
             pthread_mutex_unlock(&pool.mutex);
             return NULL;
         }
@@ -321,7 +382,7 @@ void init_renderer(int max_iterations, int palette_idx) {
     if (actual_thread_count == 0) {
         actual_thread_count = detect_thread_count();
         pool.thread_count = (actual_thread_count > 1) ? actual_thread_count - 1 : 0;
-        pool.shutdown = 0;
+        atomic_store(&pool.shutdown, 0);
         pool.frame_id = 0;
         pool.threads_idle = 0;
         atomic_store(&pool.next_row, 0);
@@ -352,7 +413,7 @@ void cleanup_renderer(void) {
 #if !defined(__EMSCRIPTEN__)
     if (actual_thread_count > 0) {
         pthread_mutex_lock(&pool.mutex);
-        pool.shutdown = 1;
+        atomic_store(&pool.shutdown, 1);
         pthread_cond_broadcast(&pool.work_ready);
         pthread_mutex_unlock(&pool.mutex);
 
@@ -379,7 +440,7 @@ void set_renderer_thread_count(int count) {
 
     // stop existing worker threads safely
     pthread_mutex_lock(&pool.mutex);
-    pool.shutdown = 1;
+    atomic_store(&pool.shutdown, 1);
     pthread_cond_broadcast(&pool.work_ready);
     pthread_mutex_unlock(&pool.mutex);
 
@@ -391,7 +452,7 @@ void set_renderer_thread_count(int count) {
 
     actual_thread_count = count;
     pool.thread_count = (actual_thread_count > 1) ? actual_thread_count - 1 : 0;
-    pool.shutdown = 0;
+    atomic_store(&pool.shutdown, 0);
     pool.threads_idle = 0;
     atomic_store(&pool.next_row, 0);
 
@@ -415,7 +476,7 @@ void set_renderer_thread_count(int count) {
 
 // dispatch a render job — returns only after all rows are painted
 static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_height,
-                     double re_min, double re_max, double im_top, double im_bottom, RenderMode mode,
+                     precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom, RenderMode mode,
                      complex_t julia_c, int max_iterations) {
     pthread_mutex_lock(&pool.mutex);
     pool.pixels = pixels;
@@ -453,7 +514,7 @@ static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_h
 }
 
 void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                                double re_min, double re_max, double im_top, double im_bottom,
+                                precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
                                 int max_iterations) {
     complex_t dummy = {0};
     dispatch(pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
@@ -461,14 +522,14 @@ void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, i
 }
 
 void render_julia_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                           double re_min, double re_max, double im_top, double im_bottom,
+                           precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
                            complex_t julia_c, int max_iterations) {
     dispatch(pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
              RENDER_JULIA, julia_c, max_iterations);
 }
 
 void render_burning_ship_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                                  double re_min, double re_max, double im_top, double im_bottom,
+                                  precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
                                   int max_iterations) {
     complex_t dummy = {0};
     dispatch(pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
