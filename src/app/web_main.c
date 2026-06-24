@@ -267,11 +267,11 @@ static void frame(void) {
 
     // cpu path: render in workers and upload to webgl texture
     if (!ctx.gpu_mode && ctx.needs_redraw) {
-        double aspect = (double)ctx.win_w / ctx.win_h;
-        double rmin = ctx.view.center_re - (ctx.view.zoom * aspect) / 2;
-        double rmax = ctx.view.center_re + (ctx.view.zoom * aspect) / 2;
-        double im_top = ctx.view.center_im + ctx.view.zoom / 2;
-        double im_bot = ctx.view.center_im - ctx.view.zoom / 2;
+        precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
+        precise_float rmin = ctx.view.center_re - (ctx.view.zoom * aspect) / 2;
+        precise_float rmax = ctx.view.center_re + (ctx.view.zoom * aspect) / 2;
+        precise_float im_top = ctx.view.center_im + ctx.view.zoom / 2;
+        precise_float im_bot = ctx.view.center_im - ctx.view.zoom / 2;
 
         if (ctx.julia_mode) {
             render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
@@ -541,7 +541,7 @@ void wasm_set_state(int julia_mode, double jre, double jim, int iters, int palet
     ctx.julia_c.re = jre;
     ctx.julia_c.im = jim;
     if (iters > 0) ctx.max_iterations = iters;
-    if (palette >= 0) ctx.palette_idx = palette % PALETTE_COUNT;
+    if (palette >= 0) ctx.palette_idx = palette % get_palette_count();
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
@@ -565,14 +565,14 @@ void wasm_toggle_tour(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
-    ctx.palette_idx = (ctx.palette_idx + 1) % PALETTE_COUNT;
+    ctx.palette_idx = (ctx.palette_idx + 1) % get_palette_count();
     init_renderer(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_palette(int idx) {
-    if (idx >= 0 && idx < PALETTE_COUNT) {
+    if (idx >= 0 && idx < get_palette_count()) {
         ctx.palette_idx = idx;
         init_renderer(ctx.max_iterations, ctx.palette_idx);
         ctx.needs_redraw = 1;
