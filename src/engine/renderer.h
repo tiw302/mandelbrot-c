@@ -25,16 +25,16 @@ void set_renderer_thread_count(int count);
 
 // high-level render dispatch — blocks until all rows are painted
 void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                                precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
-                                int max_iterations);
+                                precise_float re_min, precise_float re_max, precise_float im_top,
+                                precise_float im_bottom, int max_iterations);
 
 void render_julia_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                           precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
-                           complex_t julia_c, int max_iterations);
+                           precise_float re_min, precise_float re_max, precise_float im_top,
+                           precise_float im_bottom, complex_t julia_c, int max_iterations);
 
 void render_burning_ship_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                                  precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
-                                  int max_iterations);
+                                  precise_float re_min, precise_float re_max, precise_float im_top,
+                                  precise_float im_bottom, int max_iterations);
 
 // legacy symbol — kept for backward compatibility
 void* render_thread(void* arg);

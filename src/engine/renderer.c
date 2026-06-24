@@ -110,19 +110,26 @@ static void process_rows(void) {
 
 #ifdef USE_SIMD_F128
     if (pool.use_128bit) {
-        simd_f128 re_min = simd_f128_from_hi_lo((double)pool.re_min, (double)(pool.re_min - (precise_float)(double)pool.re_min));
-        simd_f128 im_min = simd_f128_from_hi_lo((double)pool.im_top, (double)(pool.im_top - (precise_float)(double)pool.im_top));
-        
-        precise_float pref = (pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0;
-        simd_f128 re_factor = simd_f128_from_hi_lo((double)pref, (double)(pref - (precise_float)(double)pref));
-        
-        precise_float pimf = (pool.window_height > 0) ? (pool.im_bottom - pool.im_top) / pool.window_height : 0.0;
-        simd_f128 im_factor = simd_f128_from_hi_lo((double)pimf, (double)(pimf - (precise_float)(double)pimf));
+        simd_f128 re_min = simd_f128_from_hi_lo(
+            (double)pool.re_min, (double)(pool.re_min - (precise_float)(double)pool.re_min));
+        simd_f128 im_min = simd_f128_from_hi_lo(
+            (double)pool.im_top, (double)(pool.im_top - (precise_float)(double)pool.im_top));
+
+        precise_float pref =
+            (pool.window_width > 0) ? (pool.re_max - pool.re_min) / pool.window_width : 0.0;
+        simd_f128 re_factor =
+            simd_f128_from_hi_lo((double)pref, (double)(pref - (precise_float)(double)pref));
+
+        precise_float pimf =
+            (pool.window_height > 0) ? (pool.im_bottom - pool.im_top) / pool.window_height : 0.0;
+        simd_f128 im_factor =
+            simd_f128_from_hi_lo((double)pimf, (double)(pimf - (precise_float)(double)pimf));
 
         simd_f128 julia_cre = simd_f128_from_double(pool.julia_c.re);
         simd_f128 julia_cim = simd_f128_from_double(pool.julia_c.im);
 
         int y;
+        int pitch_words = pool.pitch / sizeof(uint32_t);
         while ((y = atomic_fetch_add(&pool.next_row, 1)) < pool.window_height) {
             if (atomic_load(&pool.shutdown)) break;
             simd_f128 y_128 = simd_f128_from_double((double)y);
@@ -147,7 +154,6 @@ static void process_rows(void) {
             simd_f128x4 v_im_val = {_mm256_set1_pd(y_im_hi), _mm256_set1_pd(y_im_lo)};
             simd_f128x4 v_julia_cre = {_mm256_set1_pd(julia_cre_hi), _mm256_set1_pd(julia_cre_lo)};
             simd_f128x4 v_julia_cim = {_mm256_set1_pd(julia_cim_hi), _mm256_set1_pd(julia_cim_lo)};
-            int pitch_words = pool.pitch / sizeof(uint32_t);
 
             for (; x <= pool.window_width - 4; x += 4) {
                 double iterations[4];
@@ -183,11 +189,9 @@ static void process_rows(void) {
                 uint8_t r, g, b;
                 get_color(iterations, pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-                pool.pixels[y * (pitch_words) + x] =
-                    (0xFF << 24) | (b << 16) | (g << 8) | r;
+                pool.pixels[y * (pitch_words) + x] = (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-                pool.pixels[y * (pitch_words) + x] =
-                    (0xFF << 24) | (r << 16) | (g << 8) | b;
+                pool.pixels[y * (pitch_words) + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
             }
         }
@@ -197,8 +201,9 @@ static void process_rows(void) {
 
     double re_factor =
         (pool.window_width > 0) ? (double)((pool.re_max - pool.re_min) / pool.window_width) : 0.0;
-    double im_factor =
-        (pool.window_height > 0) ? (double)((pool.im_bottom - pool.im_top) / pool.window_height) : 0.0;
+    double im_factor = (pool.window_height > 0)
+                           ? (double)((pool.im_bottom - pool.im_top) / pool.window_height)
+                           : 0.0;
 
     int y;
     int pitch_words = pool.pitch / sizeof(uint32_t);
@@ -233,17 +238,19 @@ static void process_rows(void) {
                     v_idx = _mm256_max_epi32(v_zero, v_idx);
                     v_idx = _mm256_min_epi32(v_idx, v_max_idx);
                     __m256i v_colors = _mm256_i32gather_epi32((const int*)lut, v_idx, 4);
-                    
+
                     __m256i v_iters_int = _mm512_cvttpd_epi32(v_iters);
                     __m256i v_max_iters_int = _mm256_set1_epi32(pool.max_iterations);
                     __m256i v_mask = _mm256_cmpgt_epi32(v_max_iters_int, v_iters_int);
                     v_colors = _mm256_and_si256(v_colors, v_mask);
-                    
+
 #if defined(__EMSCRIPTEN__)
-                    __m256i r = _mm256_and_si256(_mm256_srli_epi32(v_colors, 16), _mm256_set1_epi32(0xFF));
+                    __m256i r =
+                        _mm256_and_si256(_mm256_srli_epi32(v_colors, 16), _mm256_set1_epi32(0xFF));
                     __m256i b = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF));
                     __m256i g_alpha = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF00FF00));
-                    v_colors = _mm256_or_si256(_mm256_or_si256(g_alpha, _mm256_slli_epi32(b, 16)), r);
+                    v_colors =
+                        _mm256_or_si256(_mm256_or_si256(g_alpha, _mm256_slli_epi32(b, 16)), r);
 #endif
                     _mm256_storeu_si256((__m256i*)&pool.pixels[y * pitch_words + x], v_colors);
                 } else {
@@ -288,12 +295,12 @@ static void process_rows(void) {
                     v_idx = _mm_max_epi32(v_zero, v_idx);
                     v_idx = _mm_min_epi32(v_idx, v_max_idx);
                     __m128i v_colors = _mm_i32gather_epi32((const int*)lut, v_idx, 4);
-                    
+
                     __m128i v_iters_int = _mm256_cvttpd_epi32(v_iters);
                     __m128i v_max_iters_int = _mm_set1_epi32(pool.max_iterations);
                     __m128i v_mask = _mm_cmpgt_epi32(v_max_iters_int, v_iters_int);
                     v_colors = _mm_and_si128(v_colors, v_mask);
-                    
+
 #if defined(__EMSCRIPTEN__)
                     __m128i r = _mm_and_si128(_mm_srli_epi32(v_colors, 16), _mm_set1_epi32(0xFF));
                     __m128i b = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF));
@@ -328,8 +335,7 @@ static void process_rows(void) {
             for (int i = 0; i < 2; i++) {
                 uint8_t r, g, b;
                 get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-                pool.pixels[y * pitch_words + (x + i)] =
-                    (0xFF << 24) | (b << 16) | (g << 8) | r;
+                pool.pixels[y * pitch_words + (x + i)] = (0xFF << 24) | (b << 16) | (g << 8) | r;
             }
         }
 #endif
@@ -343,11 +349,9 @@ static void process_rows(void) {
             uint8_t r, g, b;
             get_color(iterations, pool.max_iterations, &r, &g, &b);
 #if defined(__EMSCRIPTEN__)
-            pool.pixels[y * pitch_words + x] =
-                (0xFF << 24) | (b << 16) | (g << 8) | r;
+            pool.pixels[y * pitch_words + x] = (0xFF << 24) | (b << 16) | (g << 8) | r;
 #else
-            pool.pixels[y * pitch_words + x] =
-                (0xFF << 24) | (r << 16) | (g << 8) | b;
+            pool.pixels[y * pitch_words + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
 #endif
         }
     }
@@ -476,8 +480,9 @@ void set_renderer_thread_count(int count) {
 
 // dispatch a render job — returns only after all rows are painted
 static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_height,
-                     precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom, RenderMode mode,
-                     complex_t julia_c, int max_iterations) {
+                     precise_float re_min, precise_float re_max, precise_float im_top,
+                     precise_float im_bottom, RenderMode mode, complex_t julia_c,
+                     int max_iterations) {
     pthread_mutex_lock(&pool.mutex);
     pool.pixels = pixels;
     pool.pitch = pitch;
@@ -514,23 +519,23 @@ static void dispatch(uint32_t* pixels, int pitch, int window_width, int window_h
 }
 
 void render_mandelbrot_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                                precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
-                                int max_iterations) {
+                                precise_float re_min, precise_float re_max, precise_float im_top,
+                                precise_float im_bottom, int max_iterations) {
     complex_t dummy = {0};
     dispatch(pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
              RENDER_MANDELBROT, dummy, max_iterations);
 }
 
 void render_julia_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                           precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
-                           complex_t julia_c, int max_iterations) {
+                           precise_float re_min, precise_float re_max, precise_float im_top,
+                           precise_float im_bottom, complex_t julia_c, int max_iterations) {
     dispatch(pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
              RENDER_JULIA, julia_c, max_iterations);
 }
 
 void render_burning_ship_threaded(uint32_t* pixels, int pitch, int window_width, int window_height,
-                                  precise_float re_min, precise_float re_max, precise_float im_top, precise_float im_bottom,
-                                  int max_iterations) {
+                                  precise_float re_min, precise_float re_max, precise_float im_top,
+                                  precise_float im_bottom, int max_iterations) {
     complex_t dummy = {0};
     dispatch(pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
              RENDER_BURNING_SHIP, dummy, max_iterations);

@@ -27,9 +27,8 @@ static int lut_size = 0;
 
 #define NUM_BUILTIN_PALETTES 9
 static const char* builtin_palette_names[NUM_BUILTIN_PALETTES] = {
-    "Sine Wave (GPU)", "Grayscale", "Fire", "Electric", "Ocean",
-    "Inferno", "Viridis", "Plasma", "Twilight"
-};
+    "Sine Wave (GPU)", "Grayscale", "Fire",   "Electric", "Ocean",
+    "Inferno",         "Viridis",   "Plasma", "Twilight"};
 
 static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_t* b) {
     double i_val = floor(fi);
@@ -39,7 +38,7 @@ static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_
     for (int step = 0; step < 2; step++) {
         double iv = i_val + step;
         double* out = (step == 0) ? a : b_vec;
-        
+
         if (pal == 0) {
             out[0] = (sin(0.1 * iv + 4.0) * 127.0 + 128.0) / 255.0;
             out[1] = (sin(0.1 * iv + 2.0) * 127.0 + 128.0) / 255.0;
@@ -72,17 +71,19 @@ static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_
         } else if (pal == 7) {
             double t1 = 1.0 - fabs(fmod(iv / 256.0, 2.0) - 1.0);
             out[0] = 0.050 + t1 * (2.735 - t1 * 1.785);
-            out[1] = t1 * (1.580 * t1 - 0.580); if (out[1] < 0) out[1] = 0;
-            out[2] = 0.530 + t1 * (0.750 - t1 * 1.280); if (out[2] < 0) out[2] = 0;
+            out[1] = t1 * (1.580 * t1 - 0.580);
+            if (out[1] < 0) out[1] = 0;
+            out[2] = 0.530 + t1 * (0.750 - t1 * 1.280);
+            if (out[2] < 0) out[2] = 0;
         } else {
             double t1 = iv / 128.0;
-            t1 = t1 - floor(t1); // fract
+            t1 = t1 - floor(t1);  // fract
             out[0] = 0.5 + 0.5 * sin(6.283 * t1);
             out[1] = 0.3 + 0.2 * sin(6.283 * t1 + 2.094);
             out[2] = 0.5 + 0.5 * sin(6.283 * t1 + 4.189);
         }
     }
-    
+
     *r = (uint8_t)((a[0] + (b_vec[0] - a[0]) * fract) * 255.0);
     *g = (uint8_t)((a[1] + (b_vec[1] - a[1]) * fract) * 255.0);
     *b = (uint8_t)((a[2] + (b_vec[2] - a[2]) * fract) * 255.0);
@@ -124,7 +125,8 @@ static void load_palettes_json(void) {
 
         if (cjsonx_get_type(stops) == CJSONX_ARRAY) {
             loaded_palettes[i].num_stops = cjsonx_size(stops);
-            loaded_palettes[i].stops = (ColorStop*)malloc(sizeof(ColorStop) * loaded_palettes[i].num_stops);
+            loaded_palettes[i].stops =
+                (ColorStop*)malloc(sizeof(ColorStop) * loaded_palettes[i].num_stops);
             for (int j = 0; j < loaded_palettes[i].num_stops; j++) {
                 cjsonx_val_t s_obj = cjsonx_get_index(stops, j);
                 cjsonx_val_t pos = cjsonx_get(s_obj, "pos");
@@ -132,10 +134,14 @@ static void load_palettes_json(void) {
                 cjsonx_val_t g = cjsonx_get(s_obj, "g");
                 cjsonx_val_t b = cjsonx_get(s_obj, "b");
 
-                loaded_palettes[i].stops[j].pos = (cjsonx_get_type(pos) == CJSONX_NUMBER) ? cjsonx_num(pos) : 0.0;
-                loaded_palettes[i].stops[j].r = (cjsonx_get_type(r) == CJSONX_NUMBER) ? cjsonx_int(r) : 0;
-                loaded_palettes[i].stops[j].g = (cjsonx_get_type(g) == CJSONX_NUMBER) ? cjsonx_int(g) : 0;
-                loaded_palettes[i].stops[j].b = (cjsonx_get_type(b) == CJSONX_NUMBER) ? cjsonx_int(b) : 0;
+                loaded_palettes[i].stops[j].pos =
+                    (cjsonx_get_type(pos) == CJSONX_NUMBER) ? cjsonx_num(pos) : 0.0;
+                loaded_palettes[i].stops[j].r =
+                    (cjsonx_get_type(r) == CJSONX_NUMBER) ? cjsonx_int(r) : 0;
+                loaded_palettes[i].stops[j].g =
+                    (cjsonx_get_type(g) == CJSONX_NUMBER) ? cjsonx_int(g) : 0;
+                loaded_palettes[i].stops[j].b =
+                    (cjsonx_get_type(b) == CJSONX_NUMBER) ? cjsonx_int(b) : 0;
             }
         } else {
             loaded_palettes[i].num_stops = 0;
@@ -155,7 +161,7 @@ const char* get_palette_name(int idx) {
     if (!loaded_palettes && loaded_palette_count == 0) load_palettes_json();
     int total_palettes = NUM_BUILTIN_PALETTES + loaded_palette_count;
     if (idx < 0 || idx >= total_palettes) return "Unknown";
-    
+
     if (idx < NUM_BUILTIN_PALETTES) {
         return builtin_palette_names[idx];
     } else {

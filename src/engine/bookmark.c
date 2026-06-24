@@ -34,7 +34,7 @@ void save_bookmark(const Bookmark* b) {
         free(bookmarks);
         return;
     }
-    
+
     cjsonx_val_t root = cjsonx_create_array(doc);
 
     for (int i = 0; i < count; i++) {
@@ -42,8 +42,10 @@ void save_bookmark(const Bookmark* b) {
         cjsonx_object_set(obj, "center_re", cjsonx_create_number(doc, bookmarks[i].center_re));
         cjsonx_object_set(obj, "center_im", cjsonx_create_number(doc, bookmarks[i].center_im));
         cjsonx_object_set(obj, "zoom", cjsonx_create_number(doc, bookmarks[i].zoom));
-        cjsonx_object_set(obj, "max_iterations", cjsonx_create_number(doc, bookmarks[i].max_iterations));
-        cjsonx_object_set(obj, "fractal_type", cjsonx_create_number(doc, bookmarks[i].fractal_type));
+        cjsonx_object_set(obj, "max_iterations",
+                          cjsonx_create_number(doc, bookmarks[i].max_iterations));
+        cjsonx_object_set(obj, "fractal_type",
+                          cjsonx_create_number(doc, bookmarks[i].fractal_type));
         cjsonx_object_set(obj, "julia_c_re", cjsonx_create_number(doc, bookmarks[i].julia_c.re));
         cjsonx_object_set(obj, "julia_c_im", cjsonx_create_number(doc, bookmarks[i].julia_c.im));
         cjsonx_array_push(root, obj);
@@ -73,7 +75,7 @@ void save_bookmark(const Bookmark* b) {
     // ensure durable write
     fflush(f);
     fclose(f);
-    
+
     /* write to a temporary file first, then atomically rename to prevent
      * data corruption if the program crashes midway through writing. */
     rename(tmp_file_path, bookmarks_file_path);
@@ -96,7 +98,7 @@ static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
     cjsonx_iter_t it = cjsonx_iter_init(root);
     while (cjsonx_iter_next(&it)) {
         if (count >= max_count) break;
-        
+
         cjsonx_val_t item = it.value;
 
         cjsonx_val_t cre = cjsonx_get(item, "center_re");

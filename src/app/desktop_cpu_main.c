@@ -14,6 +14,7 @@
 #include <time.h>
 
 #include "bookmark.h"
+#include "camera.h"
 #include "color.h"
 #include "config.h"
 #include "ini_config.h"
@@ -22,7 +23,6 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "tour.h"
-#include "camera.h"
 
 // transient state for julia mode transitions
 typedef struct {
@@ -60,8 +60,9 @@ typedef struct {
 #define JULIA_ZOOM 4.0
 
 // internal helpers
-static void calculate_boundaries(precise_float center_re, precise_float center_im, precise_float zoom, int width,
-                                 int height, precise_float* re_min, precise_float* re_max, precise_float* im_min,
+static void calculate_boundaries(precise_float center_re, precise_float center_im,
+                                 precise_float zoom, int width, int height, precise_float* re_min,
+                                 precise_float* re_max, precise_float* im_min,
                                  precise_float* im_max);
 static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
                         SDL_Color color);
@@ -166,8 +167,8 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         }
     } else if (event->key.keysym.sym == SDLK_x) {
         precise_float rmin, rmax, imax, imin;
-        calculate_boundaries(ctx->cam.view.center_re, ctx->cam.view.center_im, ctx->cam.view.zoom, ctx->win_w,
-                             ctx->win_h, &rmin, &rmax, &imin, &imax);
+        calculate_boundaries(ctx->cam.view.center_re, ctx->cam.view.center_im, ctx->cam.view.zoom,
+                             ctx->win_w, ctx->win_h, &rmin, &rmax, &imin, &imax);
         save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx->max_iterations,
                              ctx->palette_idx,
                              ctx->julia_mode ? 1 : (ctx->burning_ship_mode ? 2 : 0), ctx->julia_c);
@@ -233,7 +234,8 @@ static void handle_mouse(AppCtx* ctx, SDL_Event* event) {
         }
 
         case SDL_MOUSEBUTTONDOWN:
-            camera_handle_mouse_down(&ctx->cam, event->button.button, event->button.x, event->button.y);
+            camera_handle_mouse_down(&ctx->cam, event->button.button, event->button.x,
+                                     event->button.y);
             break;
 
         case SDL_MOUSEMOTION:
@@ -298,8 +300,9 @@ static void render_frame(AppCtx* ctx) {
         int pitch;
         if (SDL_LockTexture(ctx->texture, NULL, (void**)&pixels, &pitch) == 0) {
             precise_float rmin, rmax, imax, imin;
-            calculate_boundaries(ctx->cam.view.center_re, ctx->cam.view.center_im, ctx->cam.view.zoom,
-                                 ctx->win_w, ctx->win_h, &rmin, &rmax, &imin, &imax);
+            calculate_boundaries(ctx->cam.view.center_re, ctx->cam.view.center_im,
+                                 ctx->cam.view.zoom, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin,
+                                 &imax);
             if (ctx->julia_mode)
                 render_julia_threaded(pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax, imin,
                                       ctx->julia_c, ctx->max_iterations);
@@ -324,7 +327,8 @@ static void render_frame(AppCtx* ctx) {
 
     if (ctx->cam.is_zooming) {
         SDL_SetRenderDrawColor(ctx->renderer, 255, 255, 0, 255);
-        SDL_Rect zoom_rect = {ctx->cam.zoom_rect.x, ctx->cam.zoom_rect.y, ctx->cam.zoom_rect.w, ctx->cam.zoom_rect.h};
+        SDL_Rect zoom_rect = {ctx->cam.zoom_rect.x, ctx->cam.zoom_rect.y, ctx->cam.zoom_rect.w,
+                              ctx->cam.zoom_rect.h};
         SDL_RenderDrawRect(ctx->renderer, &zoom_rect);
     }
 }
@@ -354,13 +358,14 @@ static void render_hud(AppCtx* ctx) {
     if (ctx->julia_mode)
         snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx->julia_c.re, ctx->julia_c.im);
     else
-        snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", (double)ctx->cam.view.center_re,
-                 (double)ctx->cam.view.center_im);
+        snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)",
+                 (double)ctx->cam.view.center_re, (double)ctx->cam.view.center_im);
     render_text(ctx->renderer, ctx->font, buf, x, y, white);
     y += line_h;
 
-    snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", (double)ctx->cam.view.zoom,
-             ctx->max_iterations, get_palette_name(ctx->palette_idx % get_palette_count()));
+    snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s",
+             (double)ctx->cam.view.zoom, ctx->max_iterations,
+             get_palette_name(ctx->palette_idx % get_palette_count()));
     render_text(ctx->renderer, ctx->font, buf, x, y, white);
 }
 
@@ -441,8 +446,9 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-static void calculate_boundaries(precise_float center_re, precise_float center_im, precise_float zoom, int width,
-                                 int height, precise_float* re_min, precise_float* re_max, precise_float* im_min,
+static void calculate_boundaries(precise_float center_re, precise_float center_im,
+                                 precise_float zoom, int width, int height, precise_float* re_min,
+                                 precise_float* re_max, precise_float* im_min,
                                  precise_float* im_max) {
     precise_float aspect = (precise_float)width / height;
     *re_min = center_re - zoom * aspect / 2.0;

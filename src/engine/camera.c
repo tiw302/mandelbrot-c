@@ -1,4 +1,5 @@
 #include "camera.h"
+
 #include <math.h>
 
 void camera_init(Camera* cam, int win_w, int win_h) {
@@ -22,7 +23,8 @@ void camera_resize(Camera* cam, int win_w, int win_h) {
     cam->win_h = win_h;
 }
 
-void camera_screen_to_complex(const Camera* cam, int screen_x, int screen_y, precise_float* re, precise_float* im) {
+void camera_screen_to_complex(const Camera* cam, int screen_x, int screen_y, precise_float* re,
+                              precise_float* im) {
     precise_float aspect = (precise_float)cam->win_w / (precise_float)cam->win_h;
     precise_float im_min = cam->view.center_im - cam->view.zoom / 2.0;
     precise_float im_max = cam->view.center_im + cam->view.zoom / 2.0;
@@ -56,11 +58,11 @@ void camera_reset(Camera* cam) {
 
 void camera_handle_wheel(Camera* cam, double y_delta, int mouse_x, int mouse_y) {
     if (y_delta == 0.0) return;
-    
+
     // Zoom factor based on wheel delta (continuous)
     // Positive delta = zoom in = factor < 1
     double factor = pow(0.9, y_delta);
-    
+
     camera_push_history(cam);
 
     precise_float aspect = (precise_float)cam->win_w / (precise_float)cam->win_h;
@@ -87,7 +89,7 @@ void camera_handle_mouse_down(Camera* cam, int button, int x, int y) {
 void camera_handle_mouse_motion(Camera* cam, int x, int y) {
     cam->mouse_x = x;
     cam->mouse_y = y;
-    
+
     if (cam->is_panning) {
         precise_float aspect = (precise_float)cam->win_w / cam->win_h;
         cam->view.center_re -= (x - cam->last_mouse_x) * cam->view.zoom * aspect / cam->win_w;
@@ -107,16 +109,22 @@ bool camera_handle_mouse_up(Camera* cam, int button) {
     } else if (button == 1) {
         if (cam->is_zooming && cam->zoom_rect.w != 0 && cam->zoom_rect.h != 0) {
             camera_push_history(cam);
-            
-            precise_float center_offset_x = ((precise_float)cam->zoom_rect.x + (precise_float)cam->zoom_rect.w / 2.0) / cam->win_w - 0.5;
-            precise_float center_offset_y = 0.5 - ((precise_float)cam->zoom_rect.y + (precise_float)cam->zoom_rect.h / 2.0) / cam->win_h;
-            
+
+            precise_float center_offset_x =
+                ((precise_float)cam->zoom_rect.x + (precise_float)cam->zoom_rect.w / 2.0) /
+                    cam->win_w -
+                0.5;
+            precise_float center_offset_y =
+                0.5 - ((precise_float)cam->zoom_rect.y + (precise_float)cam->zoom_rect.h / 2.0) /
+                          cam->win_h;
+
             precise_float aspect = (precise_float)cam->win_w / cam->win_h;
             cam->view.center_re += center_offset_x * cam->view.zoom * aspect;
             cam->view.center_im += center_offset_y * cam->view.zoom;
 
-            cam->view.zoom = fmax(fabs((double)cam->zoom_rect.w) / cam->win_w * cam->view.zoom * aspect, 
-                                  fabs((double)cam->zoom_rect.h) / cam->win_h * cam->view.zoom);
+            cam->view.zoom =
+                fmax(fabs((double)cam->zoom_rect.w) / cam->win_w * cam->view.zoom * aspect,
+                     fabs((double)cam->zoom_rect.h) / cam->win_h * cam->view.zoom);
             cam->is_zooming = 0;
             return 1;
         }

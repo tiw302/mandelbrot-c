@@ -500,8 +500,9 @@ static void frame(void) {
         y += lh;
 
         // telemetry line 3
-        snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", ctx.cam.view.zoom,
-                 ctx.max_iterations, get_palette_name(ctx.palette_idx % get_palette_count()));
+        snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s",
+                 ctx.cam.view.zoom, ctx.max_iterations,
+                 get_palette_name(ctx.palette_idx % get_palette_count()));
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
@@ -581,7 +582,8 @@ static void frame(void) {
 static void handle_mouse(const sapp_event* event) {
     switch (event->type) {
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
-            camera_handle_wheel(&ctx.cam, (double)event->scroll_y, ctx.cam.mouse_x, ctx.cam.mouse_y);
+            camera_handle_wheel(&ctx.cam, (double)event->scroll_y, ctx.cam.mouse_x,
+                                ctx.cam.mouse_y);
             ctx.needs_redraw = 1;
             break;
 
