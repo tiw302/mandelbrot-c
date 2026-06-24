@@ -57,11 +57,17 @@
 #define INITIAL_CENTER_IM 0.0
 #define INITIAL_ZOOM 3.0
 
+#ifdef __SIZEOF_FLOAT128__
+typedef __float128 precise_float;
+#else
+typedef long double precise_float;
+#endif
+
 // encapsulates the current camera state in the complex plane
 typedef struct {
-    double center_re;
-    double center_im;
-    double zoom;
+    precise_float center_re;
+    precise_float center_im;
+    precise_float zoom;
 } ViewState;
 
 #endif
