@@ -22,6 +22,7 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "tour.h"
+#include "camera.h"
 
 // transient state for julia mode transitions
 typedef struct {
@@ -38,9 +39,7 @@ typedef struct {
     int win_w, win_h;
 
     // navigation state
-    ViewState view;
-    ViewState history[MAX_HISTORY_SIZE];
-    int history_count;
+    Camera cam;
 
     // runtime modes
     TourState m_tour;
@@ -55,74 +54,67 @@ typedef struct {
     int running, needs_redraw;
     Uint32 render_time_ms;
 
-    // interaction tracking
-    int is_panning, is_zooming;
-    int last_mouse_x, last_mouse_y;
-    int mouse_x, mouse_y;
-    SDL_Rect zoom_rect;
     int current_bookmark_idx;
 } AppCtx;
 
 #define JULIA_ZOOM 4.0
 
 // internal helpers
-static void calculate_boundaries(double center_re, double center_im, double zoom, int width,
-                                 int height, double* re_min, double* re_max, double* im_min,
-                                 double* im_max);
+static void calculate_boundaries(precise_float center_re, precise_float center_im, precise_float zoom, int width,
+                                 int height, precise_float* re_min, precise_float* re_max, precise_float* im_min,
+                                 precise_float* im_max);
 static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
                         SDL_Color color);
 static void print_controls(void);
 
 // maps mouse position to complex plane coordinates
 static void get_mouse_coord(const AppCtx* ctx, double* re, double* im) {
-    double re_min, re_max, im_min, im_max;
-    calculate_boundaries(ctx->view.center_re, ctx->view.center_im, ctx->view.zoom, ctx->win_w,
-                         ctx->win_h, &re_min, &re_max, &im_min, &im_max);
-    *re = re_min + (double)ctx->mouse_x * (re_max - re_min) / ctx->win_w;
-    *im = im_max - (double)ctx->mouse_y * (im_max - im_min) / ctx->win_h;
+    precise_float pre, pim;
+    camera_screen_to_complex(&ctx->cam, ctx->cam.mouse_x, ctx->cam.mouse_y, &pre, &pim);
+    *re = (double)pre;
+    *im = (double)pim;
 }
 
-/// handles keyboard input events
+// handles keyboard input events
 static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
     if (event->key.keysym.sym == SDLK_ESCAPE || event->key.keysym.sym == SDLK_q) {
         ctx->running = 0;
     } else if (event->key.keysym.sym == SDLK_z && (SDL_GetModState() & KMOD_CTRL)) {
-        if (ctx->history_count > 0) ctx->view = ctx->history[--ctx->history_count];
-        ctx->needs_redraw = 1;
+        if (camera_pop_history(&ctx->cam)) {
+            ctx->needs_redraw = 1;
+        }
     } else if (event->key.keysym.sym == SDLK_r) {
         ctx->julia_mode = ctx->julia_session.active = 0;
         ctx->m_tour.phase = TOUR_IDLE;
         ctx->max_iterations = get_config_default_iterations();
         init_renderer(ctx->max_iterations, ctx->palette_idx);
-        ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-        ctx->history_count = 0;
+        camera_reset(&ctx->cam);
         SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer");
         ctx->needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_j) {
         if (!ctx->julia_mode) {
-            ctx->julia_session.mandelbrot_view = ctx->view;
+            ctx->julia_session.mandelbrot_view = ctx->cam.view;
             ctx->julia_session.active = 1;
             get_mouse_coord(ctx, &ctx->julia_c.re, &ctx->julia_c.im);
-            ctx->view = (ViewState){0.0, 0.0, JULIA_ZOOM};
+            ctx->cam.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
             ctx->julia_mode = 1;
             SDL_SetWindowTitle(ctx->window, "Julia Explorer");
         } else {
-            if (ctx->julia_session.active) ctx->view = ctx->julia_session.mandelbrot_view;
+            if (ctx->julia_session.active) ctx->cam.view = ctx->julia_session.mandelbrot_view;
             ctx->julia_mode = 0;
             SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer");
         }
-        ctx->history_count = 0;
+        ctx->cam.history_count = 0;
         ctx->needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_b) {
         ctx->burning_ship_mode = !ctx->burning_ship_mode;
         ctx->julia_mode = ctx->julia_session.active = 0;
-        ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-        ctx->history_count = 0;
+        camera_reset(&ctx->cam);
         SDL_SetWindowTitle(
             ctx->window, ctx->burning_ship_mode ? "Burning Ship Explorer" : "Mandelbrot Explorer");
         ctx->needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_p) {
-        ctx->palette_idx = (ctx->palette_idx + 1) % PALETTE_COUNT;
+        ctx->palette_idx = (ctx->palette_idx + 1) % get_palette_count();
         init_renderer(ctx->max_iterations, ctx->palette_idx);
         ctx->needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_e) {
@@ -132,9 +124,9 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         ctx->needs_redraw = 1;
 #endif
     } else if (event->key.keysym.sym == SDLK_m) {
-        Bookmark b = {ctx->view.center_re,
-                      ctx->view.center_im,
-                      ctx->view.zoom,
+        Bookmark b = {ctx->cam.view.center_re,
+                      ctx->cam.view.center_im,
+                      ctx->cam.view.zoom,
                       ctx->max_iterations,
                       ctx->julia_mode ? 1 : (ctx->burning_ship_mode ? 2 : 0),
                       ctx->julia_c};
@@ -143,11 +135,10 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         Bookmark b;
         int count = get_bookmark_count();
         if (count > 0) {
-            if (ctx->history_count < MAX_HISTORY_SIZE)
-                ctx->history[ctx->history_count++] = ctx->view;
+            camera_push_history(&ctx->cam);
             ctx->current_bookmark_idx = (ctx->current_bookmark_idx + 1) % count;
             if (load_bookmark(ctx->current_bookmark_idx, &b)) {
-                ctx->view = (ViewState){b.center_re, b.center_im, b.zoom};
+                ctx->cam.view = (ViewState){b.center_re, b.center_im, b.zoom};
                 ctx->max_iterations = b.max_iterations;
                 ctx->julia_mode = (b.fractal_type == 1);
                 ctx->burning_ship_mode = (b.fractal_type == 2);
@@ -174,8 +165,8 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
             free(ss);
         }
     } else if (event->key.keysym.sym == SDLK_x) {
-        double rmin, rmax, imin, imax;
-        calculate_boundaries(ctx->view.center_re, ctx->view.center_im, ctx->view.zoom, ctx->win_w,
+        precise_float rmin, rmax, imax, imin;
+        calculate_boundaries(ctx->cam.view.center_re, ctx->cam.view.center_im, ctx->cam.view.zoom, ctx->win_w,
                              ctx->win_h, &rmin, &rmax, &imin, &imax);
         save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx->max_iterations,
                              ctx->palette_idx,
@@ -199,14 +190,12 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         } else {
             if (ctx->m_tour.phase == TOUR_IDLE) {
                 ctx->julia_mode = ctx->julia_session.active = 0;
-                ctx->history_count = 0;
-                ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-                start_tour(&ctx->m_tour, &ctx->view);
+                camera_reset(&ctx->cam);
+                start_tour(&ctx->m_tour, &ctx->cam.view);
                 SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer  [Auto-Zoom]");
             } else {
                 stop_tour(&ctx->m_tour);
-                ctx->view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-                ctx->history_count = 0;
+                camera_reset(&ctx->cam);
                 SDL_SetWindowTitle(ctx->window, "Mandelbrot Explorer");
                 ctx->needs_redraw = 1;
             }
@@ -224,71 +213,42 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
 static void handle_mouse(AppCtx* ctx, SDL_Event* event) {
     switch (event->type) {
         case SDL_MOUSEWHEEL: {
-            double factor = (event->wheel.y > 0) ? 0.9 : 1.1;
-            if (ctx->history_count < MAX_HISTORY_SIZE)
-                ctx->history[ctx->history_count++] = ctx->view;
-            double mre, mim;
-            get_mouse_coord(ctx, &mre, &mim);
-            ctx->view.zoom *= factor;
-            ctx->view.center_re = mre + (ctx->view.center_re - mre) * factor;
-            ctx->view.center_im = mim + (ctx->view.center_im - mim) * factor;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+            double y_delta = event->wheel.preciseY;
+#else
+            double y_delta = (double)event->wheel.y;
+#endif
+            if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
+                y_delta *= -1.0;
+            }
+            int mx = ctx->cam.mouse_x;
+            int my = ctx->cam.mouse_y;
+#if SDL_VERSION_ATLEAST(2, 0, 26)
+            mx = event->wheel.mouseX;
+            my = event->wheel.mouseY;
+#endif
+            camera_handle_wheel(&ctx->cam, y_delta, mx, my);
             ctx->needs_redraw = 1;
-        } break;
+            break;
+        }
 
         case SDL_MOUSEBUTTONDOWN:
-            if (event->button.button == SDL_BUTTON_RIGHT) {
-                ctx->is_panning = 1;
-                ctx->last_mouse_x = event->button.x;
-                ctx->last_mouse_y = event->button.y;
-            } else if (event->button.button == SDL_BUTTON_LEFT) {
-                ctx->is_zooming = 1;
-                ctx->zoom_rect = (SDL_Rect){event->button.x, event->button.y, 0, 0};
-            }
+            camera_handle_mouse_down(&ctx->cam, event->button.button, event->button.x, event->button.y);
             break;
 
         case SDL_MOUSEMOTION:
-            ctx->mouse_x = event->motion.x;
-            ctx->mouse_y = event->motion.y;
-            if (ctx->is_panning) {
-                double aspect = (double)ctx->win_w / ctx->win_h;
-                ctx->view.center_re -=
-                    (event->motion.x - ctx->last_mouse_x) * ctx->view.zoom * aspect / ctx->win_w;
-                ctx->view.center_im +=
-                    (event->motion.y - ctx->last_mouse_y) * ctx->view.zoom / ctx->win_h;
-                ctx->last_mouse_x = event->motion.x;
-                ctx->last_mouse_y = event->motion.y;
+            camera_handle_mouse_motion(&ctx->cam, event->motion.x, event->motion.y);
+            if (ctx->cam.is_panning) {
                 ctx->needs_redraw = 1;
-            } else if (ctx->is_zooming) {
-                ctx->zoom_rect.w = event->motion.x - ctx->zoom_rect.x;
-                ctx->zoom_rect.h = event->motion.y - ctx->zoom_rect.y;
-            } else if (ctx->julia_mode) {
+            } else if (ctx->julia_mode && !ctx->cam.is_zooming) {
                 get_mouse_coord(ctx, &ctx->julia_c.re, &ctx->julia_c.im);
                 ctx->needs_redraw = 1;
             }
             break;
 
         case SDL_MOUSEBUTTONUP:
-            if (event->button.button == SDL_BUTTON_RIGHT)
-                ctx->is_panning = 0;
-            else if (event->button.button == SDL_BUTTON_LEFT) {
-                if (ctx->is_zooming && ctx->zoom_rect.w != 0 && ctx->zoom_rect.h != 0) {
-                    if (ctx->history_count < MAX_HISTORY_SIZE)
-                        ctx->history[ctx->history_count++] = ctx->view;
-                    double re_pp =
-                        (ctx->view.zoom * ((double)ctx->win_w / ctx->win_h)) / ctx->win_w;
-                    double im_pp = ctx->view.zoom / ctx->win_h;
-                    double re_min = ctx->view.center_re -
-                                    (ctx->view.zoom * ((double)ctx->win_w / ctx->win_h)) / 2.0;
-                    double im_max = ctx->view.center_im + ctx->view.zoom / 2.0;
-                    ctx->view.center_re =
-                        re_min + (ctx->zoom_rect.x + ctx->zoom_rect.w / 2.0) * re_pp;
-                    ctx->view.center_im =
-                        im_max - (ctx->zoom_rect.y + ctx->zoom_rect.h / 2.0) * im_pp;
-                    ctx->view.zoom = fmax(fabs((double)ctx->zoom_rect.w) * re_pp,
-                                          fabs((double)ctx->zoom_rect.h) * im_pp);
-                    ctx->needs_redraw = 1;
-                }
-                ctx->is_zooming = 0;
+            if (camera_handle_mouse_up(&ctx->cam, event->button.button)) {
+                ctx->needs_redraw = 1;
             }
             break;
     }
@@ -307,6 +267,7 @@ static void handle_events(AppCtx* ctx) {
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
                     ctx->win_w = event.window.data1;
                     ctx->win_h = event.window.data2;
+                    camera_resize(&ctx->cam, ctx->win_w, ctx->win_h);
                     SDL_DestroyTexture(ctx->texture);
                     ctx->texture =
                         SDL_CreateTexture(ctx->renderer, SDL_PIXELFORMAT_ARGB8888,
@@ -336,8 +297,8 @@ static void render_frame(AppCtx* ctx) {
         Uint32* pixels;
         int pitch;
         if (SDL_LockTexture(ctx->texture, NULL, (void**)&pixels, &pitch) == 0) {
-            double rmin, rmax, imin, imax;
-            calculate_boundaries(ctx->view.center_re, ctx->view.center_im, ctx->view.zoom,
+            precise_float rmin, rmax, imax, imin;
+            calculate_boundaries(ctx->cam.view.center_re, ctx->cam.view.center_im, ctx->cam.view.zoom,
                                  ctx->win_w, ctx->win_h, &rmin, &rmax, &imin, &imax);
             if (ctx->julia_mode)
                 render_julia_threaded(pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax, imin,
@@ -361,9 +322,10 @@ static void render_frame(AppCtx* ctx) {
     SDL_RenderClear(ctx->renderer);
     if (ctx->texture) SDL_RenderCopy(ctx->renderer, ctx->texture, NULL, NULL);
 
-    if (ctx->is_zooming) {
+    if (ctx->cam.is_zooming) {
         SDL_SetRenderDrawColor(ctx->renderer, 255, 255, 0, 255);
-        SDL_RenderDrawRect(ctx->renderer, &ctx->zoom_rect);
+        SDL_Rect zoom_rect = {ctx->cam.zoom_rect.x, ctx->cam.zoom_rect.y, ctx->cam.zoom_rect.w, ctx->cam.zoom_rect.h};
+        SDL_RenderDrawRect(ctx->renderer, &zoom_rect);
     }
 }
 
@@ -392,13 +354,13 @@ static void render_hud(AppCtx* ctx) {
     if (ctx->julia_mode)
         snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx->julia_c.re, ctx->julia_c.im);
     else
-        snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", ctx->view.center_re,
-                 ctx->view.center_im);
+        snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", (double)ctx->cam.view.center_re,
+                 (double)ctx->cam.view.center_im);
     render_text(ctx->renderer, ctx->font, buf, x, y, white);
     y += line_h;
 
-    snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", ctx->view.zoom,
-             ctx->max_iterations, PALETTE_NAMES[ctx->palette_idx % PALETTE_COUNT]);
+    snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s", (double)ctx->cam.view.zoom,
+             ctx->max_iterations, get_palette_name(ctx->palette_idx % get_palette_count()));
     render_text(ctx->renderer, ctx->font, buf, x, y, white);
 }
 
@@ -430,7 +392,7 @@ int main(int argc, char* argv[]) {
     ctx.texture = SDL_CreateTexture(ctx.renderer, SDL_PIXELFORMAT_ARGB8888,
                                     SDL_TEXTUREACCESS_STREAMING, ctx.win_w, ctx.win_h);
 
-    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
+    camera_init(&ctx.cam, ctx.win_w, ctx.win_h);
     ctx.julia_c = (complex_t){-0.7, 0.27};
     ctx.max_iterations = get_config_default_iterations();
     ctx.palette_idx = get_config_default_palette();
@@ -452,7 +414,7 @@ int main(int argc, char* argv[]) {
             }
         } else {
             if (ctx.m_tour.phase != TOUR_IDLE) {
-                update_tour(&ctx.m_tour, &ctx.view, now, ctx.burning_ship_mode);
+                update_tour(&ctx.m_tour, &ctx.cam.view, now, ctx.burning_ship_mode);
                 ctx.needs_redraw = 1;
             }
         }
@@ -479,14 +441,14 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-static void calculate_boundaries(double center_re, double center_im, double zoom, int width,
-                                 int height, double* re_min, double* re_max, double* im_min,
-                                 double* im_max) {
-    double aspect = (double)width / (double)height;
-    *im_min = center_im - zoom / 2.0;
+static void calculate_boundaries(precise_float center_re, precise_float center_im, precise_float zoom, int width,
+                                 int height, precise_float* re_min, precise_float* re_max, precise_float* im_min,
+                                 precise_float* im_max) {
+    precise_float aspect = (precise_float)width / height;
+    *re_min = center_re - zoom * aspect / 2.0;
+    *re_max = center_re + zoom * aspect / 2.0;
     *im_max = center_im + zoom / 2.0;
-    *re_min = center_re - (zoom * aspect) / 2.0;
-    *re_max = center_re + (zoom * aspect) / 2.0;
+    *im_min = center_im - zoom / 2.0;
 }
 
 static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
