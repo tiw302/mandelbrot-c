@@ -51,7 +51,9 @@ void julia_check_wasm_simd128(v128_t zre, v128_t zim, complex_t c, int max_itera
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -99,7 +101,9 @@ void julia_check_avx512(__m512d zre, __m512d zim, complex_t c, int max_iteration
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -117,7 +121,9 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
         double zim2 = z.im * z.im;
         double mag_sq = zre2 + zim2;
         if (mag_sq > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_sq)));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_sq)));
         }
 
         double next_im = 2.0 * z.re * z.im + c.im;
@@ -171,7 +177,9 @@ void julia_check_avx2(__m256d zre, __m256d zim, complex_t c, int max_iterations,
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -194,7 +202,9 @@ double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 c
         simd_f128_extract(mag_sq, &mag_hi, &mag_lo);
 
         if (mag_hi > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_hi)));
         }
 
         simd_f128 zre_zim = simd_f128_mul(zre, zim);
@@ -249,7 +259,9 @@ void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
