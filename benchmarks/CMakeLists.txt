@@ -1,7 +1,7 @@
 # benchmarks/CMakeLists.txt - Build configuration for benchmarks
 
 # shared include directories for all benchmarks
-include_directories(../src/core ../src/engine ../src/app ../include ../third_party ../third_party/sokol ../third_party/stb ../third_party/fons ../third_party/simd-f128)
+include_directories(../src/core ../src/engine ../src/app ../include ../third_party ../third_party/sokol ../third_party/stb ../third_party/fons ../third_party/simd-f128 ../third_party/cjsonx)
 
 # inherit compiler flags from parent (ARCH_FLAGS)
 set(BENCHMARK_FLAGS "${ARCH_FLAGS}")
@@ -21,6 +21,7 @@ add_executable(benchmark_renderer cpu/benchmark_renderer.c
     ../src/core/julia.c
     ../src/core/burning_ship.c
     ../src/core/fractal.c
+    ../src/engine/cjsonx_impl.c
 )
 target_compile_definitions(benchmark_renderer PRIVATE USE_SIMD_F128)
 target_compile_options(benchmark_renderer PRIVATE ${BENCHMARK_FLAGS} -O3 -ffast-math)
@@ -36,6 +37,7 @@ add_executable(benchmark_screenshot cpu/benchmark_screenshot.c
     ../src/core/julia.c
     ../src/core/burning_ship.c
     ../src/core/fractal.c
+    ../src/engine/cjsonx_impl.c
 )
 target_compile_definitions(benchmark_screenshot PRIVATE USE_SIMD_F128)
 target_compile_options(benchmark_screenshot PRIVATE ${BENCHMARK_FLAGS} -O3 -ffast-math)
@@ -53,6 +55,7 @@ if(BUILD_GPU)
         ../src/core/burning_ship.c
         ../src/core/fractal.c
         ../src/engine/ini_config.c
+        ../src/engine/cjsonx_impl.c
     )
     target_compile_definitions(benchmark_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE USE_SIMD_F128)
     target_compile_options(benchmark_gpu PRIVATE ${ARCH_FLAGS} -pthread)
