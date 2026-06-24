@@ -16,6 +16,24 @@ static double current_escape_radius = ESCAPE_RADIUS;
 static int current_default_thread_count = DEFAULT_THREAD_COUNT;
 static int current_default_palette = DEFAULT_PALETTE;
 
+typedef enum { TYPE_INT, TYPE_DOUBLE } ConfigType;
+
+typedef struct {
+    const char* key;
+    void* target;
+    ConfigType type;
+} ConfigEntry;
+
+static ConfigEntry config_table[] = {
+    {"window_width", &current_window_width, TYPE_INT},
+    {"window_height", &current_window_height, TYPE_INT},
+    {"default_iterations", &current_default_iterations, TYPE_INT},
+    {"max_iterations_limit", &current_max_iterations_limit, TYPE_INT},
+    {"escape_radius", &current_escape_radius, TYPE_DOUBLE},
+    {"default_thread_count", &current_default_thread_count, TYPE_INT},
+    {"default_palette", &current_default_palette, TYPE_INT},
+};
+
 // helper to trim whitespace from a string
 static char* trim_whitespace(char* str) {
     char* end;
@@ -55,20 +73,15 @@ int load_config_from_file(const char* filepath) {
             char* key = trim_whitespace(trimmed_line);
             char* value = trim_whitespace(equals_sign + 1);
 
-            if (strcmp(key, "window_width") == 0) {
-                current_window_width = atoi(value);
-            } else if (strcmp(key, "window_height") == 0) {
-                current_window_height = atoi(value);
-            } else if (strcmp(key, "default_iterations") == 0) {
-                current_default_iterations = atoi(value);
-            } else if (strcmp(key, "max_iterations_limit") == 0) {
-                current_max_iterations_limit = atoi(value);
-            } else if (strcmp(key, "escape_radius") == 0) {
-                current_escape_radius = atof(value);
-            } else if (strcmp(key, "default_thread_count") == 0) {
-                current_default_thread_count = atoi(value);
-            } else if (strcmp(key, "default_palette") == 0) {
-                current_default_palette = atoi(value);
+            for (size_t i = 0; i < sizeof(config_table) / sizeof(config_table[0]); i++) {
+                if (strcmp(key, config_table[i].key) == 0) {
+                    if (config_table[i].type == TYPE_INT) {
+                        *((int*)config_table[i].target) = atoi(value);
+                    } else if (config_table[i].type == TYPE_DOUBLE) {
+                        *((double*)config_table[i].target) = atof(value);
+                    }
+                    break;
+                }
             }
         }
     }
