@@ -4,6 +4,8 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "cjsonx.h"
+
 static char bookmarks_file_path[256] = "bookmarks.json";
 #define MAX_BOOKMARKS 1024
 
@@ -17,7 +19,7 @@ void set_bookmarks_file(const char* filepath) {
 
 static int scan_bookmarks(Bookmark* bookmarks, int max_count);
 
-// simple json writer that rewrites the whole file to avoid partial write corruption
+// simple json writer that rewrites the whole file using cJSON
 void save_bookmark(const Bookmark* b) {
     Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
     if (!bookmarks) return;
@@ -27,87 +29,96 @@ void save_bookmark(const Bookmark* b) {
         bookmarks[count++] = *b;
     }
 
-    FILE* f = fopen(bookmarks_file_path, "w");
-    if (!f) {
+    cjsonx_doc_t* doc = cjsonx_doc_new();
+    if (!doc) {
+        free(bookmarks);
+        return;
+    }
+    
+    cjsonx_val_t root = cjsonx_create_array(doc);
+
+    for (int i = 0; i < count; i++) {
+        cjsonx_val_t obj = cjsonx_create_object(doc);
+        cjsonx_object_set(obj, "center_re", cjsonx_create_number(doc, bookmarks[i].center_re));
+        cjsonx_object_set(obj, "center_im", cjsonx_create_number(doc, bookmarks[i].center_im));
+        cjsonx_object_set(obj, "zoom", cjsonx_create_number(doc, bookmarks[i].zoom));
+        cjsonx_object_set(obj, "max_iterations", cjsonx_create_number(doc, bookmarks[i].max_iterations));
+        cjsonx_object_set(obj, "fractal_type", cjsonx_create_number(doc, bookmarks[i].fractal_type));
+        cjsonx_object_set(obj, "julia_c_re", cjsonx_create_number(doc, bookmarks[i].julia_c.re));
+        cjsonx_object_set(obj, "julia_c_im", cjsonx_create_number(doc, bookmarks[i].julia_c.im));
+        cjsonx_array_push(root, obj);
+    }
+
+    doc->root = root;
+    char* json_string = cjsonx_stringify(doc);
+    cjsonx_doc_free(doc);
+
+    if (!json_string) {
         free(bookmarks);
         return;
     }
 
-    fprintf(f, "[\n");
-    for (int i = 0; i < count; i++) {
-        fprintf(f, "  {\n");
-        fprintf(f, "    \"center_re\": %.17g,\n", bookmarks[i].center_re);
-        fprintf(f, "    \"center_im\": %.17g,\n", bookmarks[i].center_im);
-        fprintf(f, "    \"zoom\": %.17g,\n", bookmarks[i].zoom);
-        fprintf(f, "    \"max_iterations\": %d,\n", bookmarks[i].max_iterations);
-        fprintf(f, "    \"fractal_type\": %d,\n", bookmarks[i].fractal_type);
-        fprintf(f, "    \"julia_c_re\": %.17g,\n", bookmarks[i].julia_c.re);
-        fprintf(f, "    \"julia_c_im\": %.17g\n", bookmarks[i].julia_c.im);
-        if (i < count - 1) {
-            fprintf(f, "  },\n");
-        } else {
-            fprintf(f, "  }\n");
-        }
+    char tmp_file_path[512];
+    snprintf(tmp_file_path, sizeof(tmp_file_path), "%s.tmp", bookmarks_file_path);
+    FILE* f = fopen(tmp_file_path, "w");
+    if (!f) {
+        free(json_string);
+        free(bookmarks);
+        return;
     }
-    fprintf(f, "]\n");
+
+    fprintf(f, "%s\n", json_string);
+    free(json_string);
 
     // ensure durable write
     fflush(f);
     fclose(f);
+    
+    /* write to a temporary file first, then atomically rename to prevent
+     * data corruption if the program crashes midway through writing. */
+    rename(tmp_file_path, bookmarks_file_path);
+
     free(bookmarks);
 }
 
-// simple scanner for the json structure we write
+// robust scanner using cJSON
 static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
-    FILE* f = fopen(bookmarks_file_path, "r");
-    if (!f) return 0;
+    cjsonx_doc_t* doc = cjsonx_read_file(bookmarks_file_path);
+    if (!doc) return 0;
 
-    int count = 0;
-    char line[512];
-    Bookmark current = {0};
-    int in_object = 0;
-
-    while (fgets(line, sizeof(line), f) && count < max_count) {
-        if (strstr(line, "{")) {
-            in_object = 1;
-        }
-        if (in_object) {
-            char* p;
-            char* colon;
-            if ((p = strstr(line, "\"center_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%lf", &current.center_re);
-            }
-            if ((p = strstr(line, "\"center_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%lf", &current.center_im);
-            }
-            if ((p = strstr(line, "\"zoom\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%lf", &current.zoom);
-            }
-            if ((p = strstr(line, "\"max_iterations\"")) != NULL &&
-                (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%d", &current.max_iterations);
-            }
-            if ((p = strstr(line, "\"fractal_type\"")) != NULL &&
-                (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%d", &current.fractal_type);
-            }
-            if ((p = strstr(line, "\"julia_c_re\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%lf", &current.julia_c.re);
-            }
-            if ((p = strstr(line, "\"julia_c_im\"")) != NULL && (colon = strchr(p, ':')) != NULL) {
-                sscanf(colon + 1, "%lf", &current.julia_c.im);
-            }
-        }
-        if (strstr(line, "}")) {
-            if (in_object) {
-                bookmarks[count++] = current;
-                in_object = 0;
-                memset(&current, 0, sizeof(Bookmark));
-            }
-        }
+    cjsonx_val_t root = doc->root;
+    if (cjsonx_get_type(root) != CJSONX_ARRAY) {
+        cjsonx_doc_free(doc);
+        return 0;
     }
 
-    fclose(f);
+    int count = 0;
+    cjsonx_iter_t it = cjsonx_iter_init(root);
+    while (cjsonx_iter_next(&it)) {
+        if (count >= max_count) break;
+        
+        cjsonx_val_t item = it.value;
+
+        cjsonx_val_t cre = cjsonx_get(item, "center_re");
+        cjsonx_val_t cim = cjsonx_get(item, "center_im");
+        cjsonx_val_t z = cjsonx_get(item, "zoom");
+        cjsonx_val_t mi = cjsonx_get(item, "max_iterations");
+        cjsonx_val_t ft = cjsonx_get(item, "fractal_type");
+        cjsonx_val_t jre = cjsonx_get(item, "julia_c_re");
+        cjsonx_val_t jim = cjsonx_get(item, "julia_c_im");
+
+        if (cjsonx_get_type(cre) == CJSONX_NUMBER) bookmarks[count].center_re = cjsonx_num(cre);
+        if (cjsonx_get_type(cim) == CJSONX_NUMBER) bookmarks[count].center_im = cjsonx_num(cim);
+        if (cjsonx_get_type(z) == CJSONX_NUMBER) bookmarks[count].zoom = cjsonx_num(z);
+        if (cjsonx_get_type(mi) == CJSONX_NUMBER) bookmarks[count].max_iterations = cjsonx_int(mi);
+        if (cjsonx_get_type(ft) == CJSONX_NUMBER) bookmarks[count].fractal_type = cjsonx_int(ft);
+        if (cjsonx_get_type(jre) == CJSONX_NUMBER) bookmarks[count].julia_c.re = cjsonx_num(jre);
+        if (cjsonx_get_type(jim) == CJSONX_NUMBER) bookmarks[count].julia_c.im = cjsonx_num(jim);
+
+        count++;
+    }
+
+    cjsonx_doc_free(doc);
     return count;
 }
 
