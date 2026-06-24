@@ -4,8 +4,8 @@ project(MandelbrotC C)
 set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
-# ensure consistent optimization flags
-add_compile_options(-O3 -ffast-math)
+# ensure consistent optimization flags without breaking 128-bit strict IEEE754 math
+add_compile_options(-O3 -fno-math-errno -fno-signed-zeros -fno-trapping-math)
 
 # --- build options ---
 option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
@@ -30,17 +30,17 @@ elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64" OR CMAKE_SYSTEM_PROCESSOR MATCHES 
 elseif(USE_NATIVE_ARCH)
     set(ARCH_FLAGS -march=native)
 else()
-    set(ARCH_FLAGS -mavx2 -mfma)
+    set(ARCH_FLAGS -mavx2 -mfma -mpclmul)
 endif()
 
 # include paths
-include_directories(include src/engine src/app third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128)
+include_directories(src/core src/engine src/app include third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128 third_party/cjsonx)
 
 # common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/burning_ship.c src/core/color.c src/core/fractal.c)
 
 # common engine
-set(ENGINE_SRC src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/ini_config.c)
+set(ENGINE_SRC src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/ini_config.c src/engine/cjsonx_impl.c src/engine/camera.c)
 
 # helper for system libs
 macro(find_system_libs target)
