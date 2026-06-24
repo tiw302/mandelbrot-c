@@ -22,8 +22,8 @@ double burning_ship_check(complex_t c, int max_iterations) {
         double zim2 = z.im * z.im;
 
         if (zre2 + zim2 > escape_radius_sq) {
-            // smooth coloring — same formula as mandelbrot
-            return (double)iterations + 2.0 - log2(log(fmax(1.0, zre2 + zim2)));
+            // smooth coloring — same formula as mandelbrot, guarded by fmax(2.0)
+            return (double)iterations + 2.0 - log2(log(fmax(2.0, zre2 + zim2)));
         }
 
         // the key difference: take absolute values before squaring
@@ -88,7 +88,9 @@ void burning_ship_check_avx2(__m256d cre, __m256d cim, int max_iterations, doubl
         if (!(escaped_bits & (1 << i)) || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -142,7 +144,9 @@ void burning_ship_check_avx512(__m512d cre, __m512d cim, int max_iterations, dou
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -197,7 +201,9 @@ void burning_ship_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations,
         if (!res_escaped[i] || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -221,7 +227,9 @@ double burning_ship_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations)
         simd_f128_extract(mag_sq, &mag_hi, &mag_lo);
 
         if (mag_hi > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_hi)));
         }
 
         simd_f128 abs_re = simd_f128_abs(zre);
@@ -282,7 +290,9 @@ void burning_ship_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterati
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
