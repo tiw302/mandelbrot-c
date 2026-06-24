@@ -40,11 +40,9 @@ double mandelbrot_check(complex_t c, int max_iterations) {
 
         double mag_sq = zre2 + zim2;
         if (mag_sq > escape_radius_sq) {
-            /* smooth (fractional) coloring formula:
-             * removes banding by interpolating the exact escape point
-             * continuously rather than in discrete integer steps.
-             * fmax guards against log(0) when mag is exactly 1.0. */
-            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_sq)));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_sq)));
         }
 
         z.im = 2.0 * z.re * z.im + c.im;
@@ -109,7 +107,9 @@ void mandelbrot_check_avx2(__m256d cre, __m256d cim, int max_iterations, double*
         if ((in_set_bits & (1 << i)) || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -167,7 +167,9 @@ void mandelbrot_check_avx512(__m512d cre, __m512d cim, int max_iterations, doubl
         if ((in_set_mask & (1 << i)) || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -230,7 +232,9 @@ void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, d
         if (res_in_set[i] || res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
@@ -271,7 +275,9 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
         simd_f128_extract(mag_sq, &mag_hi, &mag_lo);
 
         if (mag_hi > escape_radius_sq) {
-            return (double)iterations + 2.0 - log2(log(fmax(1.0, mag_hi)));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_hi)));
         }
 
         simd_f128 zre_zim = simd_f128_mul(zre, zim);
@@ -327,7 +333,9 @@ void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iteration
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            results[i] = res_iters[i] + 2.0 - log2(log(fmax(1.0, res_mag_sq[i])));
+            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
+             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
 }
