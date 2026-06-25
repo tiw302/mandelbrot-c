@@ -8,9 +8,10 @@
 
 #include "renderer.h"
 
-void save_mega_screenshot(int target_width, int target_height, double re_min, double re_max,
-                          double im_min, double im_max, int max_iterations, int palette_idx,
-                          int fractal_type, complex_t julia_c) {
+void save_mega_screenshot(int target_width, int target_height, precise_float re_min,
+                          precise_float re_max, precise_float im_min, precise_float im_max,
+                          int max_iterations, int palette_idx, int fractal_type,
+                          complex_t julia_c) {
     char filename[128];
     time_t now = time(NULL);
     struct tm* t = localtime(&now);
@@ -45,7 +46,7 @@ void save_mega_screenshot(int target_width, int target_height, double re_min, do
         return;
     }
 
-    double im_step = (im_max - im_min) / target_height;
+    precise_float im_step = (im_max - im_min) / target_height;
     int pitch = target_width * 4;
 
     // initialize renderer palette just in case
@@ -59,8 +60,8 @@ void save_mega_screenshot(int target_width, int target_height, double re_min, do
             lines = target_height - y_start;
         }
 
-        double strip_im_max = im_max - y_start * im_step;
-        double strip_im_min = strip_im_max - lines * im_step;
+        precise_float strip_im_max = im_max - y_start * im_step;
+        precise_float strip_im_min = strip_im_max - lines * im_step;
 
         if (fractal_type == 1) {
             render_julia_threaded(chunk_pixels, pitch, target_width, lines, re_min, re_max,
