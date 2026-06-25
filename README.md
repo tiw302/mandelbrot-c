@@ -84,7 +84,7 @@ The URL format encodes the following parameters:
 | `re` / `im` | 14 decimal places | View center on the complex plane |
 | `z` | Exponential (6 sig figs) | Zoom level |
 | `it` | Integer | Iteration count |
-| `p` | Integer | Palette index (0–13) |
+| `p` | Integer | Palette index (0–5) |
 | `j` | `1` if active | Julia mode flag |
 | `jre` / `jim` | 14 decimal places | Julia set c-parameter (only present in Julia mode) |
 
@@ -364,33 +364,18 @@ Rendering parameters can be tuned in `include/config.h`:
 
 ### Color Palettes
 
-The engine ships with **9 built-in palettes** plus **5 additional palettes** loaded dynamically from `assets/palettes.json`, for a total of **14 palettes** at runtime. All are selectable with `P` or `Iter+/Iter-`, or set as default via `DEFAULT_PALETTE` in `config.h`:
-
-#### Built-in Palettes (indices 0–8)
+The engine ships with 6 built-in palettes, selectable at runtime with `P` or `Iter+/Iter-`, or set as default via `DEFAULT_PALETTE` in `config.h`:
 
 | Index | Name | Character |
 | :--- | :--- | :--- |
-| `0` | Sine Wave (GPU) | Smooth cycling colors using sine-wave interpolation; matches GPU shader output exactly |
+| `0` | Sine Wave | Smooth cycling colors using sine-wave interpolation |
 | `1` | Grayscale | Pure luminance, iteration count mapped to brightness |
-| `2` | Fire | Triangular RGB waves — cyan/yellow/blue banding on high-frequency iterations |
-| `3` | Electric | Red-dominant neon feel with high-contrast blue accent |
-| `4` | Ocean | Warm amber dominant with cool blue undertones |
-| `5` | Inferno | Deep blue emphasis with bright white highlights on escape boundary |
-| `6` | Viridis | Perceptually-uniform green-to-yellow ramp (ping-pong wrapped) |
-| `7` | Plasma | Magenta-to-yellow high-contrast scientific colormap (ping-pong wrapped) |
-| `8` | Twilight | Cyclic HSL sinusoidal ramp — loops seamlessly for infinite zoom |
+| `2` | Fire | Blue-to-white ramp, cool-to-hot gradient |
+| `3` | Electric | Red-dominant, high-contrast neon feel |
+| `4` | Ocean | Warm amber tones with subtle blue undertones |
+| `5` | Inferno | Deep blue-to-white, high-zoom detail emphasis |
 
-#### JSON-loaded Palettes (indices 9–13, from `assets/palettes.json`)
-
-| Index | Name | Character |
-| :--- | :--- | :--- |
-| `9`  | Ocean | Deep-sea gradient: black → blue → cyan → amber → black |
-| `10` | Fire | Classic fire: black → red → yellow → white |
-| `11` | Grayscale | Pure black-to-white linear ramp |
-| `12` | Viridis | Perceptually-uniform blue → green → yellow |
-| `13` | Plasma | Vivid purple → magenta → yellow |
-
-All palettes use fractional iteration interpolation to eliminate color banding at region boundaries. The JSON-loaded palettes from `assets/palettes.json` are based on stop-interpolated gradient definitions and can be freely edited or extended at runtime without recompilation.
+All palettes use fractional iteration interpolation to eliminate color banding at region boundaries.
 
 ---
 
@@ -428,10 +413,7 @@ ctest --test-dir build_cpu --output-on-failure
 │   └── app/            # Platform-Specific Entries (Desktop, Web)
 ├── shaders/             # GLSL shader source files
 ├── web/                 # Web Frontend (HTML, CSS, JS)
-├── assets/              # Shared typography, media, and data files
-│   ├── fonts/          # Bundled TTF font for HUD
-│   ├── images/         # Screenshots for README
-│   └── palettes.json   # JSON-defined custom color palettes (loaded at runtime)
+├── assets/              # Shared Typography and Media
 ├── tests/               # Automated Unit Testing Suite
 ├── benchmarks/
 │   ├── cpu/            # CPU benchmarks (math kernels, renderer throughput, I/O)

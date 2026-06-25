@@ -372,7 +372,7 @@ static void render_hud(AppCtx* ctx) {
 int main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
-
+    
     srand((unsigned)time(NULL));
 #if !defined(_WIN32)
     signal(SIGPIPE, SIG_IGN);
