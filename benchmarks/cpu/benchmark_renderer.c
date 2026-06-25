@@ -13,7 +13,7 @@
 #define NUM_RUNS 10
 
 // returns time in seconds
-static double get_time_sec() {
+static double get_time_sec(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
@@ -70,7 +70,7 @@ static void run_benchmark(const char* name, int width, int height) {
     free(pixels);
 }
 
-int main() {
+int main(void) {
     printf("Initializing renderer...\n");
     init_renderer(MAX_ITERATIONS, 0);  // 0 is default palette
 
