@@ -20,7 +20,7 @@
 #define MAX_ITERATIONS 1000
 
 // returns time in seconds
-static double get_time_sec() {
+static double get_time_sec(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
@@ -33,7 +33,7 @@ static void remove_latest_file(const char* prefix, const char* ext) {
     printf("  (note: please clean up %s*.%s manually if needed)\n", prefix, ext);
 }
 
-int main() {
+int main(void) {
     printf("==========================================\n");
     printf(" Screenshot I/O Benchmarks                \n");
     printf("==========================================\n\n");
