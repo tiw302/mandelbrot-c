@@ -170,8 +170,10 @@ static void process_rows(void) {
                 simd_f128x4 v_re_min = {_mm256_set1_pd(re_min_hi), _mm256_set1_pd(re_min_lo)};
                 simd_f128x4 v_re_fac = {_mm256_set1_pd(re_fac_hi), _mm256_set1_pd(re_fac_lo)};
                 simd_f128x4 v_im_val = {_mm256_set1_pd(y_im_hi), _mm256_set1_pd(y_im_lo)};
-                simd_f128x4 v_julia_cre = {_mm256_set1_pd(julia_cre_hi), _mm256_set1_pd(julia_cre_lo)};
-                simd_f128x4 v_julia_cim = {_mm256_set1_pd(julia_cim_hi), _mm256_set1_pd(julia_cim_lo)};
+                simd_f128x4 v_julia_cre = {_mm256_set1_pd(julia_cre_hi),
+                                           _mm256_set1_pd(julia_cre_lo)};
+                simd_f128x4 v_julia_cim = {_mm256_set1_pd(julia_cim_hi),
+                                           _mm256_set1_pd(julia_cim_lo)};
 
                 for (; x <= x_end - 4; x += 4) {
                     double iterations[4];
@@ -179,8 +181,8 @@ static void process_rows(void) {
                                                                (double)(x + 2), (double)(x + 3));
                     simd_f128x4 v_re = simd_f128x4_add(v_re_min, simd_f128x4_mul(v_x, v_re_fac));
 
-                    fd->check_avx2_f128(v_re, v_im_val, v_julia_cre, v_julia_cim, pool.max_iterations,
-                                        iterations);
+                    fd->check_avx2_f128(v_re, v_im_val, v_julia_cre, v_julia_cim,
+                                        pool.max_iterations, iterations);
 
                     for (int i = 0; i < 4; i++) {
                         if (iterations[i] >= pool.max_iterations || !lut) {
@@ -208,8 +210,8 @@ static void process_rows(void) {
                     simd_f128 x_128 = simd_f128_from_double((double)x);
                     simd_f128 x_re = simd_f128_add(re_min, simd_f128_mul(x_128, re_factor));
 
-                    double iterations =
-                        fd->check_scalar_f128(x_re, y_im, julia_cre, julia_cim, pool.max_iterations);
+                    double iterations = fd->check_scalar_f128(x_re, y_im, julia_cre, julia_cim,
+                                                              pool.max_iterations);
 
                     if (iterations >= pool.max_iterations || !lut) {
                         pool.pixels[y * (pitch_words) + x] = 0xFF000000;
@@ -287,8 +289,8 @@ static void process_rows(void) {
                         v_colors = _mm256_and_si256(v_colors, v_mask);
 
 #if defined(__EMSCRIPTEN__)
-                        __m256i r =
-                            _mm256_and_si256(_mm256_srli_epi32(v_colors, 16), _mm256_set1_epi32(0xFF));
+                        __m256i r = _mm256_and_si256(_mm256_srli_epi32(v_colors, 16),
+                                                     _mm256_set1_epi32(0xFF));
                         __m256i b = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF));
                         __m256i g_alpha = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF00FF00));
                         v_colors =
@@ -342,7 +344,8 @@ static void process_rows(void) {
                         v_colors = _mm_and_si128(v_colors, v_mask);
 
 #if defined(__EMSCRIPTEN__)
-                        __m128i r = _mm_and_si128(_mm_srli_epi32(v_colors, 16), _mm_set1_epi32(0xFF));
+                        __m128i r =
+                            _mm_and_si128(_mm_srli_epi32(v_colors, 16), _mm_set1_epi32(0xFF));
                         __m128i b = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF));
                         __m128i g_alpha = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF00FF00));
                         v_colors = _mm_or_si128(_mm_or_si128(g_alpha, _mm_slli_epi32(b, 16)), r);
@@ -418,6 +421,7 @@ static void process_rows(void) {
     }
 }
 
+#if !defined(__EMSCRIPTEN__)
 // persistent worker thread — parks between frames, wakes on broadcast
 static void* worker_thread(void* arg) {
     (void)arg;
@@ -442,6 +446,7 @@ static void* worker_thread(void* arg) {
         if (++pool.threads_idle == pool.thread_count) pthread_cond_signal(&pool.work_done);
     }
 }
+#endif
 
 void init_renderer(int max_iterations, int palette_idx) {
     if (actual_thread_count == 0) {
