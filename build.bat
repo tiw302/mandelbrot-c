@@ -147,6 +147,7 @@ if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Running tests...
 ctest --test-dir build_test -C Release --output-on-failure
+set BUILD_EXIT_CODE=%errorlevel%
 echo ====================================================================================
 echo  tests complete!
 echo ====================================================================================
@@ -206,4 +207,5 @@ goto end
 
 :end
 if "%~1"=="" goto menu
-exit /b 0
+if "%BUILD_EXIT_CODE%"=="" set BUILD_EXIT_CODE=0
+exit /b %BUILD_EXIT_CODE%
