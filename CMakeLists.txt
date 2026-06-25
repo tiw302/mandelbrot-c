@@ -7,6 +7,13 @@ set(CMAKE_C_STANDARD_REQUIRED ON)
 # ensure consistent optimization flags without breaking 128-bit strict IEEE754 math
 add_compile_options(-O3 -fno-math-errno -fno-signed-zeros -fno-trapping-math)
 
+# strict compiler warnings
+if(MSVC)
+    add_compile_options(/W4 /WX)
+else()
+    add_compile_options(-Wall -Wextra -Werror -Wpedantic -Wno-unused-parameter -Wno-overlength-strings -Wno-unused-const-variable -Wno-unused-variable)
+endif()
+
 # --- build options ---
 option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
 option(BUILD_GPU     "Build GPU-Engine (Desktop)"       OFF)
@@ -34,13 +41,14 @@ else()
 endif()
 
 # include paths
-include_directories(src/core src/engine src/app include third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128 third_party/cjsonx)
+include_directories(src/core src/engine src/app include)
+include_directories(SYSTEM third_party third_party/sokol third_party/stb third_party/fons third_party/simd-f128 third_party/cjsonx)
 
 # common core math
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/burning_ship.c src/core/color.c src/core/fractal.c)
 
 # common engine
-set(ENGINE_SRC src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/ini_config.c src/engine/cjsonx_impl.c src/engine/camera.c)
+set(ENGINE_SRC src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/ini_config.c src/engine/cjsonx_impl.c src/engine/camera.c src/engine/app_state.c)
 
 # helper for system libs
 macro(find_system_libs target)
