@@ -32,6 +32,16 @@ def kill_port_owner(port):
         pass
 
 class Handler(http.server.SimpleHTTPRequestHandler):
+    # override extensions map to guarantee correct mime types across all platforms
+    extensions_map = http.server.SimpleHTTPRequestHandler.extensions_map.copy()
+    extensions_map.update({
+        '.wasm': 'application/wasm',
+        '.js': 'application/javascript',
+        '.css': 'text/css',
+        '.html': 'text/html',
+        '.svg': 'image/svg+xml',
+    })
+
     def __init__(self, *args, **kwargs):
         super().__init__(*args, directory=DIRECTORY, **kwargs)
 
