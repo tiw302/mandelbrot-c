@@ -376,14 +376,14 @@ static void frame(void) {
         sg_apply_pipeline(ctx.pip_gpu);
         // calculate uniform parameters
         precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
-        precise_float rmin = ctx.core.cam.view.center_re - ctx.core.cam.view.zoom * aspect / 2.0;
-        precise_float im_bot = ctx.core.cam.view.center_im - ctx.core.cam.view.zoom / 2.0;
+        precise_float center_re = ctx.core.cam.view.center_re;
+        precise_float center_im = ctx.core.cam.view.center_im;
 
         params_t params = {0};
-        params.center_hi[0] = (float)rmin;
-        params.center_lo[0] = (float)(rmin - (precise_float)params.center_hi[0]);
-        params.center_hi[1] = (float)im_bot;
-        params.center_lo[1] = (float)(im_bot - (precise_float)params.center_hi[1]);
+        params.center_hi[0] = (float)center_re;
+        params.center_lo[0] = (float)(center_re - (precise_float)params.center_hi[0]);
+        params.center_hi[1] = (float)center_im;
+        params.center_lo[1] = (float)(center_im - (precise_float)params.center_hi[1]);
         params.julia_c_hi[0] = (float)ctx.core.julia_c.re;
         params.julia_c_lo[0] = (float)(ctx.core.julia_c.re - (precise_float)params.julia_c_hi[0]);
         params.julia_c_hi[1] = (float)ctx.core.julia_c.im;
