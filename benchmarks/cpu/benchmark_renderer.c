@@ -1,5 +1,5 @@
-// enchmark_renderer.c — measures multi-threaded renderer performance.
-// ests thread pool load balancing and pixel memory write throughput.
+// benchmark_renderer.c — measures multi-threaded renderer performance.
+// tests thread pool load balancing and pixel memory write throughput.
 
 #include <stdint.h>
 #include <stdio.h>
