@@ -4,8 +4,8 @@
 # optimized with parallel builds and consistent naming
 
 build_cpu() {
-    cmake -S . -B build_cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build_cpu --parallel
+    cmake -S . -B build_cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
+    cmake --build build_cpu --parallel || return $?
     echo ""
     echo "===================================================================================="
     echo " build complete! to run cpu engine:"
@@ -15,8 +15,8 @@ build_cpu() {
 }
 
 build_gpu() {
-    cmake -S . -B build_gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build_gpu --parallel
+    cmake -S . -B build_gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
+    cmake --build build_gpu --parallel || return $?
     echo ""
     echo "===================================================================================="
     echo " build complete! to run gpu engine:"
@@ -28,10 +28,10 @@ build_gpu() {
 build_web() {
     if ! command -v emcmake &> /dev/null; then
         echo "error: emscripten not found. please install emsdk."
-        exit 1
+        return 1
     fi
-    emcmake cmake -S . -B build_web -DBUILD_WEB=ON
-    cmake --build build_web --parallel
+    emcmake cmake -S . -B build_web -DBUILD_WEB=ON || return $?
+    cmake --build build_web --parallel || return $?
     mkdir -p deploy
     cp web/index.html deploy/
     cp web/style.css deploy/
@@ -53,8 +53,8 @@ build_web() {
 build_deep() {
     echo "note: deep zoom engine (perturbation theory) is currently under development"
     echo "      and not yet functional. requires libgmp development headers."
-    cmake -S . -B build_deep -DBUILD_DEEP=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build_deep --parallel
+    cmake -S . -B build_deep -DBUILD_DEEP=ON -DCMAKE_BUILD_TYPE=Release || return $?
+    cmake --build build_deep --parallel || return $?
     echo ""
     echo "===================================================================================="
     echo " build complete! to run deep zoom engine:"
@@ -64,26 +64,28 @@ build_deep() {
 }
 
 run_tests() {
-    cmake -S . -B build_test -DBUILD_CPU=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build_test --parallel
+    cmake -S . -B build_test -DBUILD_CPU=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release || return $?
+    cmake --build build_test --parallel || return $?
     echo ""
     echo "Running tests..."
     ctest --test-dir build_test --output-on-failure
+    local test_status=$?
     echo "===================================================================================="
     echo " tests complete!"
     echo "===================================================================================="
     echo " "
+    return $test_status
 }
 
 run_benchmarks() {
-    cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
-    cmake --build build_bench --parallel
+    cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
+    cmake --build build_bench --parallel || return $?
     echo ""
     echo "Running math benchmark..."
-    ./build_bench/benchmarks/benchmark_math
+    ./build_bench/benchmarks/benchmark_math || return $?
     echo ""
     echo "Running renderer benchmark..."
-    ./build_bench/benchmarks/benchmark_renderer
+    ./build_bench/benchmarks/benchmark_renderer || return $?
     echo ""
     echo "===================================================================================="
     echo " benchmarks complete!"
@@ -110,9 +112,12 @@ if [ $# -gt 0 ]; then
         bench) run_benchmarks ;;
         all)   build_all ;;
         clean) clean ;;
-        *)     echo "error: unknown option '$1'. usage: $0 {cpu|gpu|web|deep|test|bench|all|clean}" ;;
+        *)
+            echo "error: unknown option '$1'. usage: $0 {cpu|gpu|web|deep|test|bench|all|clean}"
+            exit 1
+            ;;
     esac
-    exit 0
+    exit $?
 fi
 
 echo "===================================================================================="
