@@ -64,8 +64,8 @@ GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned i
 
 // internal logger callback for sokol diagnostics
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
-                       const char* message_or_null, uint32_t line_nr, const char* filename_or_null,
-                       void* user_data) {
+                      const char* message_or_null, uint32_t line_nr, const char* filename_or_null,
+                      void* user_data) {
     (void)tag;
     (void)log_level;
     (void)log_item_id;
@@ -144,8 +144,8 @@ static void rebuild_texture(void) {
 
 // allocates or resizes persistent capture buffers if window size changes
 static int ensure_capture_buffers(void) {
-    if (ctx.capture_w != ctx.win_w || ctx.capture_h != ctx.win_h ||
-        !ctx.capture_buf || !ctx.flipped_buf) {
+    if (ctx.capture_w != ctx.win_w || ctx.capture_h != ctx.win_h || !ctx.capture_buf ||
+        !ctx.flipped_buf) {
         free(ctx.capture_buf);
         free(ctx.flipped_buf);
         ctx.capture_buf = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * sizeof(uint32_t));
@@ -294,8 +294,8 @@ static void init(void) {
     ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){
         .usage = {.index_buffer = true, .immutable = true}, .data = SG_RANGE(idx)});
 
-    ctx.smp = sg_make_sampler(&(sg_sampler_desc){.min_filter = SG_FILTER_LINEAR,
-                                                 .mag_filter = SG_FILTER_LINEAR});
+    ctx.smp = sg_make_sampler(
+        &(sg_sampler_desc){.min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR});
     ctx.bind.samplers[0] = ctx.smp;
 
     rebuild_texture();
@@ -462,7 +462,8 @@ static void frame(void) {
         }
         snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms",
                  engine_name,
-                 ctx.core.julia_mode ? "Julia" : (ctx.core.burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
+                 ctx.core.julia_mode ? "Julia"
+                                     : (ctx.core.burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
                  get_actual_thread_count(), ctx.core.render_time_ms);
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
@@ -618,10 +619,9 @@ static void handle_keydown(const sapp_event* event) {
             precise_float rmin, rmax, imin, imax;
             app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &imin,
                                            &imax);
-            save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx.core.max_iterations,
-                                 ctx.core.palette_idx,
-                                 ctx.core.julia_mode ? 1 : (ctx.core.burning_ship_mode ? 2 : 0),
-                                 ctx.core.julia_c);
+            save_mega_screenshot(
+                8192, 8192, rmin, rmax, imin, imax, ctx.core.max_iterations, ctx.core.palette_idx,
+                ctx.core.julia_mode ? 1 : (ctx.core.burning_ship_mode ? 2 : 0), ctx.core.julia_c);
             ctx.core.needs_redraw = 1;
         }
     } else if (event->key_code == SAPP_KEYCODE_V) {
