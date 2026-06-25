@@ -12,9 +12,10 @@ if(MSVC)
     add_compile_options(/W4 /WX)
 else()
     add_compile_options(-Wall -Wextra -Werror -Wpedantic -Wno-unused-parameter -Wno-overlength-strings -Wno-unused-const-variable -Wno-unused-variable)
-    # disable clang warnings for nan/infinity under fast-math
+    # disable clang warnings for nan/infinity under fast-math and missing trailing newlines
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
         add_compile_options(-Wno-nan-infinity-disabled)
+        add_compile_options(-Wno-newline-eof)
     endif()
 endif()
 
