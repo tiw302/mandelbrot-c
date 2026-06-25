@@ -37,7 +37,7 @@
 
 // clang-format off
 #if defined(__APPLE__)
-#include <OpenGL/gl.h>
+#include <OpenGL/gl3.h>
 #elif defined(_WIN32)
 #ifndef APIENTRY
 #define APIENTRY __stdcall
