@@ -108,6 +108,11 @@ static void load_palettes_json(void) {
     }
 
     loaded_palettes = (PaletteDef*)malloc(sizeof(PaletteDef) * loaded_palette_count);
+    if (!loaded_palettes) {
+        loaded_palette_count = 0;
+        cjsonx_doc_free(doc);
+        return;
+    }
 
     for (int i = 0; i < loaded_palette_count; i++) {
         cjsonx_val_t p_obj = cjsonx_get_index(root, i);
@@ -127,21 +132,25 @@ static void load_palettes_json(void) {
             loaded_palettes[i].num_stops = cjsonx_size(stops);
             loaded_palettes[i].stops =
                 (ColorStop*)malloc(sizeof(ColorStop) * loaded_palettes[i].num_stops);
-            for (int j = 0; j < loaded_palettes[i].num_stops; j++) {
-                cjsonx_val_t s_obj = cjsonx_get_index(stops, j);
-                cjsonx_val_t pos = cjsonx_get(s_obj, "pos");
-                cjsonx_val_t r = cjsonx_get(s_obj, "r");
-                cjsonx_val_t g = cjsonx_get(s_obj, "g");
-                cjsonx_val_t b = cjsonx_get(s_obj, "b");
+            if (loaded_palettes[i].stops) {
+                for (int j = 0; j < loaded_palettes[i].num_stops; j++) {
+                    cjsonx_val_t s_obj = cjsonx_get_index(stops, j);
+                    cjsonx_val_t pos = cjsonx_get(s_obj, "pos");
+                    cjsonx_val_t r = cjsonx_get(s_obj, "r");
+                    cjsonx_val_t g = cjsonx_get(s_obj, "g");
+                    cjsonx_val_t b = cjsonx_get(s_obj, "b");
 
-                loaded_palettes[i].stops[j].pos =
-                    (cjsonx_get_type(pos) == CJSONX_NUMBER) ? cjsonx_num(pos) : 0.0;
-                loaded_palettes[i].stops[j].r =
-                    (cjsonx_get_type(r) == CJSONX_NUMBER) ? cjsonx_int(r) : 0;
-                loaded_palettes[i].stops[j].g =
-                    (cjsonx_get_type(g) == CJSONX_NUMBER) ? cjsonx_int(g) : 0;
-                loaded_palettes[i].stops[j].b =
-                    (cjsonx_get_type(b) == CJSONX_NUMBER) ? cjsonx_int(b) : 0;
+                    loaded_palettes[i].stops[j].pos =
+                        (cjsonx_get_type(pos) == CJSONX_NUMBER) ? cjsonx_num(pos) : 0.0;
+                    loaded_palettes[i].stops[j].r =
+                        (cjsonx_get_type(r) == CJSONX_NUMBER) ? cjsonx_int(r) : 0;
+                    loaded_palettes[i].stops[j].g =
+                        (cjsonx_get_type(g) == CJSONX_NUMBER) ? cjsonx_int(g) : 0;
+                    loaded_palettes[i].stops[j].b =
+                        (cjsonx_get_type(b) == CJSONX_NUMBER) ? cjsonx_int(b) : 0;
+                }
+            } else {
+                loaded_palettes[i].num_stops = 0;
             }
         } else {
             loaded_palettes[i].num_stops = 0;
@@ -221,7 +230,9 @@ int init_color_palette(int max_iterations, int palette_idx) {
                 } else {
                     ColorStop* s1 = &p->stops[stop_idx];
                     ColorStop* s2 = &p->stops[stop_idx + 1];
-                    double frac = (t - s1->pos) / (s2->pos - s1->pos);
+                    double diff = s2->pos - s1->pos;
+                    /* safeguard against division by zero if positions are duplicate */
+                    double frac = (diff > 0.0) ? (t - s1->pos) / diff : 0.0;
                     r = (uint8_t)(s1->r + frac * (s2->r - s1->r));
                     g = (uint8_t)(s1->g + frac * (s2->g - s1->g));
                     b = (uint8_t)(s1->b + frac * (s2->b - s1->b));
