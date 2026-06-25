@@ -8,6 +8,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
+#include <time.h>
 
 #if defined(__EMSCRIPTEN__)
 #ifndef SOKOL_GLES3
@@ -744,6 +745,7 @@ void wasm_toggle_precision(void) {
 sapp_desc sokol_main(int argc, char* argv[]) {
     (void)argc;
     (void)argv;
+    srand((unsigned)time(NULL));
     return (sapp_desc){.init_cb = init,
                        .frame_cb = frame,
                        .cleanup_cb = cleanup,
