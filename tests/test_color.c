@@ -26,7 +26,7 @@ void test_palette_bounds(void) {
 
     // test across all available palettes to ensure no index out-of-bounds
     // and that rgb values are always clamped between 0 and 255.
-    for (int p = 0; p < PALETTE_COUNT; p++) {
+    for (int p = 0; p < get_palette_count(); p++) {
         init_color_palette(max_iters, p);
 
         // test various iteration values: 0, max, and fractional
