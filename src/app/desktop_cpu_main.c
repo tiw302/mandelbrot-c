@@ -98,10 +98,9 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         precise_float rmin, rmax, imax, imin;
         app_state_calculate_boundaries(&ctx->core, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin,
                                        &imax);
-        save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx->core.max_iterations,
-                             ctx->core.palette_idx,
-                             ctx->core.julia_mode ? 1 : (ctx->core.burning_ship_mode ? 2 : 0),
-                             ctx->core.julia_c);
+        save_mega_screenshot(
+            8192, 8192, rmin, rmax, imin, imax, ctx->core.max_iterations, ctx->core.palette_idx,
+            ctx->core.julia_mode ? 1 : (ctx->core.burning_ship_mode ? 2 : 0), ctx->core.julia_c);
         ctx->core.needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_v) {
         if (is_video_recording())
@@ -256,8 +255,9 @@ static void render_hud(AppCtx* ctx) {
     SDL_RenderFillRect(ctx->renderer, &bg);
 
     const char* engine_type = ctx->cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
-    const char* mode_name =
-        ctx->core.julia_mode ? "Julia" : (ctx->core.burning_ship_mode ? "Burning Ship" : "Mandelbrot");
+    const char* mode_name = ctx->core.julia_mode
+                                ? "Julia"
+                                : (ctx->core.burning_ship_mode ? "Burning Ship" : "Mandelbrot");
 
     snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms", engine_type,
              mode_name, get_actual_thread_count(), ctx->core.render_time_ms);
