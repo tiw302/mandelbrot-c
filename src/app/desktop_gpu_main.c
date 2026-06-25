@@ -13,6 +13,7 @@
 #define FONTSTASH_IMPLEMENTATION
 #define SOKOL_FONTSTASH_IMPL
 
+#include "app_state.h"
 #include "bookmark.h"
 #include "camera.h"
 #include "color.h"
@@ -63,8 +64,8 @@ GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned i
 
 // internal logger callback for sokol diagnostics
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
-                      const char* message_or_null, uint32_t line_nr, const char* filename_or_null,
-                      void* user_data) {
+                       const char* message_or_null, uint32_t line_nr, const char* filename_or_null,
+                       void* user_data) {
     (void)tag;
     (void)log_level;
     (void)log_item_id;
@@ -85,12 +86,6 @@ typedef struct {
     float fractal_type, palette, high_precision;
 } params_t;
 
-// navigation state to restore when toggling modes
-typedef struct {
-    ViewState mandelbrot_view;
-    int active;
-} JuliaSession;
-
 // application global context
 typedef struct {
     // sokol gfx resources
@@ -104,26 +99,18 @@ typedef struct {
     uint32_t* pixels;  // staging buffer for cpu-mode texture uploads
     int win_w, win_h;
 
-    // navigation state
-    Camera cam;
+    // persistent buffers for video frame and screenshot capture
+    uint32_t* capture_buf;
+    uint32_t* flipped_buf;
+    int capture_w, capture_h;
 
-    // runtime mode flags
-    TourState m_tour;
-    JuliaTourState j_tour;
-    int julia_mode, gpu_mode, high_precision_mode, burning_ship_mode;
+    // common application state
+    AppCommonState core;
+
+    // gpu specific modes
+    int gpu_mode, high_precision_mode;
     int cpu_precision_128;
-    complex_t julia_c;
-    JuliaSession julia_session;
-
-    // renderer parameters
-    int max_iterations, palette_idx;
-
-    // bookmark tracking
-    int current_bookmark_idx;
-    int needs_redraw;
     int screenshot_requested;
-
-    uint32_t render_time_ms;
 
     // debug ui and text rendering
     sgl_pipeline pip_blend;
@@ -133,12 +120,20 @@ typedef struct {
 
 static GlobalCtx ctx;
 
+// callback to update the sokol window title
+static void set_window_title_cb(const char* title) {
+    sapp_set_window_title(title);
+}
+
 // re-allocates backend texture and staging buffer on window resize
 static void rebuild_texture(void) {
     if (ctx.img.id) sg_destroy_view(ctx.img_view);
     if (ctx.img.id) sg_destroy_image(ctx.img);
     free(ctx.pixels);
     ctx.pixels = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
+    if (!ctx.pixels) {
+        fprintf(stderr, "error: failed to allocate CPU staging buffer\n");
+    }
     ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w,
                                              .height = ctx.win_h,
                                              .pixel_format = SG_PIXELFORMAT_RGBA8,
@@ -147,17 +142,31 @@ static void rebuild_texture(void) {
     ctx.bind.views[0] = ctx.img_view;
 }
 
-// transforms current mouse coordinates to the complex plane
-static double mouse_re(void) {
-    precise_float re, im;
-    camera_screen_to_complex(&ctx.cam, ctx.cam.mouse_x, ctx.cam.mouse_y, &re, &im);
-    return (double)re;
+// allocates or resizes persistent capture buffers if window size changes
+static int ensure_capture_buffers(void) {
+    if (ctx.capture_w != ctx.win_w || ctx.capture_h != ctx.win_h ||
+        !ctx.capture_buf || !ctx.flipped_buf) {
+        free(ctx.capture_buf);
+        free(ctx.flipped_buf);
+        ctx.capture_buf = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * sizeof(uint32_t));
+        ctx.flipped_buf = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * sizeof(uint32_t));
+        if (!ctx.capture_buf || !ctx.flipped_buf) {
+            fprintf(stderr, "error: failed to allocate capture buffers\n");
+            free(ctx.capture_buf);
+            free(ctx.flipped_buf);
+            ctx.capture_buf = NULL;
+            ctx.flipped_buf = NULL;
+            ctx.capture_w = 0;
+            ctx.capture_h = 0;
+            return 0;
+        }
+        ctx.capture_w = ctx.win_w;
+        ctx.capture_h = ctx.win_h;
+    }
+    return 1;
 }
-static double mouse_im(void) {
-    precise_float re, im;
-    camera_screen_to_complex(&ctx.cam, ctx.cam.mouse_x, ctx.cam.mouse_y, &re, &im);
-    return (double)im;
-}
+
+// screen coordinate conversion is handled by app_state
 
 static char* read_shader_file(const char* path) {
     FILE* f = fopen(path, "rb");
@@ -185,7 +194,6 @@ static void reload_shaders(void) {
     char* vs_src = read_shader_file("shaders/desktop_gpu_vs.glsl");
     char* fs_cpu_src = read_shader_file("shaders/desktop_gpu_fs_cpu.glsl");
     char* fs_gpu_src = read_shader_file("shaders/desktop_gpu_fs_gpu.glsl");
-
     const char* vs_ptr = vs_src ? vs_src : dg_vs;
     const char* fs_cpu_ptr = fs_cpu_src ? fs_cpu_src : dg_fs_cpu;
     const char* fs_gpu_ptr = fs_gpu_src ? fs_gpu_src : dg_fs_gpu;
@@ -261,21 +269,39 @@ static void reload_shaders(void) {
     printf("shaders loaded/reloaded successfully.\n");
 }
 
-// initializes graphics API, shaders, and application state
+// initialization callback
 static void init(void) {
+    // initialize backend graphics APIs
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
+    sgl_desc_t sgl_desc = {0};
+    sgl_setup(&sgl_desc);
     stm_setup();
-    sgl_setup(&(sgl_desc_t){.logger.func = slog_func});
 
-    // setup blending for translucent hud elements
-    ctx.pip_blend = sgl_make_pipeline(
-        &(sg_pipeline_desc){.colors[0].blend = {
-                                .enabled = true,
-                                .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
-                                .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
-                            }});
+    ctx.win_w = sapp_width();
+    ctx.win_h = sapp_height();
 
-    // bootstrap font system for hud overlays
+    // shared context state
+    app_state_init(&ctx.core, ctx.win_w, ctx.win_h);
+    ctx.gpu_mode = 1;
+    ctx.high_precision_mode = 1;
+    ctx.cpu_precision_128 = 0;
+    ctx.screenshot_requested = 0;
+
+    // full-screen quad for fractal rendering
+    float verts[] = {-1, 1, 0, 0, 1, 1, 1, 0, 1, -1, 1, 1, -1, -1, 0, 1};
+    ctx.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){.data = SG_RANGE(verts)});
+    uint16_t idx[] = {0, 1, 2, 0, 2, 3};
+    ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){
+        .usage = {.index_buffer = true, .immutable = true}, .data = SG_RANGE(idx)});
+
+    ctx.smp = sg_make_sampler(&(sg_sampler_desc){.min_filter = SG_FILTER_LINEAR,
+                                                 .mag_filter = SG_FILTER_LINEAR});
+    ctx.bind.samplers[0] = ctx.smp;
+
+    rebuild_texture();
+    reload_shaders();
+
+    // setup fontstash for text rendering
     ctx.fons = sfons_create(&(sfons_desc_t){.width = 512, .height = 512});
     const char* font_paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2,
                                 FONT_PATH_3,     FONT_PATH_4, NULL};
@@ -285,94 +311,44 @@ static void init(void) {
         if (ctx.font_id != FONS_INVALID) break;
     }
 
-    ctx.win_w = sapp_width();
-    ctx.win_h = sapp_height();
+    ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
+        .colors[0].blend = {.enabled = true,
+                            .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
+                            .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA}});
 
-    // full-screen quad for fractal rendering
-    float verts[] = {-1, 1, 0, 0, 1, 1, 1, 0, 1, -1, 1, 1, -1, -1, 0, 1};
-    ctx.bind.vertex_buffers[0] = sg_make_buffer(&(sg_buffer_desc){.data = SG_RANGE(verts)});
-    uint16_t idx[] = {0, 1, 2, 0, 2, 3};
-    ctx.bind.index_buffer = sg_make_buffer(&(sg_buffer_desc){
-        .usage = {.index_buffer = true, .immutable = true}, .data = SG_RANGE(idx)});
-
-    ctx.smp = sg_make_sampler(
-        &(sg_sampler_desc){.min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR});
-    ctx.bind.samplers[0] = ctx.smp;
-    rebuild_texture();
-
-    reload_shaders();
-
-    ctx.pass_action = (sg_pass_action){
-        .colors[0] = {.load_action = SG_LOADACTION_CLEAR, .clear_value = {0, 0, 0, 1}}};
-
-    // application state init
-    camera_init(&ctx.cam, ctx.win_w, ctx.win_h);
-    ctx.julia_c = (complex_t){-0.7, 0.27};
-    ctx.max_iterations = get_config_default_iterations();
-    ctx.palette_idx = get_config_default_palette();
-    ctx.gpu_mode = 1;
-    ctx.cpu_precision_128 = 0;
-    ctx.m_tour = (TourState){TOUR_IDLE, 0, 0, 0, 0, 0, 0, 0, -1};
-    ctx.j_tour = (JuliaTourState){JULIA_TOUR_IDLE, 0, 0, 0, 0, 0, -1};
     init_fractal_registry();
-    init_renderer(ctx.max_iterations, ctx.palette_idx);
-    set_cpu_precision(ctx.cpu_precision_128);
-    ctx.needs_redraw = 1;
-
-    srand((unsigned)time(NULL));
-
-    puts("mandelbrot explorer");
-    puts("  left drag   : zoom selection   | right drag  : pan");
-    puts("  scroll      : zoom at cursor   | ctrl+z      : undo");
-    puts("  up/down     : iterations       | shift+up/dn : x100");
-    puts("  p           : cycle palette    | r           : reset");
-    puts("  e           : toggle precision (64/128-bit)");
-    puts("  j           : julia mode       | t           : tour");
-    puts("  b           : burning ship     | s           : screenshot");
-    puts("  m           : save bookmark    | l           : load bookmark");
-    puts("  x           : mega screenshot  | v           : record video");
-    puts("  [ / ]       : scale threads    | f5          : reload shaders");
-    puts("  q / esc     : quit");
+    init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
 }
 
-// logic and rendering dispatched once per frame
+// frame rendering callback
 static void frame(void) {
     uint32_t now = (uint32_t)stm_ms(stm_now());
 
     // step animation state machines
-    if (ctx.m_tour.phase != TOUR_IDLE) {
-        update_tour(&ctx.m_tour, &ctx.cam.view, now, ctx.burning_ship_mode);
-        ctx.needs_redraw = 1;
-    }
-    if (ctx.j_tour.phase != JULIA_TOUR_IDLE) {
-        update_julia_tour(&ctx.j_tour, &ctx.julia_c, now);
-        ctx.needs_redraw = 1;
-    }
+    app_state_update_tours(&ctx.core, now, set_window_title_cb);
 
     // force redraw to maintain steady frame pacing during video export
     if (is_video_recording()) {
-        ctx.needs_redraw = 1;
+        ctx.core.needs_redraw = 1;
     }
 
     // fallback: execute multi-threaded cpu render if gpu path is disabled
-    if (!ctx.gpu_mode && ctx.needs_redraw) {
+    if (!ctx.gpu_mode && ctx.core.needs_redraw && ctx.pixels) {
         set_cpu_precision(ctx.cpu_precision_128);
-        precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
-        precise_float rmin = ctx.cam.view.center_re - ctx.cam.view.zoom * aspect / 2.0;
-        precise_float rmax = ctx.cam.view.center_re + ctx.cam.view.zoom * aspect / 2.0;
-        precise_float im_top = ctx.cam.view.center_im + ctx.cam.view.zoom / 2.0;
-        precise_float im_bot = ctx.cam.view.center_im - ctx.cam.view.zoom / 2.0;
+        precise_float rmin, rmax, im_top, im_bot;
+        app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &im_bot,
+                                       &im_top);
         uint32_t t0 = (uint32_t)stm_ms(stm_now());
-        if (ctx.julia_mode)
+        if (ctx.core.julia_mode)
             render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                  im_top, im_bot, ctx.julia_c, ctx.max_iterations);
-        else if (ctx.burning_ship_mode)
+                                  im_top, im_bot, ctx.core.julia_c, ctx.core.max_iterations);
+        else if (ctx.core.burning_ship_mode)
             render_burning_ship_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
-                                         rmax, im_top, im_bot, ctx.max_iterations);
+                                         rmax, im_top, im_bot, ctx.core.max_iterations);
         else
             render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                       im_top, im_bot, ctx.max_iterations);
-        ctx.render_time_ms = (uint32_t)stm_ms(stm_now()) - t0;
+                                       im_top, im_bot, ctx.core.max_iterations);
+        ctx.core.render_time_ms = (uint32_t)stm_ms(stm_now()) - t0;
         // swap red and blue channels for sokol sg_pixelformat_rgba8 texture upload
         int pixel_count = ctx.win_w * ctx.win_h;
         for (int i = 0; i < pixel_count; i++) {
@@ -385,7 +361,7 @@ static void frame(void) {
         sg_update_image(ctx.img, &(sg_image_data){
                                      .mip_levels[0] = {.ptr = ctx.pixels,
                                                        .size = (size_t)ctx.win_w * ctx.win_h * 4}});
-        ctx.needs_redraw = 0;
+        ctx.core.needs_redraw = 0;
     }
 
     // background orchestration (drawing the fractal)
@@ -394,76 +370,79 @@ static void frame(void) {
     sgl_matrix_mode_projection();
     sgl_ortho(0.0f, (float)ctx.win_w, (float)ctx.win_h, 0.0f, -1.0f, 1.0f);
 
-    // render interactive zoom box
-    if (ctx.cam.is_zooming && ctx.cam.zoom_rect.w != 0 && ctx.cam.zoom_rect.h != 0) {
-        float x1 = (float)ctx.cam.zoom_rect.x;
-        float y1 = (float)ctx.cam.zoom_rect.y;
-        float x2 = (float)(ctx.cam.zoom_rect.x + ctx.cam.zoom_rect.w);
-        float y2 = (float)(ctx.cam.zoom_rect.y + ctx.cam.zoom_rect.h);
+    sg_begin_pass(&(sg_pass){.action = ctx.pass_action, .swapchain = sglue_swapchain()});
+
+    if (ctx.gpu_mode) {
+        sg_apply_pipeline(ctx.pip_gpu);
+        // calculate uniform parameters
+        precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
+        precise_float rmin = ctx.core.cam.view.center_re - ctx.core.cam.view.zoom * aspect / 2.0;
+        precise_float im_bot = ctx.core.cam.view.center_im - ctx.core.cam.view.zoom / 2.0;
+
+        params_t params = {0};
+        params.center_hi[0] = (float)rmin;
+        params.center_lo[0] = (float)(rmin - (precise_float)params.center_hi[0]);
+        params.center_hi[1] = (float)im_bot;
+        params.center_lo[1] = (float)(im_bot - (precise_float)params.center_hi[1]);
+        params.julia_c_hi[0] = (float)ctx.core.julia_c.re;
+        params.julia_c_lo[0] = (float)(ctx.core.julia_c.re - (precise_float)params.julia_c_hi[0]);
+        params.julia_c_hi[1] = (float)ctx.core.julia_c.im;
+        params.julia_c_lo[1] = (float)(ctx.core.julia_c.im - (precise_float)params.julia_c_hi[1]);
+        params.zoom = (float)ctx.core.cam.view.zoom;
+        params.iters = (float)ctx.core.max_iterations;
+        params.aspect = (float)aspect;
+        params.fractal_type =
+            (float)(ctx.core.julia_mode ? 1 : (ctx.core.burning_ship_mode ? 2 : 0));
+        params.palette = (float)ctx.core.palette_idx;
+        params.high_precision = (float)ctx.high_precision_mode;
+
+        sg_apply_uniforms(0, &SG_RANGE(params));
+    } else {
+        sg_apply_pipeline(ctx.pip_cpu);
+    }
+    sg_apply_bindings(&ctx.bind);
+    sg_draw(0, 6, 1);
+
+    // render interactive components using sokol_gl
+    if (ctx.core.cam.is_zooming) {
+        sgl_load_pipeline(ctx.pip_blend);
         sgl_begin_lines();
-        sgl_c3b(255, 255, 0);
+        sgl_c4b(255, 255, 0, 255);
+        float x0 = (float)ctx.core.cam.zoom_rect.x;
+        float y0 = (float)ctx.core.cam.zoom_rect.y;
+        float x1 = x0 + (float)ctx.core.cam.zoom_rect.w;
+        float y1 = y0 + (float)ctx.core.cam.zoom_rect.h;
+        // draw bounds
+        sgl_v2f(x0, y0);
+        sgl_v2f(x1, y0);
+        sgl_v2f(x1, y0);
         sgl_v2f(x1, y1);
-        sgl_v2f(x2, y1);
-        sgl_v2f(x2, y1);
-        sgl_v2f(x2, y2);
-        sgl_v2f(x2, y2);
-        sgl_v2f(x1, y2);
-        sgl_v2f(x1, y2);
         sgl_v2f(x1, y1);
+        sgl_v2f(x0, y1);
+        sgl_v2f(x0, y1);
+        sgl_v2f(x0, y0);
         sgl_end();
     }
-    sgl_load_default_pipeline();
 
-    // main rendering pass
-    sg_begin_pass(&(sg_pass){.action = ctx.pass_action, .swapchain = sglue_swapchain()});
-    sg_pipeline cur = ctx.gpu_mode ? ctx.pip_gpu : ctx.pip_cpu;
-    if (sg_query_pipeline_state(cur) == SG_RESOURCESTATE_VALID) {
-        sg_apply_pipeline(cur);
-        sg_apply_bindings(&ctx.bind);
-        // build uniform data for gpu path
-        if (ctx.gpu_mode) {
-            float chi_re = (float)ctx.cam.view.center_re;
-            float chi_im = (float)ctx.cam.view.center_im;
-            float jc_re = (float)ctx.julia_c.re;
-            float jc_im = (float)ctx.julia_c.im;
-            params_t p = {
-                // hi-lo split for simulated 64-bit precision
-                .center_hi = {chi_re, chi_im},
-                .center_lo = {(float)(ctx.cam.view.center_re - chi_re),
-                              (float)(ctx.cam.view.center_im - chi_im)},
-                .julia_c_hi = {jc_re, jc_im},
-                .julia_c_lo = {(float)(ctx.julia_c.re - jc_re), (float)(ctx.julia_c.im - jc_im)},
-                .zoom = (float)ctx.cam.view.zoom,
-                .iters = (float)ctx.max_iterations,
-                .aspect = (float)ctx.win_w / ctx.win_h,
-                .fractal_type = ctx.julia_mode ? 1.0f : (ctx.burning_ship_mode ? 2.0f : 0.0f),
-                .palette = (float)ctx.palette_idx,
-                .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f};
-            sg_apply_uniforms(0, &SG_RANGE(p));
-        }
-        sg_draw(0, 6, 1);
-    }
+    // render heads-up telemetry display
+    if (DEBUG_INFO && ctx.font_id != FONS_INVALID) {
+        sgl_load_pipeline(ctx.pip_blend);
+        sgl_begin_quads();
+        float visual_font_size = FONT_SIZE;
+        float lh = visual_font_size + 6.0f;
+        float bg_h = 3.0f * lh + 20.0f;
+        if (ctx.core.m_tour.phase != TOUR_IDLE) bg_h += lh;
+        float bg_w = 700.0f;
 
-    // hud compositing
-    sgl_load_pipeline(ctx.pip_blend);
-    int num_lines = 3;
-    if (ctx.m_tour.phase != TOUR_IDLE) num_lines++;
-    if (ctx.j_tour.phase != JULIA_TOUR_IDLE) num_lines++;
+        sgl_c4b(20, 20, 25, 220);  // semi-transparent backdrop
+        sgl_v2f(5.0f, 5.0f);
+        sgl_v2f(bg_w, 5.0f);
+        sgl_v2f(bg_w, bg_h);
+        sgl_v2f(5.0f, bg_h);
+        sgl_v2f(5.0f, 5.0f);
+        sgl_end();
 
-    float visual_font_size = FONT_SIZE * 1.26f;
-    float lh = visual_font_size + 6.0f;
-    float bg_w = 780.0f;
-    float bg_h = num_lines * lh + 20.0f;
-    sgl_begin_quads();
-    sgl_c4b(20, 20, 25, 220);  // semi-transparent backdrop
-    sgl_v2f(5.0f, 5.0f);
-    sgl_v2f(bg_w, 5.0f);
-    sgl_v2f(bg_w, bg_h);
-    sgl_v2f(5.0f, bg_h);
-    sgl_end();
-
-    // render text telemetry using fontstash
-    if (ctx.font_id != FONS_INVALID) {
+        // render text telemetry using fontstash
         fonsClearState(ctx.fons);
         fonsSetFont(ctx.fons, ctx.font_id);
         fonsSetSize(ctx.fons, visual_font_size);
@@ -483,37 +462,37 @@ static void frame(void) {
         }
         snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms",
                  engine_name,
-                 ctx.julia_mode ? "Julia" : (ctx.burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
-                 get_actual_thread_count(), ctx.render_time_ms);
+                 ctx.core.julia_mode ? "Julia" : (ctx.core.burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
+                 get_actual_thread_count(), ctx.core.render_time_ms);
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
         // telemetry line 2
-        if (ctx.julia_mode) {
-            snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx.julia_c.re,
-                     ctx.julia_c.im);
+        if (ctx.core.julia_mode) {
+            snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx.core.julia_c.re,
+                     ctx.core.julia_c.im);
         } else {
-            snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)", ctx.cam.view.center_re,
-                     ctx.cam.view.center_im);
+            snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)",
+                     (double)ctx.core.cam.view.center_re, (double)ctx.core.cam.view.center_im);
         }
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
         // telemetry line 3
         snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s",
-                 ctx.cam.view.zoom, ctx.max_iterations,
-                 get_palette_name(ctx.palette_idx % get_palette_count()));
+                 (double)ctx.core.cam.view.zoom, ctx.core.max_iterations,
+                 get_palette_name(ctx.core.palette_idx % get_palette_count()));
         fonsDrawText(ctx.fons, x, y, buf, NULL);
         y += lh;
 
         // tour telemetry
-        if (ctx.m_tour.phase != TOUR_IDLE) {
-            int t_idx = get_tour_target_idx(&ctx.m_tour);
-            int t_tot = get_num_tour_targets(ctx.burning_ship_mode);
-            double t_re = get_tour_target_re(&ctx.m_tour, ctx.burning_ship_mode);
-            double t_im = get_tour_target_im(&ctx.m_tour, ctx.burning_ship_mode);
+        if (ctx.core.m_tour.phase != TOUR_IDLE) {
+            int t_idx = get_tour_target_idx(&ctx.core.m_tour);
+            int t_tot = get_num_tour_targets(ctx.core.burning_ship_mode);
+            double t_re = get_tour_target_re(&ctx.core.m_tour, ctx.core.burning_ship_mode);
+            double t_im = get_tour_target_im(&ctx.core.m_tour, ctx.core.burning_ship_mode);
             snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d/%d (%.4f, %.4f)",
-                     get_tour_phase_name(ctx.m_tour.phase), t_idx + 1, t_tot, t_re, t_im);
+                     get_tour_phase_name(ctx.core.m_tour.phase), t_idx + 1, t_tot, t_re, t_im);
             fonsDrawText(ctx.fons, x, y, buf, NULL);
             y += lh;
         }
@@ -524,55 +503,32 @@ static void frame(void) {
     sgl_draw();
 
     // capture video frame or screenshot if requested
-    if (is_video_recording()) {
-        uint32_t* ss = malloc((size_t)ctx.win_w * ctx.win_h * 4);
-        if (ss) {
-            glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ss);
-            uint32_t* flipped = malloc((size_t)ctx.win_w * ctx.win_h * 4);
-            if (flipped) {
-                for (int y = 0; y < ctx.win_h; y++) {
-                    int src_y = ctx.win_h - 1 - y;
-                    for (int x = 0; x < ctx.win_w; x++) {
-                        uint32_t p = ss[src_y * ctx.win_w + x];
-                        uint8_t r = (p >> 0) & 0xFF;
-                        uint8_t g = (p >> 8) & 0xFF;
-                        uint8_t b = (p >> 16) & 0xFF;
-                        uint8_t a = (p >> 24) & 0xFF;
-                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) |
-                                                     ((uint32_t)r << 16) | ((uint32_t)a << 24);
-                    }
+    if (is_video_recording() || ctx.screenshot_requested) {
+        if (ensure_capture_buffers()) {
+            glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ctx.capture_buf);
+            for (int y = 0; y < ctx.win_h; y++) {
+                int src_y = ctx.win_h - 1 - y;
+                for (int x = 0; x < ctx.win_w; x++) {
+                    uint32_t p = ctx.capture_buf[src_y * ctx.win_w + x];
+                    uint8_t r = (p >> 0) & 0xFF;
+                    uint8_t g = (p >> 8) & 0xFF;
+                    uint8_t b = (p >> 16) & 0xFF;
+                    uint8_t a = (p >> 24) & 0xFF;
+                    ctx.flipped_buf[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) |
+                                                         ((uint32_t)r << 16) | ((uint32_t)a << 24);
                 }
-                append_video_frame(flipped, ctx.win_w, ctx.win_h);
-                free(flipped);
             }
-            free(ss);
-        }
-    }
-
-    if (ctx.screenshot_requested) {
-        uint32_t* ss = malloc((size_t)ctx.win_w * ctx.win_h * 4);
-        if (ss) {
-            glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ss);
-            uint32_t* flipped = malloc((size_t)ctx.win_w * ctx.win_h * 4);
-            if (flipped) {
-                for (int y = 0; y < ctx.win_h; y++) {
-                    int src_y = ctx.win_h - 1 - y;
-                    for (int x = 0; x < ctx.win_w; x++) {
-                        uint32_t p = ss[src_y * ctx.win_w + x];
-                        uint8_t r = (p >> 0) & 0xFF;
-                        uint8_t g = (p >> 8) & 0xFF;
-                        uint8_t b = (p >> 16) & 0xFF;
-                        uint8_t a = (p >> 24) & 0xFF;
-                        flipped[y * ctx.win_w + x] = (uint32_t)b | ((uint32_t)g << 8) |
-                                                     ((uint32_t)r << 16) | ((uint32_t)a << 24);
-                    }
-                }
-                save_screenshot(flipped, ctx.win_w, ctx.win_h);
-                free(flipped);
+            if (is_video_recording()) {
+                append_video_frame(ctx.flipped_buf, ctx.win_w, ctx.win_h);
             }
-            free(ss);
+            if (ctx.screenshot_requested) {
+                save_screenshot(ctx.flipped_buf, ctx.win_w, ctx.win_h);
+                ctx.screenshot_requested = 0;
+            }
+        } else {
+            // make sure we don't spin forever trying to take a screenshot if allocation fails
+            ctx.screenshot_requested = 0;
         }
-        ctx.screenshot_requested = 0;
     }
 
     sg_end_pass();
@@ -582,32 +538,32 @@ static void frame(void) {
 static void handle_mouse(const sapp_event* event) {
     switch (event->type) {
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
-            camera_handle_wheel(&ctx.cam, (double)event->scroll_y, ctx.cam.mouse_x,
-                                ctx.cam.mouse_y);
-            ctx.needs_redraw = 1;
+            camera_handle_wheel(&ctx.core.cam, (double)event->scroll_y, ctx.core.cam.mouse_x,
+                                ctx.core.cam.mouse_y);
+            ctx.core.needs_redraw = 1;
             break;
 
         case SAPP_EVENTTYPE_MOUSE_DOWN: {
             int btn = (event->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
-            camera_handle_mouse_down(&ctx.cam, btn, (int)event->mouse_x, (int)event->mouse_y);
+            camera_handle_mouse_down(&ctx.core.cam, btn, (int)event->mouse_x, (int)event->mouse_y);
             break;
         }
 
         case SAPP_EVENTTYPE_MOUSE_MOVE:
-            camera_handle_mouse_motion(&ctx.cam, (int)event->mouse_x, (int)event->mouse_y);
-            if (ctx.cam.is_panning) {
-                ctx.needs_redraw = 1;
-            } else if (ctx.julia_mode && !ctx.cam.is_zooming) {
-                ctx.julia_c.re = mouse_re();
-                ctx.julia_c.im = mouse_im();
-                ctx.needs_redraw = 1;
+            camera_handle_mouse_motion(&ctx.core.cam, (int)event->mouse_x, (int)event->mouse_y);
+            if (ctx.core.cam.is_panning) {
+                ctx.core.needs_redraw = 1;
+            } else if (ctx.core.julia_mode && !ctx.core.cam.is_zooming) {
+                app_state_get_mouse_coord(&ctx.core, ctx.core.cam.mouse_x, ctx.core.cam.mouse_y,
+                                          &ctx.core.julia_c.re, &ctx.core.julia_c.im);
+                ctx.core.needs_redraw = 1;
             }
             break;
 
         case SAPP_EVENTTYPE_MOUSE_UP: {
             int btn = (event->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
-            if (camera_handle_mouse_up(&ctx.cam, btn)) {
-                ctx.needs_redraw = 1;
+            if (camera_handle_mouse_up(&ctx.core.cam, btn)) {
+                ctx.core.needs_redraw = 1;
             }
             break;
         }
@@ -621,20 +577,14 @@ static void handle_keydown(const sapp_event* event) {
     if (event->key_code == SAPP_KEYCODE_ESCAPE || event->key_code == SAPP_KEYCODE_Q) {
         sapp_request_quit();
     } else if (event->key_code == SAPP_KEYCODE_Z && (event->modifiers & SAPP_MODIFIER_CTRL)) {
-        if (camera_pop_history(&ctx.cam)) {
-            ctx.needs_redraw = 1;
+        if (camera_pop_history(&ctx.core.cam)) {
+            ctx.core.needs_redraw = 1;
         }
     } else if (event->key_code == SAPP_KEYCODE_R) {
-        ctx.julia_mode = ctx.julia_session.active = 0;
-        ctx.m_tour.phase = TOUR_IDLE;
-        ctx.max_iterations = get_config_default_iterations();
-        init_renderer(ctx.max_iterations, ctx.palette_idx);
-        camera_reset(&ctx.cam);
-        sapp_set_window_title("Mandelbrot Explorer");
-        ctx.needs_redraw = 1;
+        app_state_reset(&ctx.core, set_window_title_cb);
     } else if (event->key_code == SAPP_KEYCODE_G) {
         ctx.gpu_mode = !ctx.gpu_mode;
-        ctx.needs_redraw = 1;
+        ctx.core.needs_redraw = 1;
     } else if (event->key_code == SAPP_KEYCODE_E) {
         if (ctx.gpu_mode)
             ctx.high_precision_mode = !ctx.high_precision_mode;
@@ -644,56 +594,35 @@ static void handle_keydown(const sapp_event* event) {
             set_cpu_precision(ctx.cpu_precision_128);
 #endif
         }
-        ctx.needs_redraw = 1;
+        ctx.core.needs_redraw = 1;
     } else if (event->key_code == SAPP_KEYCODE_P) {
-        ctx.palette_idx = (ctx.palette_idx + 1) % get_palette_count();
-        init_renderer(ctx.max_iterations, ctx.palette_idx);
-        ctx.needs_redraw = 1;
+        app_state_cycle_palette(&ctx.core);
     } else if (event->key_code == SAPP_KEYCODE_J) {
-        if (!ctx.julia_mode) {
-            ctx.julia_session.mandelbrot_view = ctx.cam.view;
-            ctx.julia_session.active = 1;
-            ctx.julia_c.re = mouse_re();
-            ctx.julia_c.im = mouse_im();
-            ctx.cam.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
-            ctx.julia_mode = 1;
-            sapp_set_window_title("Julia Explorer");
-        } else {
-            if (ctx.julia_session.active) ctx.cam.view = ctx.julia_session.mandelbrot_view;
-            ctx.julia_mode = 0;
-            sapp_set_window_title("Mandelbrot Explorer");
-        }
-        ctx.cam.history_count = 0;
-        ctx.needs_redraw = 1;
+        app_state_toggle_julia(&ctx.core, set_window_title_cb);
     } else if (event->key_code == SAPP_KEYCODE_B) {
-        ctx.burning_ship_mode = !ctx.burning_ship_mode;
-        ctx.julia_mode = ctx.julia_session.active = 0;
-        camera_reset(&ctx.cam);
-        ctx.needs_redraw = 1;
+        app_state_toggle_burning_ship(&ctx.core, set_window_title_cb);
     } else if (event->key_code == SAPP_KEYCODE_UP || event->key_code == SAPP_KEYCODE_DOWN) {
-        int step = ctx.max_iterations / 10;
+        int step = ctx.core.max_iterations / 10;
         if (step < 10) step = 10;
         if (event->modifiers & SAPP_MODIFIER_SHIFT) step *= 10;
-        ctx.max_iterations += (event->key_code == SAPP_KEYCODE_UP) ? step : -step;
-        if (ctx.max_iterations < 10) ctx.max_iterations = 10;
-        if (ctx.max_iterations > get_config_max_iterations_limit())
-            ctx.max_iterations = get_config_max_iterations_limit();
-        init_renderer(ctx.max_iterations, ctx.palette_idx);
-        ctx.needs_redraw = 1;
+        ctx.core.max_iterations += (event->key_code == SAPP_KEYCODE_UP) ? step : -step;
+        if (ctx.core.max_iterations < 10) ctx.core.max_iterations = 10;
+        if (ctx.core.max_iterations > get_config_max_iterations_limit())
+            ctx.core.max_iterations = get_config_max_iterations_limit();
+        init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
+        ctx.core.needs_redraw = 1;
     } else if (event->key_code == SAPP_KEYCODE_S) {
         ctx.screenshot_requested = 1;
     } else if (event->key_code == SAPP_KEYCODE_X) {
         if (!ctx.gpu_mode) {
-            double rmin, rmax, imin, imax;
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            rmin = ctx.cam.view.center_re - ctx.cam.view.zoom * aspect / 2;
-            rmax = ctx.cam.view.center_re + ctx.cam.view.zoom * aspect / 2;
-            imin = ctx.cam.view.center_im - ctx.cam.view.zoom / 2;
-            imax = ctx.cam.view.center_im + ctx.cam.view.zoom / 2;
-            save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx.max_iterations,
-                                 ctx.palette_idx,
-                                 ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0), ctx.julia_c);
-            ctx.needs_redraw = 1;
+            precise_float rmin, rmax, imin, imax;
+            app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &imin,
+                                           &imax);
+            save_mega_screenshot(8192, 8192, rmin, rmax, imin, imax, ctx.core.max_iterations,
+                                 ctx.core.palette_idx,
+                                 ctx.core.julia_mode ? 1 : (ctx.core.burning_ship_mode ? 2 : 0),
+                                 ctx.core.julia_c);
+            ctx.core.needs_redraw = 1;
         }
     } else if (event->key_code == SAPP_KEYCODE_V) {
         if (is_video_recording())
@@ -701,61 +630,20 @@ static void handle_keydown(const sapp_event* event) {
         else
             start_video_recording(ctx.win_w, ctx.win_h, 60);
     } else if (event->key_code == SAPP_KEYCODE_M) {
-        Bookmark b = {ctx.cam.view.center_re,
-                      ctx.cam.view.center_im,
-                      ctx.cam.view.zoom,
-                      ctx.max_iterations,
-                      ctx.julia_mode ? 1 : (ctx.burning_ship_mode ? 2 : 0),
-                      ctx.julia_c};
-        save_bookmark(&b);
+        app_state_save_bookmark(&ctx.core);
     } else if (event->key_code == SAPP_KEYCODE_L) {
-        Bookmark b;
-        int count = get_bookmark_count();
-        if (count > 0) {
-            camera_push_history(&ctx.cam);
-            ctx.current_bookmark_idx = (ctx.current_bookmark_idx + 1) % count;
-            if (load_bookmark(ctx.current_bookmark_idx, &b)) {
-                ctx.cam.view = (ViewState){b.center_re, b.center_im, b.zoom};
-                ctx.max_iterations = b.max_iterations;
-                ctx.julia_mode = (b.fractal_type == 1);
-                ctx.burning_ship_mode = (b.fractal_type == 2);
-                ctx.julia_c = b.julia_c;
-                init_renderer(ctx.max_iterations, ctx.palette_idx);
-                ctx.needs_redraw = 1;
-            }
-        }
+        app_state_load_next_bookmark(&ctx.core);
     } else if (event->key_code == SAPP_KEYCODE_T) {
-        if (ctx.julia_mode) {
-            if (ctx.j_tour.phase == JULIA_TOUR_IDLE) {
-                start_julia_tour(&ctx.j_tour, &ctx.julia_c, (uint32_t)stm_ms(stm_now()));
-                sapp_set_window_title("Julia Explorer [Auto-c]");
-            } else {
-                stop_julia_tour(&ctx.j_tour);
-                sapp_set_window_title("Julia Explorer");
-                ctx.needs_redraw = 1;
-            }
-        } else {
-            if (ctx.m_tour.phase == TOUR_IDLE) {
-                ctx.julia_mode = ctx.julia_session.active = 0;
-                camera_reset(&ctx.cam);
-                start_tour(&ctx.m_tour, &ctx.cam.view);
-                sapp_set_window_title("Mandelbrot Explorer [Auto-Zoom]");
-            } else {
-                stop_tour(&ctx.m_tour);
-                camera_reset(&ctx.cam);
-                sapp_set_window_title("Mandelbrot Explorer");
-                ctx.needs_redraw = 1;
-            }
-        }
+        app_state_toggle_tour(&ctx.core, (uint32_t)stm_ms(stm_now()), set_window_title_cb);
     } else if (event->key_code == SAPP_KEYCODE_LEFT_BRACKET ||
                event->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
         int threads = get_actual_thread_count();
         threads += (event->key_code == SAPP_KEYCODE_RIGHT_BRACKET) ? 1 : -1;
         set_renderer_thread_count(threads);
-        ctx.needs_redraw = 1;
+        ctx.core.needs_redraw = 1;
     } else if (event->key_code == SAPP_KEYCODE_F5) {
         reload_shaders();
-        ctx.needs_redraw = 1;
+        ctx.core.needs_redraw = 1;
     }
 }
 
@@ -765,9 +653,9 @@ static void event(const sapp_event* ev) {
         if (ev->window_width > 0 && ev->window_height > 0) {
             ctx.win_w = ev->framebuffer_width;
             ctx.win_h = ev->framebuffer_height;
-            camera_resize(&ctx.cam, ctx.win_w, ctx.win_h);
+            camera_resize(&ctx.core.cam, ctx.win_w, ctx.win_h);
             rebuild_texture();
-            ctx.needs_redraw = 1;
+            ctx.core.needs_redraw = 1;
         }
     } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
                ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
@@ -779,6 +667,8 @@ static void event(const sapp_event* ev) {
 
 static void cleanup(void) {
     free(ctx.pixels);
+    free(ctx.capture_buf);
+    free(ctx.flipped_buf);
     cleanup_renderer();
     cleanup_color_palette();
     sfons_destroy(ctx.fons);
