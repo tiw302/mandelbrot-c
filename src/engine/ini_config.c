@@ -5,6 +5,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "color.h"
 #include "config.h"
 
 // default values populated from config.h
@@ -103,8 +104,9 @@ int load_config_from_file(const char* filepath) {
     if (current_default_thread_count < 0) current_default_thread_count = 0;
     if (current_default_thread_count > 64) current_default_thread_count = 64;
 
+    int pal_count = get_palette_count();
     if (current_default_palette < 0) current_default_palette = 0;
-    if (current_default_palette > 8) current_default_palette = 8;
+    if (current_default_palette >= pal_count) current_default_palette = pal_count - 1;
 
     // clamp escape radius to positive and reasonable range
     if (current_escape_radius <= 0.0) current_escape_radius = ESCAPE_RADIUS;
