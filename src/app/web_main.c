@@ -54,14 +54,14 @@ EM_JS(void, update_debug_info_js,
                               high_precision, tour_target_idx, tour_total_targets, tour_target_re,
                               tour_target_im);
           }
-      });
+      })
 
 // javascript interop: synchronizes the visual zoom selection box.
 EM_JS(void, update_zoom_box_js, (int is_zooming, int x, int y, int w, int h), {
     if (typeof updateZoomBox === 'function') {
         updateZoomBox(is_zooming, x, y, w, h);
     }
-});
+})
 
 // javascript interop: triggers a browser download of the captured frame.
 // utilizes the browser's native blob and url object APIs.
@@ -69,7 +69,7 @@ EM_JS(void, download_screenshot_js, (uint32_t* ptr, int w, int h), {
     if (typeof downloadScreenshotData === 'function') {
         downloadScreenshotData(ptr, w, h, HEAPU8);
     }
-});
+})
 // clang-format on
 #else
 #define update_debug_info_js(...)
