@@ -14,13 +14,15 @@ void camera_init(Camera* cam, int win_w, int win_h) {
     cam->mouse_x = 0;
     cam->mouse_y = 0;
     cam->zoom_rect = (CamRect){0, 0, 0, 0};
-    cam->win_w = win_w;
-    cam->win_h = win_h;
+    /* clamp window dimensions to prevent division by zero */
+    cam->win_w = win_w < 1 ? 1 : win_w;
+    cam->win_h = win_h < 1 ? 1 : win_h;
 }
 
 void camera_resize(Camera* cam, int win_w, int win_h) {
-    cam->win_w = win_w;
-    cam->win_h = win_h;
+    /* clamp window dimensions to prevent division by zero */
+    cam->win_w = win_w < 1 ? 1 : win_w;
+    cam->win_h = win_h < 1 ? 1 : win_h;
 }
 
 void camera_screen_to_complex(const Camera* cam, int screen_x, int screen_y, precise_float* re,
