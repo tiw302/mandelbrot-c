@@ -21,7 +21,7 @@ static int scan_bookmarks(Bookmark* bookmarks, int max_count);
 
 // simple json writer that rewrites the whole file using cJSON
 void save_bookmark(const Bookmark* b) {
-    Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
+    Bookmark* bookmarks = (Bookmark*)calloc(MAX_BOOKMARKS, sizeof(Bookmark));
     if (!bookmarks) return;
 
     int count = scan_bookmarks(bookmarks, MAX_BOOKMARKS);
@@ -78,6 +78,10 @@ void save_bookmark(const Bookmark* b) {
 
     /* write to a temporary file first, then atomically rename to prevent
      * data corruption if the program crashes midway through writing. */
+#ifdef _WIN32
+    /* on windows rename fails if destination already exists */
+    remove(bookmarks_file_path);
+#endif
     rename(tmp_file_path, bookmarks_file_path);
 
     free(bookmarks);
@@ -125,7 +129,7 @@ static int scan_bookmarks(Bookmark* bookmarks, int max_count) {
 }
 
 int load_bookmark(int index, Bookmark* b) {
-    Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
+    Bookmark* bookmarks = (Bookmark*)calloc(MAX_BOOKMARKS, sizeof(Bookmark));
     if (!bookmarks) return 0;
 
     int count = scan_bookmarks(bookmarks, MAX_BOOKMARKS);
@@ -142,7 +146,7 @@ int load_bookmark(int index, Bookmark* b) {
 
 // scans the file and returns the actual count of correctly formatted objects
 int get_bookmark_count(void) {
-    Bookmark* bookmarks = (Bookmark*)malloc(sizeof(Bookmark) * MAX_BOOKMARKS);
+    Bookmark* bookmarks = (Bookmark*)calloc(MAX_BOOKMARKS, sizeof(Bookmark));
     if (!bookmarks) return 0;
 
     int count = scan_bookmarks(bookmarks, MAX_BOOKMARKS);
