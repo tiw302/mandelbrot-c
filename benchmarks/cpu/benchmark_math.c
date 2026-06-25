@@ -11,13 +11,13 @@
 #define GRID_HEIGHT 1024
 
 // returns time in seconds
-double get_time_sec() {
+double get_time_sec(void) {
     struct timespec ts;
     clock_gettime(CLOCK_MONOTONIC, &ts);
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-int main() {
+int main(void) {
     printf("==========================================\n");
     printf(" Mandelbrot Math Kernel Benchmarks        \n");
     printf(" Resolution: %d x %d (%.2f Million Pixels)\n", GRID_WIDTH, GRID_HEIGHT,
