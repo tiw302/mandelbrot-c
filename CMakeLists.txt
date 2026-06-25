@@ -111,8 +111,10 @@ if(ipo_supported)
 endif()
 
 # --- 5. benchmarks ---
-# always add the benchmarks directory so it builds regardless of build_cpu/gpu
-add_subdirectory(benchmarks)
+# always add the benchmarks directory so it builds regardless of build_cpu/gpu, except under Emscripten
+if(NOT EMSCRIPTEN)
+    add_subdirectory(benchmarks)
+endif()
 
 # --- 6. tests ---
 # add tests directory if build_testing is on
