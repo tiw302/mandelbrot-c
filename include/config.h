@@ -63,6 +63,9 @@ typedef __float128 precise_float;
 typedef long double precise_float;
 #endif
 
+// zoom threshold below which perturbation is used (screen units)
+#define PERTURBATION_ZOOM_THRESHOLD 1e-6
+
 // encapsulates the current camera state in the complex plane
 typedef struct {
     precise_float center_re;
