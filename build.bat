@@ -27,7 +27,7 @@ echo ===========================================================================
 echo   1^) cpu (combined 64/128-bit)
 echo   2^) gpu (combined 32/64-bit)
 echo   3^) web
-echo   4^) deep zoom (perturbation theory)
+echo   4^) deep zoom (gpu + perturbation)
 echo   5^) run tests
 echo   6^) run benchmarks
 echo   7^) build all
@@ -120,17 +120,15 @@ goto end
 
 :build_deep
 echo.
-echo Note: Deep Zoom engine (perturbation theory) is under development
-echo       and not yet functional. Requires MPIR/GMP headers.
-echo Configuring Deep Zoom build...
+echo Configuring Deep Zoom (Perturbation) build...
 cmake -S . -B build_deep -DBUILD_DEEP=ON -DCMAKE_BUILD_TYPE=Release
 if %errorlevel% neq 0 exit /b %errorlevel%
-echo Building Deep Zoom engine...
+echo Building Perturbation engine...
 cmake --build build_deep --parallel --config Release
 if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo ====================================================================================
-echo  build complete! to run deep zoom engine:
+echo  build complete! to run perturbation engine:
 echo   * .\build_deep\Release\mandelbrot_deep.exe
 echo ====================================================================================
 echo.

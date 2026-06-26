@@ -51,13 +51,11 @@ build_web() {
 }
 
 build_deep() {
-    echo "note: deep zoom engine (perturbation theory) is currently under development"
-    echo "      and not yet functional. requires libgmp development headers."
     cmake -S . -B build_deep -DBUILD_DEEP=ON -DCMAKE_BUILD_TYPE=Release || return $?
     cmake --build build_deep --parallel || return $?
     echo ""
     echo "===================================================================================="
-    echo " build complete! to run deep zoom engine:"
+    echo " build complete! to run perturbation engine:"
     echo "  * ./build_deep/mandelbrot_deep"
     echo "===================================================================================="
     echo " "
@@ -126,7 +124,7 @@ echo "==========================================================================
 echo "  1) cpu (combined 64/128-bit)"
 echo "  2) gpu (combined 32/64-bit)"
 echo "  3) web"
-echo "  4) deep zoom (perturbation theory)"
+echo "  4) deep zoom (gpu + perturbation)"
 echo "  5) run tests"
 echo "  6) run benchmarks"
 echo "  7) build all"
