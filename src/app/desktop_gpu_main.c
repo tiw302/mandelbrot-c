@@ -24,6 +24,9 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "tour.h"
+#ifdef BUILD_PERTURBATION
+#include "perturbation.h"
+#endif
 
 // clang-format off
 #include "sokol/sokol_app.h"
@@ -84,6 +87,11 @@ typedef struct {
     float julia_c_lo[2];
     float zoom, iters, aspect;
     float fractal_type, palette, high_precision;
+#ifdef BUILD_PERTURBATION
+    float use_perturbation;
+    float orbit_len;
+    float zoom_lo;  // low part of zoom for Dekker hi-lo in perturbation d0 calc
+#endif
 } params_t;
 
 // application global context
@@ -116,6 +124,15 @@ typedef struct {
     sgl_pipeline pip_blend;
     FONScontext* fons;
     int font_id;
+
+#ifdef BUILD_PERTURBATION
+    sg_image orbit_tex;
+    sg_view orbit_tex_view;
+    sg_sampler orbit_smp;
+    int orbit_len;
+    int use_perturbation;
+    int active_perturbation_last; // cached result from orbit computation step
+#endif
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -216,19 +233,34 @@ static void reload_shaders(void) {
         .attrs[1].glsl_name = "uv_in",
         .vertex_func.source = vs_ptr,
         .fragment_func.source = fs_gpu_ptr,
+#ifdef BUILD_PERTURBATION
+        .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
+        .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
+        .texture_sampler_pairs[0] = {.stage = SG_SHADERSTAGE_FRAGMENT,
+                                     .view_slot = 0,
+                                     .sampler_slot = 0,
+                                     .glsl_name = "u_orbit"},
+#endif
         .uniform_blocks[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT,
             .size = sizeof(params_t),
-            .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
+            .glsl_uniforms = {
+                {.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
+                {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
+                {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
+                {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT},
+#ifdef BUILD_PERTURBATION
+                {.glsl_name = "u_use_perturbation", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_orbit_len", .type = SG_UNIFORMTYPE_FLOAT},
+                {.glsl_name = "u_zoom_lo", .type = SG_UNIFORMTYPE_FLOAT},
+#endif
+            }}});
 
     if (sg_query_shader_state(shd_cpu) != SG_RESOURCESTATE_VALID ||
         sg_query_shader_state(shd_gpu) != SG_RESOURCESTATE_VALID) {
@@ -300,6 +332,23 @@ static void init(void) {
 
     rebuild_texture();
     reload_shaders();
+#ifdef BUILD_PERTURBATION
+    ctx.orbit_tex = sg_make_image(&(sg_image_desc){
+        .width = MAX_ITERATIONS_LIMIT,
+        .height = 1,
+        .pixel_format = SG_PIXELFORMAT_RG32F,
+        .usage = {.dynamic_update = true}
+    });
+    ctx.orbit_tex_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.orbit_tex});
+    ctx.orbit_smp = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_NEAREST,
+        .mag_filter = SG_FILTER_NEAREST,
+        .wrap_u = SG_WRAP_CLAMP_TO_EDGE,
+        .wrap_v = SG_WRAP_CLAMP_TO_EDGE
+    });
+    ctx.orbit_len = 0;
+    ctx.use_perturbation = 1;
+#endif
 
     // setup fontstash for text rendering
     ctx.fons = sfons_create(&(sfons_desc_t){.width = 512, .height = 512});
@@ -364,6 +413,63 @@ static void frame(void) {
         ctx.core.needs_redraw = 0;
     }
 
+#ifdef BUILD_PERTURBATION
+    // minimum orbit length required for perturbation to give accurate results.
+    // if the reference center escapes in fewer steps, the perturbation approximation
+    // breaks down and we fall back to the dekker double-single rendering path.
+    #define MIN_ORBIT_LEN 20
+
+    // check if all conditions for perturbation mode are currently satisfied.
+    int can_use_perturbation = ctx.gpu_mode && ctx.use_perturbation &&
+                               (ctx.core.cam.view.zoom < PERTURBATION_ZOOM_THRESHOLD) &&
+                               !ctx.core.julia_mode && !ctx.core.burning_ship_mode;
+
+    if (!can_use_perturbation) {
+        // mode changed (julia enabled, zoom out, etc.) — disable immediately.
+        ctx.active_perturbation_last = 0;
+    } else if (ctx.core.needs_redraw) {
+        // view has moved — recompute the reference orbit and re-evaluate quality.
+        precise_float center_re = ctx.core.cam.view.center_re;
+        precise_float center_im = ctx.core.cam.view.center_im;
+        int max_iters = ctx.core.max_iterations;
+        if (max_iters > MAX_ITERATIONS_LIMIT) max_iters = MAX_ITERATIONS_LIMIT;
+
+        RefOrbit* orb = perturbation_compute(center_re, center_im, max_iters);
+        // debug: print orbit quality to terminal so we can see what's happening
+        if (orb) {
+            printf("[PERTURB] center=(%.6Lf, %.6Lf) orbit_len=%d min=%d -> %s\n",
+                   (long double)center_re, (long double)center_im,
+                   orb->len, MIN_ORBIT_LEN,
+                   orb->len >= MIN_ORBIT_LEN ? "USE_PERTURB" : "FALLBACK");
+            fflush(stdout);
+        }
+        if (orb && orb->len >= MIN_ORBIT_LEN) {
+            // orbit is long enough — upload texture and enable perturbation.
+            ctx.orbit_len = orb->len;
+            ctx.active_perturbation_last = 1;
+
+            static ComplexFloat orbit_upload_buf[MAX_ITERATIONS_LIMIT];
+            for (int k = 0; k < orb->len; k++)
+                orbit_upload_buf[k] = orb->zn[k];
+            if (orb->len < MAX_ITERATIONS_LIMIT) {
+                memset(orbit_upload_buf + orb->len, 0,
+                       (MAX_ITERATIONS_LIMIT - orb->len) * sizeof(ComplexFloat));
+            }
+            sg_update_image(ctx.orbit_tex, &(sg_image_data){
+                .mip_levels[0] = {.ptr = orbit_upload_buf,
+                                  .size = sizeof(orbit_upload_buf)}});
+        } else {
+            // center escapes too quickly — perturbation is inaccurate here.
+            // fall back to dekker double-single mode for this view position.
+            ctx.active_perturbation_last = 0;
+        }
+        if (orb) perturbation_free(orb);
+    }
+    // if can_use_perturbation && !needs_redraw:
+    //   keep ctx.active_perturbation_last unchanged from the previous frame.
+    //   this preserves the quality decision made when the orbit was last computed.
+#endif
+
     // background orchestration (drawing the fractal)
     sgl_viewport(0, 0, ctx.win_w, ctx.win_h, true);
     sgl_defaults();
@@ -374,6 +480,23 @@ static void frame(void) {
 
     if (ctx.gpu_mode) {
         sg_apply_pipeline(ctx.pip_gpu);
+
+        int active_perturbation = 0;
+#ifdef BUILD_PERTURBATION
+        // reuse the decision made during orbit computation to ensure consistency
+        active_perturbation = ctx.active_perturbation_last;
+        if (active_perturbation) {
+            ctx.bind.views[0] = ctx.orbit_tex_view;
+            ctx.bind.samplers[0] = ctx.orbit_smp;
+        } else {
+            ctx.bind.views[0] = ctx.img_view;
+            ctx.bind.samplers[0] = ctx.smp;
+        }
+#else
+        ctx.bind.views[0] = ctx.img_view;
+        ctx.bind.samplers[0] = ctx.smp;
+#endif
+
         // calculate uniform parameters
         precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
         precise_float center_re = ctx.core.cam.view.center_re;
@@ -395,9 +518,19 @@ static void frame(void) {
             (float)(ctx.core.julia_mode ? 1 : (ctx.core.burning_ship_mode ? 2 : 0));
         params.palette = (float)ctx.core.palette_idx;
         params.high_precision = (float)ctx.high_precision_mode;
+#ifdef BUILD_PERTURBATION
+        params.use_perturbation = (float)active_perturbation;
+        params.orbit_len = (float)ctx.orbit_len;
+        // zoom_lo carries the sub-float residual of zoom for Dekker d0 computation
+        // in the perturbation shader. allows d0 to be computed with ~14 decimal digits
+        // of precision instead of the 7 offered by single-precision float alone.
+        params.zoom_lo = (float)(ctx.core.cam.view.zoom - (precise_float)params.zoom);
+#endif
 
         sg_apply_uniforms(0, &SG_RANGE(params));
     } else {
+        ctx.bind.views[0] = ctx.img_view;
+        ctx.bind.samplers[0] = ctx.smp;
         sg_apply_pipeline(ctx.pip_cpu);
     }
     sg_apply_bindings(&ctx.bind);
@@ -454,7 +587,25 @@ static void frame(void) {
         fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
         const char* engine_name = "CPU (64-bit)";
         if (ctx.gpu_mode) {
+#ifdef BUILD_PERTURBATION
+            if (ctx.active_perturbation_last) {
+                // perturbation is actually running for this frame
+                engine_name = "GPU (Perturbation)";
+            } else if (ctx.use_perturbation &&
+                       (ctx.core.cam.view.zoom < PERTURBATION_ZOOM_THRESHOLD) &&
+                       !ctx.core.julia_mode && !ctx.core.burning_ship_mode) {
+                // user enabled perturbation but orbit was too short — using dekker
+                if ((float)ctx.core.cam.view.zoom == 0.0f) {
+                    engine_name = "GPU (Perturbation: No Float!)";
+                } else {
+                    engine_name = "GPU (Perturbation: Fallback)";
+                }
+            } else {
+                engine_name = ctx.high_precision_mode ? "GPU (64-bit emulation)" : "GPU (32-bit)";
+            }
+#else
             engine_name = ctx.high_precision_mode ? "GPU (64-bit emulation)" : "GPU (32-bit)";
+#endif
         } else {
 #ifdef USE_SIMD_F128
             engine_name = ctx.cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
@@ -532,6 +683,10 @@ static void frame(void) {
         }
     }
 
+    if (ctx.gpu_mode) {
+        ctx.core.needs_redraw = 0;
+    }
+
     sg_end_pass();
     sg_commit();
 }
@@ -583,6 +738,11 @@ static void handle_keydown(const sapp_event* event) {
         }
     } else if (event->key_code == SAPP_KEYCODE_R) {
         app_state_reset(&ctx.core, set_window_title_cb);
+#ifdef BUILD_PERTURBATION
+    } else if (event->key_code == SAPP_KEYCODE_N) {
+        ctx.use_perturbation = !ctx.use_perturbation;
+        ctx.core.needs_redraw = 1;
+#endif
     } else if (event->key_code == SAPP_KEYCODE_G) {
         ctx.gpu_mode = !ctx.gpu_mode;
         ctx.core.needs_redraw = 1;
@@ -674,6 +834,11 @@ static void cleanup(void) {
     sfons_destroy(ctx.fons);
     if (ctx.shd_cpu.id) sg_destroy_shader(ctx.shd_cpu);
     if (ctx.shd_gpu.id) sg_destroy_shader(ctx.shd_gpu);
+#ifdef BUILD_PERTURBATION
+    if (ctx.orbit_tex.id) sg_destroy_view(ctx.orbit_tex_view);
+    if (ctx.orbit_tex.id) sg_destroy_image(ctx.orbit_tex);
+    if (ctx.orbit_smp.id) sg_destroy_sampler(ctx.orbit_smp);
+#endif
     sgl_shutdown();
     sg_shutdown();
 }
