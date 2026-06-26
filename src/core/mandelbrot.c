@@ -1,3 +1,9 @@
+/* mandelbrot.c
+ *
+ * core mathematical kernels for computing the mandelbrot set.
+ * provides scalar double, avx2, avx512, wasm-simd128, and high-precision simd-f128 paths.
+ */
+
 #include "core_math.h"
 
 #if defined(__AVX2__) || defined(__AVX512F__)

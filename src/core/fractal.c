@@ -1,3 +1,10 @@
+/* fractal.c
+ *
+ * centralized registry for all fractal math kernels.
+ * provides an abstract pluggable interface for registering and switching
+ * between different types of fractals (Mandelbrot, Julia, Burning Ship, etc.).
+ */
+
 #include "fractal.h"
 
 #include <stdio.h>

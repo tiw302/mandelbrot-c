@@ -1,3 +1,9 @@
+/* burning_ship.c
+ *
+ * core mathematical kernels for computing the burning ship fractal.
+ * provides scalar double, avx2, avx512, wasm-simd128, and high-precision simd-f128 paths.
+ */
+
 #include "burning_ship.h"
 
 #include "core_math.h"
