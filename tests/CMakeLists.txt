@@ -72,3 +72,8 @@ target_compile_options(test_app_state PRIVATE ${TEST_FLAGS} -pthread)
 target_link_libraries(test_app_state PRIVATE m pthread)
 add_test(NAME app_state_manager COMMAND test_app_state)
 
+# 9. test_perturbation (perturbation theory reference orbit logic)
+add_executable(test_perturbation test_perturbation.c ../src/engine/perturbation.c)
+target_compile_options(test_perturbation PRIVATE ${TEST_FLAGS})
+target_link_libraries(test_perturbation PRIVATE m)
+add_test(NAME perturbation_orbit COMMAND test_perturbation)
