@@ -1,3 +1,9 @@
+/* app_state.c
+ *
+ * manages the global application state lifecycle, event dispatch, and UI coordinate mapping.
+ * handles coordinate conversions and state transitions between render modes.
+ */
+
 #include "app_state.h"
 
 #include <stdio.h>

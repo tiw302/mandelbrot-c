@@ -1,3 +1,10 @@
+/* screenshot.c
+ *
+ * handles screenshot saving and high-resolution "mega screenshot" rendering.
+ * supports uncompressed TGA format and exports in vertical strips to control
+ * memory usage during large rendering passes.
+ */
+
 #include "screenshot.h"
 // screenshot.c is the sole owner of stb_image_write implementation.
 // do not define STB_IMAGE_WRITE_IMPLEMENTATION anywhere else.

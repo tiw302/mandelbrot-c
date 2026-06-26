@@ -1,3 +1,9 @@
+/* camera.c
+ *
+ * handles interactive navigation, viewport calculations, coordinate mapping,
+ * and maintains a historical stack of visited coordinates for undo functionality.
+ */
+
 #include "camera.h"
 
 #include <math.h>

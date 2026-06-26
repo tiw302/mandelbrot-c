@@ -1,3 +1,9 @@
+/* bookmark.c
+ *
+ * handles serialization, deserialization, and persistent storage of bookmark states.
+ * uses JSON format to save complex-plane viewports, iterations, and render parameters.
+ */
+
 #include "bookmark.h"
 
 #include <stdio.h>

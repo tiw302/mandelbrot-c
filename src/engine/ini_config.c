@@ -1,3 +1,9 @@
+/* ini_config.c
+ *
+ * handles configuration parsing, loading from and writing to config files.
+ * stores settings like window size, default iterations, threads, and color palettes.
+ */
+
 #include "ini_config.h"
 
 #include <ctype.h>

@@ -1,3 +1,9 @@
+/* renderer.c
+ *
+ * handles multi-threaded and vectorized CPU rendering of fractal sets.
+ * orchestrates the thread pool, tile-based parallel rendering, and pixel formats.
+ */
+
 #include "renderer.h"
 
 #include <math.h>
