@@ -23,7 +23,7 @@ endif()
 option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
 option(BUILD_GPU     "Build GPU-Engine (Desktop)"       OFF)
 option(BUILD_WEB     "Build Web-Engine (WASM)"          OFF)
-option(BUILD_DEEP    "Build Deep-Zoom Engine (GMP)"     OFF)
+option(BUILD_DEEP    "Build Deep-Zoom Engine (Perturbation)" OFF)
 
 # architecture tuning — set USE_NATIVE_ARCH=ON if your target machine
 # matches the build machine. falls back to avx2+fma when OFF. if the
@@ -92,6 +92,17 @@ if(BUILD_GPU)
     target_compile_definitions(mandelbrot_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE USE_SIMD_F128)
     target_compile_options(mandelbrot_gpu PRIVATE ${ARCH_FLAGS} -pthread)
     find_system_libs(mandelbrot_gpu)
+endif()
+
+# --- 2b. deep / perturbation engine ---
+if(BUILD_DEEP)
+    if(APPLE)
+        set_source_files_properties(src/app/desktop_gpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
+    endif()
+    add_executable(mandelbrot_deep ${CORE_SRC} ${ENGINE_SRC} src/engine/perturbation.c src/engine/screenshot.c src/app/desktop_gpu_main.c)
+    target_compile_definitions(mandelbrot_deep PRIVATE SOKOL_GLCORE FORCE_GPU_MODE USE_SIMD_F128 BUILD_PERTURBATION=1)
+    target_compile_options(mandelbrot_deep PRIVATE ${ARCH_FLAGS} -pthread)
+    find_system_libs(mandelbrot_deep)
 endif()
 
 # --- 3. web engine ---
