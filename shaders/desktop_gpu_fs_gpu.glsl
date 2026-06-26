@@ -4,11 +4,15 @@ uniform vec2 u_center_lo;
 uniform vec2 u_julia_c_hi;
 uniform vec2 u_julia_c_lo;
 uniform float u_zoom;
+uniform float u_zoom_lo;  // low part of zoom for Dekker hi-lo d0 calculation
 uniform float u_iters;
 uniform float u_aspect;
 uniform float u_fractal_type;
 uniform float u_palette;
 uniform float u_high_precision;
+uniform float u_use_perturbation;
+uniform float u_orbit_len;
+uniform sampler2D u_orbit;
 in vec2 uv;
 out vec4 color;
 
@@ -103,10 +107,38 @@ void main() {
   int m = int(u_iters), i = 0;
   float mag2 = 0.0;
 
-  // path 1: dekker double-single (64-bit emulation).
-  // solves pixelation issues when zooming deep into the set by using
-  // two 32-bit floats to store a high-precision coordinate.
-  if (u_high_precision > 0.5) {
+  // path 0: perturbation theory (high-speed deep zoom).
+  // uses a single high-precision reference orbit computed on the cpu (Zn)
+  // and approximates the pixel position using a low-precision float delta (dn).
+  // formula: delta_{n+1} = 2 * Zn * delta_n + delta_n^2 + delta_0
+  if (u_use_perturbation > 0.5 && u_fractal_type < 0.5) {
+    // d0 is the complex offset of this pixel from the reference center.
+    // computed with Dekker double-single arithmetic so that even at extreme zoom
+    // levels (below float range) the pixel offset retains sufficient precision.
+    vec2 zoom_ds = vec2(u_zoom, u_zoom_lo);
+    vec2 d0 = vec2(
+        ds_mul(vec2(uv.x - 0.5, 0.0), ds_mul(zoom_ds, vec2(u_aspect, 0.0))).x,
+        ds_mul(vec2(0.5 - uv.y, 0.0), zoom_ds).x
+    );
+    vec2 dn = d0;
+    int orbit_n = int(u_orbit_len);
+    for (; i < 2000; i++) {
+      if (i >= orbit_n || i >= m) break;
+      
+      // sample reference orbit point Z_n from texture
+      vec2 Zn = texture(u_orbit, vec2((float(i) + 0.5) / 10000.0, 0.5)).rg;
+      
+      // calculate actual coordinate value W_n = Z_n + delta_n
+      vec2 Wn = Zn + dn;
+      mag2 = dot(Wn, Wn);
+      if (mag2 > 100.0) break;
+      
+      // compute next delta: dn_next = 2 * Zn * dn + dn^2 + d0
+      vec2 dn_sq = vec2(dn.x * dn.x - dn.y * dn.y, 2.0 * dn.x * dn.y);
+      vec2 Zn_dn = vec2(Zn.x * dn.x - Zn.y * dn.y, Zn.x * dn.y + Zn.y * dn.x);
+      dn = 2.0 * Zn_dn + dn_sq + d0;
+    }
+  } else if (u_high_precision > 0.5) {
     vec2 uv_dx = vec2(uv.x - 0.5, 0.0);
     vec2 uv_dy = vec2(0.5 - uv.y, 0.0);
     vec2 zoom_a = vec2(u_zoom, 0.0);
