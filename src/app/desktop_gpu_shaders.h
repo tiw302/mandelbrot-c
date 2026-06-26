@@ -40,6 +40,7 @@ static const char* dg_fs_cpu =
  *   u_center_hi / u_center_lo  — hi-lo split of the double-precision view center
  *   u_julia_c_hi/u_julia_c_lo  — hi-lo split of the julia set c parameter
  *   u_zoom                     — zoom level (complex plane units per screen height)
+ *   u_zoom_lo                  — low-precision component of zoom
  *   u_iters                    — maximum iteration count
  *   u_aspect                   — window aspect ratio (width / height)
  *   u_fractal_type             — 0.0 = mandelbrot, 1.0 = julia, 2.0 = burning ship
@@ -52,6 +53,8 @@ static const char* dg_fs_gpu =
     "uniform vec2 u_julia_c_hi; uniform vec2 u_julia_c_lo; uniform float u_zoom; uniform float "
     "u_iters; uniform float u_aspect;"
     "uniform float u_fractal_type; uniform float u_palette; uniform float u_high_precision;"
+    "uniform float u_use_perturbation; uniform float u_orbit_len; uniform float u_zoom_lo;"
+    " uniform sampler2D u_orbit;"
     "in vec2 uv; out vec4 color;\n"
 
     /* dekker double-single addition (knuth twosum algorithm).
@@ -160,11 +163,38 @@ static const char* dg_fs_gpu =
     "void main() {\n"
     "  int m = int(u_iters), i = 0;\n"
     "  float mag2 = 0.0;\n"
-
-    /* path 1: dekker double-single (64-bit emulation).
-     * solves pixelation issues when zooming deep into the set by using
-     * two 32-bit floats to store a high-precision coordinate. */
-    "  if (u_high_precision > 0.5) {\n"
+    "\n"
+    "  // path 0: perturbation theory (high-speed deep zoom).\n"
+    "  // uses a single high-precision reference orbit computed on the cpu (Zn)\n"
+    "  // and approximates the pixel position using a low-precision float delta (dn).\n"
+    "  // formula: delta_{n+1} = 2 * Zn * delta_n + delta_n^2 + delta_0\n"
+    "  if (u_use_perturbation > 0.5 && u_fractal_type < 0.5) {\n"
+    "    // d0 is the complex offset of this pixel from the reference center.\n"
+    "    // computed with Dekker double-single arithmetic for precision at extreme zoom.\n"
+    "    vec2 zoom_ds = vec2(u_zoom, u_zoom_lo);\n"
+    "    vec2 d0 = vec2(\n"
+    "        ds_mul(vec2(uv.x - 0.5, 0.0), ds_mul(zoom_ds, vec2(u_aspect, 0.0))).x,\n"
+    "        ds_mul(vec2(0.5 - uv.y, 0.0), zoom_ds).x\n"
+    "    );\n"
+    "    vec2 dn = d0;\n"
+    "    int orbit_n = int(u_orbit_len);\n"
+    "    for (; i < 2000; i++) {\n"
+    "      if (i >= orbit_n || i >= m) break;\n"
+    "      \n"
+    "      // sample reference orbit point Z_n from texture\n"
+    "      vec2 Zn = texture(u_orbit, vec2((float(i) + 0.5) / 10000.0, 0.5)).rg;\n"
+    "      \n"
+    "      // calculate actual coordinate value W_n = Z_n + delta_n\n"
+    "      vec2 Wn = Zn + dn;\n"
+    "      mag2 = dot(Wn, Wn);\n"
+    "      if (mag2 > 100.0) break;\n"
+    "      \n"
+    "      // compute next delta: dn_next = 2 * Zn * dn + dn^2 + d0\n"
+    "      vec2 dn_sq = vec2(dn.x * dn.x - dn.y * dn.y, 2.0 * dn.x * dn.y);\n"
+    "      vec2 Zn_dn = vec2(Zn.x * dn.x - Zn.y * dn.y, Zn.x * dn.y + Zn.y * dn.x);\n"
+    "      dn = 2.0 * Zn_dn + dn_sq + d0;\n"
+    "    }\n"
+    "  } else if (u_high_precision > 0.5) {\n"
     "    vec2 uv_dx = vec2(uv.x - 0.5, 0.0);\n"
     "    vec2 uv_dy = vec2(0.5 - uv.y, 0.0);\n"
     "    vec2 zoom_a = vec2(u_zoom, 0.0);\n"
