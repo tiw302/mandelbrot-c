@@ -131,6 +131,7 @@ typedef struct {
     int max_iterations, palette_idx;
     int needs_redraw;
     int screenshot_requested;
+    RendererContext* renderer_ctx;
 
     // interaction tracking
     int is_panning, is_zooming;
@@ -247,7 +248,11 @@ static void init(void) {
     ctx.gpu_mode = 1;
 
     init_fractal_registry();
-    init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
+    ctx.renderer_ctx = init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
+    if (!ctx.renderer_ctx) {
+        fprintf(stderr, "error: failed to initialize renderer context\n");
+        exit(1);
+    }
     ctx.palette_idx = DEFAULT_PALETTE;
 }
 
@@ -275,13 +280,13 @@ static void frame(void) {
         precise_float im_bot = ctx.view.center_im - ctx.view.zoom / 2;
 
         if (ctx.julia_mode) {
-            render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+            render_julia_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                   im_top, im_bot, ctx.julia_c, ctx.max_iterations);
         } else if (ctx.burning_ship_mode) {
-            render_burning_ship_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
+            render_burning_ship_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
                                          rmax, im_top, im_bot, ctx.max_iterations);
         } else {
-            render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+            render_mandelbrot_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                        im_top, im_bot, ctx.max_iterations);
         }
 
@@ -470,12 +475,12 @@ static void handle_keyboard_event(const sapp_event* ev) {
             ctx.max_iterations += ctx.max_iterations / 10;
             if (ctx.max_iterations > get_config_max_iterations_limit())
                 ctx.max_iterations = get_config_max_iterations_limit();
-            init_renderer(ctx.max_iterations, ctx.palette_idx);
+            init_color_palette(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_DOWN) {
             ctx.max_iterations -= ctx.max_iterations / 10;
             if (ctx.max_iterations < 10) ctx.max_iterations = 10;
-            init_renderer(ctx.max_iterations, ctx.palette_idx);
+            init_color_palette(ctx.max_iterations, ctx.palette_idx);
             ctx.needs_redraw = 1;
         } else if (ev->key_code == SAPP_KEYCODE_B) {
             ctx.burning_ship_mode = !ctx.burning_ship_mode;
@@ -514,7 +519,7 @@ static void event(const sapp_event* ev) {
 
 static void cleanup(void) {
     free(ctx.pixels);
-    cleanup_renderer();
+    cleanup_renderer(ctx.renderer_ctx);
     cleanup_color_palette();
     sg_shutdown();
 }
@@ -543,7 +548,7 @@ void wasm_set_state(int julia_mode, double jre, double jim, int iters, int palet
     ctx.julia_c.im = jim;
     if (iters > 0) ctx.max_iterations = iters;
     if (palette >= 0) ctx.palette_idx = palette % get_palette_count();
-    init_renderer(ctx.max_iterations, ctx.palette_idx);
+    init_color_palette(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
 
@@ -567,7 +572,7 @@ void wasm_toggle_tour(void) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
     ctx.palette_idx = (ctx.palette_idx + 1) % get_palette_count();
-    init_renderer(ctx.max_iterations, ctx.palette_idx);
+    init_color_palette(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
 
@@ -575,7 +580,7 @@ EMSCRIPTEN_KEEPALIVE
 void wasm_set_palette(int idx) {
     if (idx >= 0 && idx < get_palette_count()) {
         ctx.palette_idx = idx;
-        init_renderer(ctx.max_iterations, ctx.palette_idx);
+        init_color_palette(ctx.max_iterations, ctx.palette_idx);
         ctx.needs_redraw = 1;
     }
 }
@@ -627,7 +632,7 @@ void wasm_adjust_iterations(int diff) {
     if (ctx.max_iterations < 10) ctx.max_iterations = 10;
     if (ctx.max_iterations > get_config_max_iterations_limit())
         ctx.max_iterations = get_config_max_iterations_limit();
-    init_renderer(ctx.max_iterations, ctx.palette_idx);
+    init_color_palette(ctx.max_iterations, ctx.palette_idx);
     ctx.needs_redraw = 1;
 }
 
@@ -736,7 +741,7 @@ void wasm_request_screenshot(void) {
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_precision(void) {
     ctx.high_precision_mode = !ctx.high_precision_mode;
-    set_cpu_precision(ctx.high_precision_mode);
+    set_cpu_precision(ctx.renderer_ctx, ctx.high_precision_mode);
     ctx.needs_redraw = 1;
 }
 
