@@ -12,10 +12,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+#if !defined(_WIN32)
+#include <signal.h>
+#endif
 
 #include "renderer.h"
 
-void save_mega_screenshot(int target_width, int target_height, precise_float re_min,
+int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int target_width, int target_height, precise_float re_min,
                           precise_float re_max, precise_float im_min, precise_float im_max,
                           int max_iterations, int palette_idx, int fractal_type,
                           complex_t julia_c) {
@@ -27,7 +30,7 @@ void save_mega_screenshot(int target_width, int target_height, precise_float re_
     FILE* file = fopen(filename, "wb");
     if (!file) {
         fprintf(stderr, "error: failed to open mega screenshot file for writing\n");
-        return;
+        return 0;
     }
 
     // write tga header (uncompressed true-color image)
@@ -50,14 +53,14 @@ void save_mega_screenshot(int target_width, int target_height, precise_float re_
     if (!chunk_pixels) {
         fprintf(stderr, "error: failed to allocate memory for mega screenshot chunk\n");
         fclose(file);
-        return;
+        return 0;
     }
 
     precise_float im_step = (im_max - im_min) / target_height;
     int pitch = target_width * 4;
 
     // initialize renderer palette just in case
-    init_renderer(max_iterations, palette_idx);
+    init_color_palette(max_iterations, palette_idx);
 
     printf("saving mega screenshot (%dx%d) to %s...\n", target_width, target_height, filename);
 
@@ -71,18 +74,22 @@ void save_mega_screenshot(int target_width, int target_height, precise_float re_
         precise_float strip_im_min = strip_im_max - lines * im_step;
 
         if (fractal_type == 1) {
-            render_julia_threaded(chunk_pixels, pitch, target_width, lines, re_min, re_max,
+            render_julia_threaded(render_ctx, chunk_pixels, pitch, target_width, lines, re_min, re_max,
                                   strip_im_max, strip_im_min, julia_c, max_iterations);
         } else if (fractal_type == 2) {
-            render_burning_ship_threaded(chunk_pixels, pitch, target_width, lines, re_min, re_max,
+            render_burning_ship_threaded(render_ctx, chunk_pixels, pitch, target_width, lines, re_min, re_max,
                                          strip_im_max, strip_im_min, max_iterations);
         } else {
-            render_mandelbrot_threaded(chunk_pixels, pitch, target_width, lines, re_min, re_max,
+            render_mandelbrot_threaded(render_ctx, chunk_pixels, pitch, target_width, lines, re_min, re_max,
                                        strip_im_max, strip_im_min, max_iterations);
         }
 
         fwrite(chunk_pixels, 4, (size_t)target_width * lines, file);
-        printf("\rprogress: %d%%", (y_start + lines) * 100 / target_height);
+        int progress = (y_start + lines) * 100 / target_height;
+        if (state) {
+            state->mega_screenshot_progress = progress;
+        }
+        printf("\rprogress: %d%%", progress);
         fflush(stdout);
     }
 
@@ -90,9 +97,82 @@ void save_mega_screenshot(int target_width, int target_height, precise_float re_
 
     free(chunk_pixels);
     fclose(file);
+    return 1;
 }
 
 #include <pthread.h>
+#include <stdlib.h>
+
+typedef struct {
+    RendererContext* render_ctx;
+    AppCommonState* state;
+    int target_width;
+    int target_height;
+    precise_float re_min;
+    precise_float re_max;
+    precise_float im_min;
+    precise_float im_max;
+    int max_iterations;
+    int palette_idx;
+    int fractal_type;
+    complex_t julia_c;
+} MegaScreenshotArgs;
+
+static void* mega_screenshot_thread_func(void* arg) {
+    MegaScreenshotArgs* args = (MegaScreenshotArgs*)arg;
+    int success = save_mega_screenshot(args->render_ctx, args->state, args->target_width, args->target_height, args->re_min,
+                                       args->re_max, args->im_min, args->im_max, args->max_iterations,
+                                       args->palette_idx, args->fractal_type, args->julia_c);
+    if (args->state) {
+        args->state->mega_screenshot_active = success ? 2 : 3;
+    }
+    free(args);
+    return NULL;
+}
+
+void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* state, int target_width, int target_height, precise_float re_min,
+                                precise_float re_max, precise_float im_min, precise_float im_max,
+                                int max_iterations, int palette_idx, int fractal_type,
+                                complex_t julia_c) {
+    if (state && state->mega_screenshot_active) {
+        return; // Already rendering
+    }
+
+    MegaScreenshotArgs* args = (MegaScreenshotArgs*)malloc(sizeof(MegaScreenshotArgs));
+    if (!args) return;
+
+    args->render_ctx = render_ctx;
+    args->state = state;
+    args->target_width = target_width;
+    args->target_height = target_height;
+    args->re_min = re_min;
+    args->re_max = re_max;
+    args->im_min = im_min;
+    args->im_max = im_max;
+    args->max_iterations = max_iterations;
+    args->palette_idx = palette_idx;
+    args->fractal_type = fractal_type;
+    args->julia_c = julia_c;
+
+    if (state) {
+        state->mega_screenshot_active = 1;
+        state->mega_screenshot_progress = 0;
+    }
+
+    pthread_t thread;
+    if (pthread_create(&thread, NULL, mega_screenshot_thread_func, args) == 0) {
+        pthread_detach(thread);
+    } else {
+        // Fallback to sync
+        int success = save_mega_screenshot(render_ctx, state, target_width, target_height, re_min, re_max, im_min, im_max,
+                                           max_iterations, palette_idx, fractal_type, julia_c);
+        if (state) {
+            state->mega_screenshot_active = success ? 2 : 3;
+        }
+        free(args);
+    }
+}
+
 #include <string.h>
 
 #include "stb/stb_image_write.h"
@@ -128,7 +208,14 @@ static void* video_worker(void* arg) {
         pthread_mutex_unlock(&video_mutex);
 
         if (frame_data) {
-            if (ffmpeg_pipe) fwrite(frame_data, 4, (size_t)video_w * video_h, ffmpeg_pipe);
+            if (ffmpeg_pipe) {
+                size_t written = fwrite(frame_data, 4, (size_t)video_w * video_h, ffmpeg_pipe);
+                if (written < (size_t)video_w * video_h) {
+                    fprintf(stderr, "error: ffmpeg pipe broken. stopping video recording.\n");
+                    is_recording = 0;
+                    video_shutdown = 1;
+                }
+            }
             free(frame_data);
         } else if (video_shutdown) {
             break;
@@ -137,8 +224,25 @@ static void* video_worker(void* arg) {
     return NULL;
 }
 
+static int check_ffmpeg_installed(void) {
+#ifdef _WIN32
+    return system("where ffmpeg >nul 2>&1") == 0;
+#else
+    return system("which ffmpeg >/dev/null 2>&1") == 0;
+#endif
+}
+
 int start_video_recording(int width, int height, int fps) {
     if (is_recording) return 0;
+
+    if (!check_ffmpeg_installed()) {
+        fprintf(stderr, "error: ffmpeg is not installed or not in PATH.\n");
+        return 0;
+    }
+
+#if !defined(_WIN32)
+    signal(SIGPIPE, SIG_IGN);
+#endif
 
     char filename[128];
     time_t now = time(NULL);
@@ -240,15 +344,18 @@ int is_video_recording(void) {
     return is_recording;
 }
 
-void save_screenshot(uint32_t* pixels, int width, int height) {
+void save_screenshot(AppCommonState* state, uint32_t* pixels, int width, int height, uint32_t now) {
     char filename[64];
-    time_t now = time(NULL);
-    struct tm* t = localtime(&now);
+    time_t t_now = time(NULL);
+    struct tm* t = localtime(&t_now);
     strftime(filename, sizeof(filename), "mandelbrot_%Y%m%d_%H%M%S.png", t);
 
     // allocate temp buffer for rgba conversion
     uint32_t* rgba_pixels = (uint32_t*)malloc((size_t)width * height * 4);
-    if (!rgba_pixels) return;
+    if (!rgba_pixels) {
+        if (state) app_state_push_notification(state, "Error: Screenshot failed!", now);
+        return;
+    }
 
     for (int i = 0; i < width * height; i++) {
         uint32_t p = pixels[i];
@@ -263,9 +370,49 @@ void save_screenshot(uint32_t* pixels, int width, int height) {
 
     if (stbi_write_png(filename, width, height, 4, rgba_pixels, width * 4)) {
         printf("screenshot saved to %s\n", filename);
+        if (state) app_state_push_notification(state, "Screenshot Saved!", now);
     } else {
         fprintf(stderr, "error: failed to save screenshot\n");
+        if (state) app_state_push_notification(state, "Error: Screenshot failed!", now);
     }
 
     free(rgba_pixels);
+}
+
+static uint32_t* temp_flip_buf = NULL;
+static int temp_flip_w = 0, temp_flip_h = 0;
+
+void process_gpu_frame(AppCommonState* state, const uint32_t* rgba_pixels, int width, int height, int save_shot, uint32_t now) {
+    if (width != temp_flip_w || height != temp_flip_h || !temp_flip_buf) {
+        free(temp_flip_buf);
+        temp_flip_buf = (uint32_t*)malloc((size_t)width * height * sizeof(uint32_t));
+        if (!temp_flip_buf) {
+            fprintf(stderr, "error: failed to allocate temporary flip buffer\n");
+            temp_flip_w = 0;
+            temp_flip_h = 0;
+            return;
+        }
+        temp_flip_w = width;
+        temp_flip_h = height;
+    }
+
+    for (int y = 0; y < height; y++) {
+        int src_y = height - 1 - y;
+        for (int x = 0; x < width; x++) {
+            uint32_t p = rgba_pixels[src_y * width + x];
+            uint8_t r = (p >> 0) & 0xFF;
+            uint8_t g = (p >> 8) & 0xFF;
+            uint8_t b = (p >> 16) & 0xFF;
+            uint8_t a = (p >> 24) & 0xFF;
+            // convert OpenGL RGBA to BGRA
+            temp_flip_buf[y * width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+        }
+    }
+
+    if (save_shot) {
+        save_screenshot(state, temp_flip_buf, width, height, now);
+    }
+    if (is_video_recording()) {
+        append_video_frame(temp_flip_buf, width, height);
+    }
 }
