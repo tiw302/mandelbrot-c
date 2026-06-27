@@ -24,6 +24,7 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "tour.h"
+#include "hud_sokol.h"
 #ifdef BUILD_PERTURBATION
 #include "perturbation.h"
 #endif
@@ -119,6 +120,7 @@ typedef struct {
     int gpu_mode, high_precision_mode;
     int cpu_precision_128;
     int screenshot_requested;
+    RendererContext* renderer_ctx;
 
     // debug ui and text rendering
     sgl_pipeline pip_blend;
@@ -366,7 +368,7 @@ static void init(void) {
                             .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA}});
 
     init_fractal_registry();
-    init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
+    ctx.renderer_ctx = init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
 }
 
 // frame rendering callback
@@ -383,19 +385,19 @@ static void frame(void) {
 
     // fallback: execute multi-threaded cpu render if gpu path is disabled
     if (!ctx.gpu_mode && ctx.core.needs_redraw && ctx.pixels) {
-        set_cpu_precision(ctx.cpu_precision_128);
+        set_cpu_precision(ctx.renderer_ctx, ctx.cpu_precision_128);
         precise_float rmin, rmax, im_top, im_bot;
         app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &im_bot,
                                        &im_top);
         uint32_t t0 = (uint32_t)stm_ms(stm_now());
         if (ctx.core.julia_mode)
-            render_julia_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+            render_julia_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                   im_top, im_bot, ctx.core.julia_c, ctx.core.max_iterations);
         else if (ctx.core.burning_ship_mode)
-            render_burning_ship_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
+            render_burning_ship_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
                                          rmax, im_top, im_bot, ctx.core.max_iterations);
         else
-            render_mandelbrot_threaded(ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
+            render_mandelbrot_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
                                        im_top, im_bot, ctx.core.max_iterations);
         ctx.core.render_time_ms = (uint32_t)stm_ms(stm_now()) - t0;
         // swap red and blue channels for sokol sg_pixelformat_rgba8 texture upload
@@ -559,97 +561,9 @@ static void frame(void) {
 
     // render heads-up telemetry display
     if (DEBUG_INFO && ctx.font_id != FONS_INVALID) {
-        sgl_load_pipeline(ctx.pip_blend);
-        sgl_begin_quads();
-        float visual_font_size = FONT_SIZE;
-        float lh = visual_font_size + 6.0f;
-        float bg_h = 3.0f * lh + 20.0f;
-        if (ctx.core.m_tour.phase != TOUR_IDLE) bg_h += lh;
-        float bg_w = 700.0f;
-
-        sgl_c4b(20, 20, 25, 220);  // semi-transparent backdrop
-        sgl_v2f(5.0f, 5.0f);
-        sgl_v2f(bg_w, 5.0f);
-        sgl_v2f(bg_w, bg_h);
-        sgl_v2f(5.0f, bg_h);
-        sgl_v2f(5.0f, 5.0f);
-        sgl_end();
-
-        // render text telemetry using fontstash
-        fonsClearState(ctx.fons);
-        fonsSetFont(ctx.fons, ctx.font_id);
-        fonsSetSize(ctx.fons, visual_font_size);
-        fonsSetAlign(ctx.fons, FONS_ALIGN_LEFT | FONS_ALIGN_TOP);
-        float x = 15.0f, y = 12.0f;
-        char buf[256];
-
-        // telemetry line 1
-        fonsSetColor(ctx.fons, sfons_rgba(255, 255, 255, 255));
-        const char* engine_name = "CPU (64-bit)";
-        if (ctx.gpu_mode) {
-#ifdef BUILD_PERTURBATION
-            if (ctx.active_perturbation_last) {
-                // perturbation is actually running for this frame
-                engine_name = "GPU (Perturbation)";
-            } else if (ctx.use_perturbation &&
-                       (ctx.core.cam.view.zoom < PERTURBATION_ZOOM_THRESHOLD) &&
-                       !ctx.core.julia_mode && !ctx.core.burning_ship_mode) {
-                // user enabled perturbation but orbit was too short — using dekker
-                if ((float)ctx.core.cam.view.zoom == 0.0f) {
-                    engine_name = "GPU (Perturbation: No Float!)";
-                } else {
-                    engine_name = "GPU (Perturbation: Fallback)";
-                }
-            } else {
-                engine_name = ctx.high_precision_mode ? "GPU (64-bit emulation)" : "GPU (32-bit)";
-            }
-#else
-            engine_name = ctx.high_precision_mode ? "GPU (64-bit emulation)" : "GPU (32-bit)";
-#endif
-        } else {
-#ifdef USE_SIMD_F128
-            engine_name = ctx.cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
-#endif
-        }
-        snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms",
-                 engine_name,
-                 ctx.core.julia_mode ? "Julia"
-                                     : (ctx.core.burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
-                 get_actual_thread_count(), ctx.core.render_time_ms);
-        fonsDrawText(ctx.fons, x, y, buf, NULL);
-        y += lh;
-
-        // telemetry line 2
-        if (ctx.core.julia_mode) {
-            snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx.core.julia_c.re,
-                     ctx.core.julia_c.im);
-        } else {
-            snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)",
-                     (double)ctx.core.cam.view.center_re, (double)ctx.core.cam.view.center_im);
-        }
-        fonsDrawText(ctx.fons, x, y, buf, NULL);
-        y += lh;
-
-        // telemetry line 3
-        snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s",
-                 (double)ctx.core.cam.view.zoom, ctx.core.max_iterations,
-                 get_palette_name(ctx.core.palette_idx % get_palette_count()));
-        fonsDrawText(ctx.fons, x, y, buf, NULL);
-        y += lh;
-
-        // tour telemetry
-        if (ctx.core.m_tour.phase != TOUR_IDLE) {
-            int t_idx = get_tour_target_idx(&ctx.core.m_tour);
-            int t_tot = get_num_tour_targets(ctx.core.burning_ship_mode);
-            double t_re = get_tour_target_re(&ctx.core.m_tour, ctx.core.burning_ship_mode);
-            double t_im = get_tour_target_im(&ctx.core.m_tour, ctx.core.burning_ship_mode);
-            snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d/%d (%.4f, %.4f)",
-                     get_tour_phase_name(ctx.core.m_tour.phase), t_idx + 1, t_tot, t_re, t_im);
-            fonsDrawText(ctx.fons, x, y, buf, NULL);
-            y += lh;
-        }
-
-        sfons_flush(ctx.fons);
+        hud_render_sokol_gpu(ctx.fons, ctx.font_id, &ctx.core, ctx.win_w, ctx.win_h,
+                             ctx.gpu_mode, ctx.high_precision_mode, ctx.cpu_precision_128,
+                             0, 0, ctx.pip_blend, now);
     }
 
     sgl_draw();
@@ -674,7 +588,7 @@ static void frame(void) {
                 append_video_frame(ctx.flipped_buf, ctx.win_w, ctx.win_h);
             }
             if (ctx.screenshot_requested) {
-                save_screenshot(ctx.flipped_buf, ctx.win_w, ctx.win_h);
+                save_screenshot(&ctx.core, ctx.flipped_buf, ctx.win_w, ctx.win_h, now);
                 ctx.screenshot_requested = 0;
             }
         } else {
@@ -692,115 +606,88 @@ static void frame(void) {
 }
 
 static void handle_mouse(const sapp_event* event) {
-    switch (event->type) {
-        case SAPP_EVENTTYPE_MOUSE_SCROLL:
-            camera_handle_wheel(&ctx.core.cam, (double)event->scroll_y, ctx.core.cam.mouse_x,
-                                ctx.core.cam.mouse_y);
-            ctx.core.needs_redraw = 1;
-            break;
-
-        case SAPP_EVENTTYPE_MOUSE_DOWN: {
-            int btn = (event->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
-            camera_handle_mouse_down(&ctx.core.cam, btn, (int)event->mouse_x, (int)event->mouse_y);
-            break;
-        }
-
-        case SAPP_EVENTTYPE_MOUSE_MOVE:
-            camera_handle_mouse_motion(&ctx.core.cam, (int)event->mouse_x, (int)event->mouse_y);
-            if (ctx.core.cam.is_panning) {
-                ctx.core.needs_redraw = 1;
-            } else if (ctx.core.julia_mode && !ctx.core.cam.is_zooming) {
-                app_state_get_mouse_coord(&ctx.core, ctx.core.cam.mouse_x, ctx.core.cam.mouse_y,
-                                          &ctx.core.julia_c.re, &ctx.core.julia_c.im);
-                ctx.core.needs_redraw = 1;
-            }
-            break;
-
-        case SAPP_EVENTTYPE_MOUSE_UP: {
-            int btn = (event->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
-            if (camera_handle_mouse_up(&ctx.core.cam, btn)) {
-                ctx.core.needs_redraw = 1;
-            }
-            break;
-        }
-
-        default:
-            break;
-    }
+    sokol_handle_mouse(&ctx.core, event);
 }
 
 static void handle_keydown(const sapp_event* event) {
-    if (event->key_code == SAPP_KEYCODE_ESCAPE || event->key_code == SAPP_KEYCODE_Q) {
-        sapp_request_quit();
-    } else if (event->key_code == SAPP_KEYCODE_Z && (event->modifiers & SAPP_MODIFIER_CTRL)) {
-        if (camera_pop_history(&ctx.core.cam)) {
-            ctx.core.needs_redraw = 1;
-        }
-    } else if (event->key_code == SAPP_KEYCODE_R) {
-        app_state_reset(&ctx.core, set_window_title_cb);
+    uint32_t now = (uint32_t)stm_ms(stm_now());
+    if (sokol_handle_common_keydown(&ctx.core, event, now)) {
+        return;
+    }
+
 #ifdef BUILD_PERTURBATION
-    } else if (event->key_code == SAPP_KEYCODE_N) {
+    if (event->key_code == SAPP_KEYCODE_N) {
         ctx.use_perturbation = !ctx.use_perturbation;
         ctx.core.needs_redraw = 1;
+        app_state_push_notification(&ctx.core, ctx.use_perturbation ? "Perturbation: Enabled" : "Perturbation: Disabled", now);
+    } else
 #endif
-    } else if (event->key_code == SAPP_KEYCODE_G) {
+    if (event->key_code == SAPP_KEYCODE_G) {
         ctx.gpu_mode = !ctx.gpu_mode;
         ctx.core.needs_redraw = 1;
+        app_state_push_notification(&ctx.core, ctx.gpu_mode ? "Engine: GPU" : "Engine: CPU", now);
     } else if (event->key_code == SAPP_KEYCODE_E) {
-        if (ctx.gpu_mode)
+        if (ctx.gpu_mode) {
             ctx.high_precision_mode = !ctx.high_precision_mode;
-        else {
+            app_state_push_notification(&ctx.core, ctx.high_precision_mode ? "Precision: 64-bit (Double)" : "Precision: 32-bit (Float)", now);
+        } else {
 #ifdef USE_SIMD_F128
             ctx.cpu_precision_128 = !ctx.cpu_precision_128;
-            set_cpu_precision(ctx.cpu_precision_128);
+            set_cpu_precision(ctx.renderer_ctx, ctx.cpu_precision_128);
+            app_state_push_notification(&ctx.core, ctx.cpu_precision_128 ? "Precision: 128-bit (SIMD)" : "Precision: 64-bit (Double)", now);
 #endif
         }
         ctx.core.needs_redraw = 1;
-    } else if (event->key_code == SAPP_KEYCODE_P) {
-        app_state_cycle_palette(&ctx.core);
     } else if (event->key_code == SAPP_KEYCODE_J) {
         app_state_toggle_julia(&ctx.core, set_window_title_cb);
+        app_state_push_notification(&ctx.core, ctx.core.julia_mode ? "Julia Mode: Active" : "Julia Mode: Inactive", now);
     } else if (event->key_code == SAPP_KEYCODE_B) {
         app_state_toggle_burning_ship(&ctx.core, set_window_title_cb);
-    } else if (event->key_code == SAPP_KEYCODE_UP || event->key_code == SAPP_KEYCODE_DOWN) {
-        int step = ctx.core.max_iterations / 10;
-        if (step < 10) step = 10;
-        if (event->modifiers & SAPP_MODIFIER_SHIFT) step *= 10;
-        ctx.core.max_iterations += (event->key_code == SAPP_KEYCODE_UP) ? step : -step;
-        if (ctx.core.max_iterations < 10) ctx.core.max_iterations = 10;
-        if (ctx.core.max_iterations > get_config_max_iterations_limit())
-            ctx.core.max_iterations = get_config_max_iterations_limit();
-        init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
-        ctx.core.needs_redraw = 1;
+        app_state_push_notification(&ctx.core, ctx.core.burning_ship_mode ? "Burning Ship Mode" : "Mandelbrot Mode", now);
     } else if (event->key_code == SAPP_KEYCODE_S) {
         ctx.screenshot_requested = 1;
+        ctx.core.needs_redraw = 1;
     } else if (event->key_code == SAPP_KEYCODE_X) {
-        if (!ctx.gpu_mode) {
+        if (!ctx.gpu_mode && ctx.core.mega_screenshot_active == 0) {
             precise_float rmin, rmax, imin, imax;
             app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &imin,
                                            &imax);
-            save_mega_screenshot(
-                8192, 8192, rmin, rmax, imin, imax, ctx.core.max_iterations, ctx.core.palette_idx,
+            save_mega_screenshot_async(
+                ctx.renderer_ctx, &ctx.core, 8192, 8192, rmin, rmax, imin, imax, ctx.core.max_iterations, ctx.core.palette_idx,
                 ctx.core.julia_mode ? 1 : (ctx.core.burning_ship_mode ? 2 : 0), ctx.core.julia_c);
             ctx.core.needs_redraw = 1;
+            app_state_push_notification(&ctx.core, "Generating 8K Image...", now);
         }
     } else if (event->key_code == SAPP_KEYCODE_V) {
-        if (is_video_recording())
+        if (is_video_recording()) {
             stop_video_recording();
-        else
-            start_video_recording(ctx.win_w, ctx.win_h, 60);
+            app_state_push_notification(&ctx.core, "Video Recording Saved!", now);
+        } else {
+            if (start_video_recording(ctx.win_w, ctx.win_h, 60)) {
+                app_state_push_notification(&ctx.core, "Video Recording Started", now);
+            } else {
+                app_state_push_notification(&ctx.core, "Error: ffmpeg not found!", now);
+            }
+        }
     } else if (event->key_code == SAPP_KEYCODE_M) {
         app_state_save_bookmark(&ctx.core);
+        app_state_push_notification(&ctx.core, "Bookmark Saved!", now);
     } else if (event->key_code == SAPP_KEYCODE_L) {
         app_state_load_next_bookmark(&ctx.core);
+        app_state_push_notification(&ctx.core, "Bookmark Loaded!", now);
     } else if (event->key_code == SAPP_KEYCODE_T) {
-        app_state_toggle_tour(&ctx.core, (uint32_t)stm_ms(stm_now()), set_window_title_cb);
+        app_state_toggle_tour(&ctx.core, now, set_window_title_cb);
+        app_state_push_notification(&ctx.core, ctx.core.m_tour.phase != TOUR_IDLE ? "Julia Tour Started" : "Tour Stopped", now);
     } else if (event->key_code == SAPP_KEYCODE_LEFT_BRACKET ||
                event->key_code == SAPP_KEYCODE_RIGHT_BRACKET) {
-        int threads = get_actual_thread_count();
+        int threads = get_actual_thread_count(ctx.renderer_ctx);
         threads += (event->key_code == SAPP_KEYCODE_RIGHT_BRACKET) ? 1 : -1;
-        set_renderer_thread_count(threads);
+        set_renderer_thread_count(ctx.renderer_ctx, threads);
+        ctx.core.thread_count = get_actual_thread_count(ctx.renderer_ctx);
         ctx.core.needs_redraw = 1;
+        char buf[64];
+        snprintf(buf, sizeof(buf), "CPU Threads: %d Cores", ctx.core.thread_count);
+        app_state_push_notification(&ctx.core, buf, now);
     } else if (event->key_code == SAPP_KEYCODE_F5) {
         reload_shaders();
         ctx.core.needs_redraw = 1;
@@ -829,7 +716,7 @@ static void cleanup(void) {
     free(ctx.pixels);
     free(ctx.capture_buf);
     free(ctx.flipped_buf);
-    cleanup_renderer();
+    cleanup_renderer(ctx.renderer_ctx);
     cleanup_color_palette();
     sfons_destroy(ctx.fons);
     if (ctx.shd_cpu.id) sg_destroy_shader(ctx.shd_cpu);
