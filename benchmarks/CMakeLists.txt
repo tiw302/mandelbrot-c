@@ -38,6 +38,10 @@ add_executable(benchmark_screenshot cpu/benchmark_screenshot.c
     ../src/core/burning_ship.c
     ../src/core/fractal.c
     ../src/engine/cjsonx_impl.c
+    ../src/engine/app_state.c
+    ../src/engine/camera.c
+    ../src/engine/tour.c
+    ../src/engine/bookmark.c
 )
 target_compile_definitions(benchmark_screenshot PRIVATE USE_SIMD_F128)
 target_compile_options(benchmark_screenshot PRIVATE ${BENCHMARK_FLAGS} -O3 -ffast-math)
