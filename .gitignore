@@ -103,6 +103,7 @@ desktop.ini
 !assets/**/*.png
 screenshot_*.tga
 *.tga
+*.mp4
 
 # temporary scripts
 test_*
