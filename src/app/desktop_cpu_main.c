@@ -14,6 +14,7 @@
 #include <time.h>
 
 #include "app_state.h"
+#include "hud_sdl.h"
 #include "bookmark.h"
 #include "camera.h"
 #include "color.h"
@@ -37,6 +38,8 @@ typedef struct {
     AppCommonState core;
 
     int cpu_precision_128;
+    int screenshot_requested;
+    RendererContext* renderer_ctx;
 } AppCtx;
 
 static SDL_Window* g_window = NULL;
@@ -47,36 +50,46 @@ static void set_window_title_cb(const char* title) {
 }
 
 // internal helpers
-static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
-                        SDL_Color color);
 static void print_controls(void);
 
 // handles keyboard input events
 static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
     if (event->key.keysym.sym == SDLK_ESCAPE || event->key.keysym.sym == SDLK_q) {
         ctx->core.running = 0;
+    } else if (event->key.keysym.sym == SDLK_h || event->key.keysym.sym == SDLK_F1) {
+        ctx->core.show_help = !ctx->core.show_help;
     } else if (event->key.keysym.sym == SDLK_z && (SDL_GetModState() & KMOD_CTRL)) {
         if (camera_pop_history(&ctx->core.cam)) {
             ctx->core.needs_redraw = 1;
+            app_state_push_notification(&ctx->core, "Undo Camera Action", SDL_GetTicks());
         }
     } else if (event->key.keysym.sym == SDLK_r) {
         app_state_reset(&ctx->core, set_window_title_cb);
+        app_state_push_notification(&ctx->core, "View Reset!", SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_j) {
         app_state_toggle_julia(&ctx->core, set_window_title_cb);
+        app_state_push_notification(&ctx->core, ctx->core.julia_mode ? "Julia Mode: Active" : "Julia Mode: Inactive", SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_b) {
         app_state_toggle_burning_ship(&ctx->core, set_window_title_cb);
+        app_state_push_notification(&ctx->core, ctx->core.burning_ship_mode ? "Burning Ship Mode" : "Mandelbrot Mode", SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_p) {
         app_state_cycle_palette(&ctx->core);
+        char buf[64];
+        snprintf(buf, sizeof(buf), "Palette: %s", get_palette_name(ctx->core.palette_idx % get_palette_count()));
+        app_state_push_notification(&ctx->core, buf, SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_e) {
 #ifdef USE_SIMD_F128
         ctx->cpu_precision_128 = !ctx->cpu_precision_128;
-        set_cpu_precision(ctx->cpu_precision_128);
+        set_cpu_precision(ctx->renderer_ctx, ctx->cpu_precision_128);
         ctx->core.needs_redraw = 1;
+        app_state_push_notification(&ctx->core, ctx->cpu_precision_128 ? "Precision: 128-bit (SIMD)" : "Precision: 64-bit (Double)", SDL_GetTicks());
 #endif
     } else if (event->key.keysym.sym == SDLK_m) {
         app_state_save_bookmark(&ctx->core);
+        app_state_push_notification(&ctx->core, "Bookmark Saved!", SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_l) {
         app_state_load_next_bookmark(&ctx->core);
+        app_state_push_notification(&ctx->core, "Bookmark Loaded!", SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_UP || event->key.keysym.sym == SDLK_DOWN) {
         int step = ctx->core.max_iterations / 10;
         if (step < 10) step = 10;
@@ -85,36 +98,46 @@ static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
         if (ctx->core.max_iterations < 10) ctx->core.max_iterations = 10;
         if (ctx->core.max_iterations > get_config_max_iterations_limit())
             ctx->core.max_iterations = get_config_max_iterations_limit();
-        init_renderer(ctx->core.max_iterations, ctx->core.palette_idx);
+        init_color_palette(ctx->core.max_iterations, ctx->core.palette_idx);
         ctx->core.needs_redraw = 1;
     } else if (event->key.keysym.sym == SDLK_s) {
-        uint32_t* ss = malloc((size_t)ctx->win_w * ctx->win_h * 4);
-        if (ss) {
-            SDL_RenderReadPixels(ctx->renderer, NULL, SDL_PIXELFORMAT_ARGB8888, ss, ctx->win_w * 4);
-            save_screenshot(ss, ctx->win_w, ctx->win_h);
-            free(ss);
-        }
-    } else if (event->key.keysym.sym == SDLK_x) {
-        precise_float rmin, rmax, imax, imin;
-        app_state_calculate_boundaries(&ctx->core, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin,
-                                       &imax);
-        save_mega_screenshot(
-            8192, 8192, rmin, rmax, imin, imax, ctx->core.max_iterations, ctx->core.palette_idx,
-            ctx->core.julia_mode ? 1 : (ctx->core.burning_ship_mode ? 2 : 0), ctx->core.julia_c);
+        ctx->screenshot_requested = 1;
         ctx->core.needs_redraw = 1;
+    } else if (event->key.keysym.sym == SDLK_x) {
+        if (ctx->core.mega_screenshot_active == 0) {
+            precise_float rmin, rmax, imax, imin;
+            app_state_calculate_boundaries(&ctx->core, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin,
+                                           &imax);
+            save_mega_screenshot_async(
+                ctx->renderer_ctx, &ctx->core, 8192, 8192, rmin, rmax, imin, imax, ctx->core.max_iterations, ctx->core.palette_idx,
+                ctx->core.julia_mode ? 1 : (ctx->core.burning_ship_mode ? 2 : 0), ctx->core.julia_c);
+            ctx->core.needs_redraw = 1;
+            app_state_push_notification(&ctx->core, "Generating 8K Image...", SDL_GetTicks());
+        }
     } else if (event->key.keysym.sym == SDLK_v) {
-        if (is_video_recording())
+        if (is_video_recording()) {
             stop_video_recording();
-        else
-            start_video_recording(ctx->win_w, ctx->win_h, 60);
+            app_state_push_notification(&ctx->core, "Video Recording Saved!", SDL_GetTicks());
+        } else {
+            if (start_video_recording(ctx->win_w, ctx->win_h, 60)) {
+                app_state_push_notification(&ctx->core, "Video Recording Started", SDL_GetTicks());
+            } else {
+                app_state_push_notification(&ctx->core, "Error: ffmpeg not found!", SDL_GetTicks());
+            }
+        }
     } else if (event->key.keysym.sym == SDLK_t) {
         app_state_toggle_tour(&ctx->core, SDL_GetTicks(), set_window_title_cb);
+        app_state_push_notification(&ctx->core, ctx->core.m_tour.phase != TOUR_IDLE ? "Julia Tour Started" : "Tour Stopped", SDL_GetTicks());
     } else if (event->key.keysym.sym == SDLK_LEFTBRACKET ||
                event->key.keysym.sym == SDLK_RIGHTBRACKET) {
-        int threads = get_actual_thread_count();
+        int threads = get_actual_thread_count(ctx->renderer_ctx);
         threads += (event->key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1;
-        set_renderer_thread_count(threads);
+        set_renderer_thread_count(ctx->renderer_ctx, threads);
+        ctx->core.thread_count = get_actual_thread_count(ctx->renderer_ctx);
         ctx->core.needs_redraw = 1;
+        char buf[64];
+        snprintf(buf, sizeof(buf), "CPU Threads: %d Cores", ctx->core.thread_count);
+        app_state_push_notification(&ctx->core, buf, SDL_GetTicks());
     }
 }
 
@@ -212,16 +235,20 @@ static void render_frame(AppCtx* ctx) {
             app_state_calculate_boundaries(&ctx->core, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin,
                                            &imax);
             if (ctx->core.julia_mode)
-                render_julia_threaded(pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax, imin,
+                render_julia_threaded(ctx->renderer_ctx, pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax, imin,
                                       ctx->core.julia_c, ctx->core.max_iterations);
             else if (ctx->core.burning_ship_mode)
-                render_burning_ship_threaded(pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax,
+                render_burning_ship_threaded(ctx->renderer_ctx, pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax,
                                              imax, imin, ctx->core.max_iterations);
             else
-                render_mandelbrot_threaded(pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax,
+                render_mandelbrot_threaded(ctx->renderer_ctx, pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax,
                                            imin, ctx->core.max_iterations);
             if (is_video_recording()) {
                 append_video_frame(pixels, ctx->win_w, ctx->win_h);
+            }
+            if (ctx->screenshot_requested) {
+                save_screenshot(&ctx->core, pixels, ctx->win_w, ctx->win_h, SDL_GetTicks());
+                ctx->screenshot_requested = 0;
             }
             SDL_UnlockTexture(ctx->texture);
         }
@@ -239,44 +266,20 @@ static void render_frame(AppCtx* ctx) {
                               ctx->core.cam.zoom_rect.w, ctx->core.cam.zoom_rect.h};
         SDL_RenderDrawRect(ctx->renderer, &zoom_rect);
     }
+
+    if (is_video_recording()) {
+        SDL_SetRenderDrawColor(ctx->renderer, 255, 0, 0, 255);
+        for (int i = 0; i < 4; i++) {
+            SDL_Rect r = {i, i, ctx->win_w - 2 * i, ctx->win_h - 2 * i};
+            SDL_RenderDrawRect(ctx->renderer, &r);
+        }
+    }
 }
 
 // draws the debug heads-up display (hud)
 static void render_hud(AppCtx* ctx) {
-    if (!DEBUG_INFO || !ctx->font) return;
-
-    char buf[256];
-    SDL_Color white = {255, 255, 255, 255};
-    int x = 15, y = 12, line_h = FONT_SIZE + 6;
-
-    SDL_Rect bg = {5, 5, 700, 3 * line_h + 20};
-    SDL_SetRenderDrawBlendMode(ctx->renderer, SDL_BLENDMODE_BLEND);
-    SDL_SetRenderDrawColor(ctx->renderer, 20, 20, 25, 220);
-    SDL_RenderFillRect(ctx->renderer, &bg);
-
-    const char* engine_type = ctx->cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
-    const char* mode_name = ctx->core.julia_mode
-                                ? "Julia"
-                                : (ctx->core.burning_ship_mode ? "Burning Ship" : "Mandelbrot");
-
-    snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms", engine_type,
-             mode_name, get_actual_thread_count(), ctx->core.render_time_ms);
-    render_text(ctx->renderer, ctx->font, buf, x, y, white);
-    y += line_h;
-
-    if (ctx->core.julia_mode)
-        snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", ctx->core.julia_c.re,
-                 ctx->core.julia_c.im);
-    else
-        snprintf(buf, sizeof(buf), "[COORD]  Center: (%.14f, %.14f)",
-                 (double)ctx->core.cam.view.center_re, (double)ctx->core.cam.view.center_im);
-    render_text(ctx->renderer, ctx->font, buf, x, y, white);
-    y += line_h;
-
-    snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s",
-             (double)ctx->core.cam.view.zoom, ctx->core.max_iterations,
-             get_palette_name(ctx->core.palette_idx % get_palette_count()));
-    render_text(ctx->renderer, ctx->font, buf, x, y, white);
+    hud_render_sdl(ctx->renderer, ctx->font, &ctx->core, ctx->win_w, ctx->win_h,
+                   ctx->cpu_precision_128, SDL_GetTicks());
 }
 
 int main(int argc, char* argv[]) {
@@ -344,9 +347,21 @@ int main(int argc, char* argv[]) {
 
     app_state_init(&ctx.core, ctx.win_w, ctx.win_h);
     ctx.cpu_precision_128 = 0;
+    ctx.screenshot_requested = 0;
 
     init_fractal_registry();
-    init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
+    ctx.renderer_ctx = init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
+    if (!ctx.renderer_ctx) {
+        fprintf(stderr, "error: failed to initialize renderer context\n");
+        if (ctx.font) TTF_CloseFont(ctx.font);
+        SDL_DestroyTexture(ctx.texture);
+        SDL_DestroyRenderer(ctx.renderer);
+        SDL_DestroyWindow(ctx.window);
+        TTF_Quit();
+        SDL_Quit();
+        return 1;
+    }
+    ctx.core.thread_count = get_actual_thread_count(ctx.renderer_ctx);
     print_controls();
 
     while (ctx.core.running) {
@@ -354,9 +369,18 @@ int main(int argc, char* argv[]) {
         Uint32 now = SDL_GetTicks();
         app_state_update_tours(&ctx.core, now, set_window_title_cb);
 
-        // force redraw to maintain steady frame pacing during video export
-        if (is_video_recording()) {
+        // force redraw to maintain steady frame pacing during video export, notification overlays, or mega screenshot rendering
+        if (is_video_recording() || app_state_has_active_notifications(&ctx.core) || ctx.core.mega_screenshot_active == 1) {
             ctx.core.needs_redraw = 1;
+        }
+
+        // check if mega screenshot finished
+        if (ctx.core.mega_screenshot_active == 2) {
+            app_state_update_or_push_notification(&ctx.core, "Generating 8K", "Mega Screenshot Saved!", now);
+            ctx.core.mega_screenshot_active = 0;
+        } else if (ctx.core.mega_screenshot_active == 3) {
+            app_state_update_or_push_notification(&ctx.core, "Generating 8K", "Error: Mega Screenshot failed!", now);
+            ctx.core.mega_screenshot_active = 0;
         }
 
         handle_events(&ctx);
@@ -366,7 +390,7 @@ int main(int argc, char* argv[]) {
     }
 
     if (ctx.font) TTF_CloseFont(ctx.font);
-    cleanup_renderer();
+    cleanup_renderer(ctx.renderer_ctx);
     cleanup_color_palette();
     SDL_DestroyTexture(ctx.texture);
     SDL_DestroyRenderer(ctx.renderer);
@@ -376,19 +400,7 @@ int main(int argc, char* argv[]) {
     return 0;
 }
 
-static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
-                        SDL_Color color) {
-    SDL_Surface* surface = TTF_RenderUTF8_Blended(font, text, color);
-    if (!surface) return;
-    SDL_Texture* tex = SDL_CreateTextureFromSurface(renderer, surface);
-    if (tex) {
-        SDL_Rect dst = {x, y, surface->w, surface->h};
-        SDL_RenderCopy(renderer, tex, NULL, &dst);
-        SDL_DestroyTexture(tex);
-    }
-    SDL_FreeSurface(surface);
-}
-
+// print controls console guide at startup
 static void print_controls(void) {
     puts("mandelbrot explorer");
     puts("  left drag   : zoom selection   | right drag  : pan");
@@ -400,5 +412,6 @@ static void print_controls(void) {
     puts("  b           : burning ship     | s           : screenshot");
     puts("  m           : save bookmark    | l           : load bookmark");
     puts("  x           : mega screenshot  | v           : record video");
-    puts("  [ / ]       : scale threads    | q / esc     : quit");
+    puts("  [ / ]       : scale threads    | h           : toggle help menu");
+    puts("  q / esc     : quit");
 }
