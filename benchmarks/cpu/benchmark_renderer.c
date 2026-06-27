@@ -19,12 +19,12 @@ static double get_time_sec(void) {
     return ts.tv_sec + ts.tv_nsec * 1e-9;
 }
 
-static void run_benchmark(const char* name, int width, int height) {
+static void run_benchmark(RendererContext* ctx, const char* name, int width, int height) {
     printf("==========================================\n");
     printf(" %s\n", name);
     printf(" Resolution: %d x %d (%.2f Million Pixels)\n", width, height, (width * height) / 1e6);
     printf(" Max Iterations: %d\n", MAX_ITERATIONS);
-    printf(" Thread Count: %d\n", get_actual_thread_count());
+    printf(" Thread Count: %d\n", get_actual_thread_count(ctx));
     printf("==========================================\n\n");
 
     uint32_t* pixels = (uint32_t*)malloc((size_t)width * height * sizeof(uint32_t));
@@ -44,12 +44,12 @@ static void run_benchmark(const char* name, int width, int height) {
     printf("Running %d frames...\n", NUM_RUNS);
 
     // warm up run
-    render_mandelbrot_threaded(pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
+    render_mandelbrot_threaded(ctx, pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
                                MAX_ITERATIONS);
 
     for (int i = 0; i < NUM_RUNS; i++) {
         double start = get_time_sec();
-        render_mandelbrot_threaded(pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
+        render_mandelbrot_threaded(ctx, pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
                                    MAX_ITERATIONS);
         double end = get_time_sec();
 
@@ -72,25 +72,29 @@ static void run_benchmark(const char* name, int width, int height) {
 
 int main(void) {
     printf("Initializing renderer...\n");
-    init_renderer(MAX_ITERATIONS, 0);  // 0 is default palette
+    RendererContext* ctx = init_renderer(MAX_ITERATIONS, 0);  // 0 is default palette
+    if (!ctx) {
+        printf("failed to initialize renderer\n");
+        return 1;
+    }
 
     // 1080p benchmark
-    run_benchmark("1. Renderer 1080p Benchmark (64-bit)", 1920, 1080);
+    run_benchmark(ctx, "1. Renderer 1080p Benchmark (64-bit)", 1920, 1080);
 
     // 4k benchmark
-    run_benchmark("2. Renderer 4K Benchmark (64-bit)", 3840, 2160);
+    run_benchmark(ctx, "2. Renderer 4K Benchmark (64-bit)", 3840, 2160);
 
 #ifdef USE_SIMD_F128
     // 1080p benchmark 128-bit
-    set_cpu_precision(1);
-    run_benchmark("3. Renderer 1080p Benchmark (128-bit)", 1920, 1080);
+    set_cpu_precision(ctx, 1);
+    run_benchmark(ctx, "3. Renderer 1080p Benchmark (128-bit)", 1920, 1080);
 
     // 4k benchmark 128-bit
-    run_benchmark("4. Renderer 4K Benchmark (128-bit)", 3840, 2160);
-    set_cpu_precision(0);
+    run_benchmark(ctx, "4. Renderer 4K Benchmark (128-bit)", 3840, 2160);
+    set_cpu_precision(ctx, 0);
 #endif
 
-    cleanup_renderer();
+    cleanup_renderer(ctx);
     printf("Benchmark complete.\n");
     return 0;
 }

@@ -38,13 +38,18 @@ int main(void) {
     printf(" Screenshot I/O Benchmarks                \n");
     printf("==========================================\n\n");
 
-    init_renderer(MAX_ITERATIONS, 0);
+    RendererContext* ctx = init_renderer(MAX_ITERATIONS, 0);
+    if (!ctx) {
+        printf("failed to initialize renderer\n");
+        return 1;
+    }
 
     const double x_min = -2.0;
     const double x_max = 1.0;
     const double y_min = -1.5;
     const double y_max = 1.5;
     complex_t dummy = {0};
+    AppCommonState dummy_state = {0};
 
     // --- 1. Standard PNG Screenshot (1080p) ---
     int width_1080 = 1920;
@@ -55,12 +60,12 @@ int main(void) {
     if (pixels) {
         // pre-render an image so we have realistic data to compress
         printf("   (pre-rendering 1080p buffer...)\n");
-        render_mandelbrot_threaded(pixels, width_1080 * 4, width_1080, height_1080, x_min, x_max,
+        render_mandelbrot_threaded(ctx, pixels, width_1080 * 4, width_1080, height_1080, x_min, x_max,
                                    y_min, y_max, MAX_ITERATIONS);
 
         printf("   Saving PNG to disk...\n");
         double start = get_time_sec();
-        save_screenshot(pixels, width_1080, height_1080);
+        save_screenshot(NULL, pixels, width_1080, height_1080, 0);
         double end = get_time_sec();
 
         printf("   -> Time taken: %.4f seconds\n\n", end - start);
@@ -77,14 +82,14 @@ int main(void) {
     printf("   Rendering and saving chunks to disk...\n");
 
     double start = get_time_sec();
-    save_mega_screenshot(width_8k, height_8k, x_min, x_max, y_min, y_max, MAX_ITERATIONS, 0, 0,
+    save_mega_screenshot(ctx, &dummy_state, width_8k, height_8k, x_min, x_max, y_min, y_max, MAX_ITERATIONS, 0, 0,
                          dummy);
     double end = get_time_sec();
 
     printf("   -> Time taken: %.4f seconds\n\n", end - start);
     remove_latest_file("mega_mandelbrot_", "tga");
 
-    cleanup_renderer();
+    cleanup_renderer(ctx);
     printf("Benchmark complete.\n");
     return 0;
 }
