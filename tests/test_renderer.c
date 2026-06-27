@@ -10,7 +10,11 @@ int test_pool_dispatch() {
     int palette_idx = 0;
 
     // initialize renderer with dummy max iterations and palette
-    init_renderer(max_iterations, palette_idx);
+    RendererContext* ctx = init_renderer(max_iterations, palette_idx);
+    if (!ctx) {
+        printf("failed: could not initialize renderer context\n");
+        return 0;
+    }
 
     // create a dummy pixel buffer
     int width = 128;
@@ -19,12 +23,12 @@ int test_pool_dispatch() {
     uint32_t* pixels = (uint32_t*)calloc(width * height, sizeof(uint32_t));
     if (!pixels) {
         printf("failed: could not allocate dummy pixel buffer\n");
-        cleanup_renderer();
+        cleanup_renderer(ctx);
         return 0;
     }
 
     // dispatch a small render job
-    render_mandelbrot_threaded(pixels, pitch, width, height, -2.0, 1.0, 1.5, -1.5, max_iterations);
+    render_mandelbrot_threaded(ctx, pixels, pitch, width, height, -2.0, 1.0, 1.5, -1.5, max_iterations);
 
     // validate some pixels got modified (at least the center shouldn't be all 0 if mapped properly)
     int modified = 0;
@@ -38,12 +42,12 @@ int test_pool_dispatch() {
     if (!modified) {
         printf("failed: pixels were not modified by dispatch\n");
         free(pixels);
-        cleanup_renderer();
+        cleanup_renderer(ctx);
         return 0;
     }
 
     free(pixels);
-    cleanup_renderer();
+    cleanup_renderer(ctx);
     return 1;
 }
 
