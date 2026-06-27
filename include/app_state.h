@@ -1,15 +1,8 @@
 #ifndef APP_STATE_H
 #define APP_STATE_H
 
-#include "bookmark.h"
 #include "camera.h"
-#include "color.h"
-#include "config.h"
-#include "ini_config.h"
-#include "julia.h"
-#include "mandelbrot.h"
-#include "renderer.h"
-#include "screenshot.h"
+#include "core_math.h"
 #include "tour.h"
 
 // transient state for julia mode transitions
@@ -40,8 +33,25 @@ typedef struct {
     int current_bookmark_idx;
     int needs_redraw;
     int running;
+    int show_help;
     uint32_t render_time_ms;
+    int thread_count;
+
+    // screenshot state
+    volatile int mega_screenshot_active;
+    volatile int mega_screenshot_progress;
+
+    // notification system (max 5 active stacked notifications)
+    struct {
+        char message[64];
+        uint32_t start_time;
+        int active;
+    } notifications[5];
 } AppCommonState;
+
+void app_state_push_notification(AppCommonState* state, const char* msg, uint32_t now);
+void app_state_update_or_push_notification(AppCommonState* state, const char* search_msg, const char* new_msg, uint32_t now);
+int app_state_has_active_notifications(const AppCommonState* state);
 
 // initializes state
 void app_state_init(AppCommonState* state, int win_w, int win_h);
