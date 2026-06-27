@@ -5,9 +5,15 @@
  */
 
 #include "app_state.h"
+#include "bookmark.h"
+#include "config.h"
+#include "ini_config.h"
+#include "renderer.h"
+#include "color.h"
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 
 // initialize defaults for common application state
 void app_state_init(AppCommonState* state, int win_w, int win_h) {
@@ -21,6 +27,13 @@ void app_state_init(AppCommonState* state, int win_w, int win_h) {
     state->current_bookmark_idx = -1;
     state->running = 1;
     state->needs_redraw = 1;
+    state->show_help = 0;
+    state->mega_screenshot_active = 0;
+    state->mega_screenshot_progress = 0;
+    state->thread_count = 0;
+    for (int i = 0; i < 5; i++) {
+        state->notifications[i].active = 0;
+    }
 }
 
 // restore initial explorer mode and reset camera view
@@ -29,7 +42,8 @@ void app_state_reset(AppCommonState* state, app_title_callback set_title_cb) {
     state->julia_session.active = 0;
     state->m_tour.phase = TOUR_IDLE;
     state->max_iterations = get_config_default_iterations();
-    init_renderer(state->max_iterations, state->palette_idx);
+    state->show_help = 0;
+    init_color_palette(state->max_iterations, state->palette_idx);
     camera_reset(&state->cam);
     if (set_title_cb) set_title_cb("Mandelbrot Explorer");
     state->needs_redraw = 1;
@@ -165,4 +179,35 @@ void app_state_calculate_boundaries(const AppCommonState* state, int width, int 
     *re_max = state->cam.view.center_re + state->cam.view.zoom * aspect / 2.0;
     *im_max = state->cam.view.center_im + state->cam.view.zoom / 2.0;
     *im_min = state->cam.view.center_im - state->cam.view.zoom / 2.0;
+}
+
+void app_state_push_notification(AppCommonState* state, const char* msg, uint32_t now) {
+    // Shift active notifications UP (from bottom/index 0 upwards)
+    for (int i = 4; i > 0; i--) {
+        state->notifications[i] = state->notifications[i - 1];
+    }
+    // Put the newest notification at index 0 (bottom of the stack)
+    snprintf(state->notifications[0].message, sizeof(state->notifications[0].message), "%s", msg);
+    state->notifications[0].start_time = now;
+    state->notifications[0].active = 1;
+}
+
+void app_state_update_or_push_notification(AppCommonState* state, const char* search_msg, const char* new_msg, uint32_t now) {
+    for (int i = 0; i < 5; i++) {
+        if (state->notifications[i].active && strstr(state->notifications[i].message, search_msg) != NULL) {
+            snprintf(state->notifications[i].message, sizeof(state->notifications[i].message), "%s", new_msg);
+            state->notifications[i].start_time = now;
+            return;
+        }
+    }
+    app_state_push_notification(state, new_msg, now);
+}
+
+int app_state_has_active_notifications(const AppCommonState* state) {
+    for (int i = 0; i < 5; i++) {
+        if (state->notifications[i].active) {
+            return 1;
+        }
+    }
+    return 0;
 }
