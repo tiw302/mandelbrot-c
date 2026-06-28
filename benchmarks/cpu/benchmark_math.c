@@ -1,4 +1,8 @@
-// benchmark_math.c — measures performance of mandelbrot math kernels.
+/* benchmark_math.c
+ *
+ * performance benchmarking for mandelbrot math kernels.
+ * measures and compares scalar vs vectorized simd execution speeds.
+ */
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -41,7 +45,7 @@ int main(void) {
     double start, end, time_taken;
     long long total_pixels = GRID_WIDTH * GRID_HEIGHT;
 
-    // --- 1. scalar double benchmark ---
+    // scalar double benchmark
     printf("1. Running Scalar (double)...\n");
     start = get_time_sec();
     for (int y = 0; y < GRID_HEIGHT; y++) {
@@ -56,7 +60,7 @@ int main(void) {
     printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
 
 #ifdef __AVX2__
-    // --- 2. avx2 double benchmark ---
+    // avx2 double benchmark
     printf("2. Running AVX2 (4x double)...\n");
     start = get_time_sec();
     for (int y = 0; y < GRID_HEIGHT; y++) {
@@ -73,8 +77,28 @@ int main(void) {
     printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
 #endif
 
+#ifdef __AVX512F__
+    // avx512 double benchmark
+    printf("2b. Running AVX512 (8x double)...\n");
+    start = get_time_sec();
+    for (int y = 0; y < GRID_HEIGHT; y++) {
+        for (int x = 0; x < GRID_WIDTH; x += 8) {
+            __m512d cre = _mm512_set_pd(x_min + (x + 7) * dx, x_min + (x + 6) * dx,
+                                        x_min + (x + 5) * dx, x_min + (x + 4) * dx,
+                                        x_min + (x + 3) * dx, x_min + (x + 2) * dx,
+                                        x_min + (x + 1) * dx, x_min + x * dx);
+            __m512d cim = _mm512_set1_pd(y_min + y * dy);
+            mandelbrot_check_avx512(cre, cim, MAX_ITERATIONS, &results[y * GRID_WIDTH + x]);
+        }
+    }
+    end = get_time_sec();
+    time_taken = end - start;
+    printf("   -> Time taken: %.4f seconds\n", time_taken);
+    printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
+#endif
+
 #ifdef USE_SIMD_F128
-    // --- 3. scalar f128 benchmark ---
+    // scalar f128 benchmark
     printf("3. Running simd-f128 (128-bit double-double)...\n");
     start = get_time_sec();
     for (int y = 0; y < GRID_HEIGHT; y++) {
@@ -90,7 +114,7 @@ int main(void) {
     printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
 
 #ifdef __AVX2__
-    // --- 4. avx2 f128 benchmark ---
+    // avx2 f128 benchmark
     printf("4. Running simd-f128x4 (AVX2 128-bit double-double)...\n");
     start = get_time_sec();
     for (int y = 0; y < GRID_HEIGHT; y++) {
