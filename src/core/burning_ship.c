@@ -1,7 +1,7 @@
 /* burning_ship.c
  *
- * core mathematical kernels for computing the burning ship fractal.
- * provides scalar double, avx2, avx512, wasm-simd128, and high-precision simd-f128 paths.
+ * mathematical kernel for computing the burning ship fractal.
+ * implements sign-flipped imaginary parts in scalar, simd, and 128-bit paths.
  */
 
 #include "burning_ship.h"
@@ -209,6 +209,59 @@ void burning_ship_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations,
         } else {
             /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
              * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
+        }
+    }
+}
+#endif
+
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+// arm neon vectorized burning ship path:
+// processes 2 pixels simultaneously using 64-bit float vectors.
+void burning_ship_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results) {
+    float64x2_t zre = vdupq_n_f64(0.0);
+    float64x2_t zim = vdupq_n_f64(0.0);
+    float64x2_t iters = vdupq_n_f64(0.0);
+    float64x2_t esc_radius_sq = vdupq_n_f64(ESCAPE_RADIUS * ESCAPE_RADIUS);
+    uint64x2_t escaped_mask = vdupq_n_u64(0);
+    float64x2_t final_mag_sq = vdupq_n_f64(0.0);
+    float64x2_t one = vdupq_n_f64(1.0);
+
+    for (int i = 0; i < max_iterations; i++) {
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+
+        float64x2_t zre2 = vmulq_f64(zre, zre);
+        float64x2_t zim2 = vmulq_f64(zim, zim);
+        float64x2_t mag_sq = vaddq_f64(zre2, zim2);
+
+        uint64x2_t mask = vcgtq_f64(mag_sq, esc_radius_sq);
+        uint64x2_t just_escaped = vbicq_u64(mask, escaped_mask);
+
+        final_mag_sq = vbslq_f64(just_escaped, mag_sq, final_mag_sq);
+        escaped_mask = vorrq_u64(escaped_mask, mask);
+        float64x2_t iters_inc = vbslq_f64(escaped_mask, vdupq_n_f64(0.0), one);
+        iters = vaddq_f64(iters, iters_inc);
+
+        // absolute values
+        float64x2_t abs_re = vabsq_f64(zre);
+        float64x2_t abs_im = vabsq_f64(zim);
+
+        float64x2_t zre_zim = vmulq_f64(abs_re, abs_im);
+        zim = vaddq_f64(vaddq_f64(zre_zim, zre_zim), cim);
+        zre = vaddq_f64(vsubq_f64(zre2, zim2), cre);
+    }
+
+    double res_iters[2], res_mag_sq[2];
+    uint64_t res_escaped[2];
+    vst1q_f64(res_iters, iters);
+    vst1q_f64(res_mag_sq, final_mag_sq);
+    vst1q_u64(res_escaped, escaped_mask);
+
+    for (int i = 0; i < 2; i++) {
+        if (!res_escaped[i] || res_iters[i] >= max_iterations) {
+            results[i] = (double)max_iterations;
+        } else {
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
