@@ -7,7 +7,7 @@ uniform float u_zoom;
 uniform float u_zoom_lo;  // low part of zoom for Dekker hi-lo d0 calculation
 uniform float u_iters;
 uniform float u_aspect;
-uniform float u_fractal_type;
+uniform float u_fractal_type;  // 0=mandelbrot, 1=julia, 2=burning_ship, 3=tricorn, 4=celtic, 5=buffalo
 uniform float u_palette;
 uniform float u_high_precision;
 uniform float u_use_perturbation;
@@ -87,7 +87,6 @@ vec3 lut_color(float fi, int pal) {
     a=vec3(255.-abs(mod(i*.5,510.)-255.), 255.-abs(mod(i*2.,510.)-255.), 255.-abs(mod(i*8.,510.)-255.))/255.;
     b=vec3(255.-abs(mod((i+1.)*.5,510.)-255.), 255.-abs(mod((i+1.)*2.,510.)-255.), 255.-abs(mod((i+1.)*8.,510.)-255.))/255.;
   } else if (pal==6) { // viridis
-    // ping-pong wrap for gpu shader
     float t1 = 1.0 - abs(mod(i/256., 2.0) - 1.0); float t2 = 1.0 - abs(mod((i+1.)/256., 2.0) - 1.0);
     a=vec3(0.267+t1*(0.993*t1-0.260), 0.004+t1*(1.490-t1*0.494), 0.329+t1*(1.268*t1*t1-0.680*t1-0.259));
     b=vec3(0.267+t2*(0.993*t2-0.260), 0.004+t2*(1.490-t2*0.494), 0.329+t2*(1.268*t2*t2-0.680*t2-0.259));
@@ -112,9 +111,6 @@ void main() {
   // and approximates the pixel position using a low-precision float delta (dn).
   // formula: delta_{n+1} = 2 * Zn * delta_n + delta_n^2 + delta_0
   if (u_use_perturbation > 0.5 && u_fractal_type < 0.5) {
-    // d0 is the complex offset of this pixel from the reference center.
-    // computed with Dekker double-single arithmetic so that even at extreme zoom
-    // levels (below float range) the pixel offset retains sufficient precision.
     vec2 zoom_ds = vec2(u_zoom, u_zoom_lo);
     vec2 d0 = vec2(
         ds_mul(vec2(uv.x - 0.5, 0.0), ds_mul(zoom_ds, vec2(u_aspect, 0.0))).x,
@@ -124,20 +120,16 @@ void main() {
     int orbit_n = int(u_orbit_len);
     for (; i < 2000; i++) {
       if (i >= orbit_n || i >= m) break;
-      
-      // sample reference orbit point Z_n from texture
       vec2 Zn = texture(u_orbit, vec2((float(i) + 0.5) / 10000.0, 0.5)).rg;
-      
-      // calculate actual coordinate value W_n = Z_n + delta_n
       vec2 Wn = Zn + dn;
       mag2 = dot(Wn, Wn);
       if (mag2 > 100.0) break;
-      
-      // compute next delta: dn_next = 2 * Zn * dn + dn^2 + d0
       vec2 dn_sq = vec2(dn.x * dn.x - dn.y * dn.y, 2.0 * dn.x * dn.y);
       vec2 Zn_dn = vec2(Zn.x * dn.x - Zn.y * dn.y, Zn.x * dn.y + Zn.y * dn.x);
       dn = 2.0 * Zn_dn + dn_sq + d0;
     }
+
+  // path 1: dekker double-single 64-bit emulation.
   } else if (u_high_precision > 0.5) {
     vec2 uv_dx = vec2(uv.x - 0.5, 0.0);
     vec2 uv_dy = vec2(0.5 - uv.y, 0.0);
@@ -151,7 +143,7 @@ void main() {
     vec2 c_val_y = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;
     vec2 zx = (u_fractal_type == 1.0) ? px : vec2(0.0);
     vec2 zy = (u_fractal_type == 1.0) ? py : vec2(0.0);
-    if (u_fractal_type < 0.5) { // cardioid rejection (mandelbrot)
+    if (u_fractal_type < 0.5) { // cardioid rejection (mandelbrot only)
       float cr = px.x - 0.25, ci2 = py.x*py.x, q = cr*cr+ci2;
       if (q*(q+cr) <= 0.25*ci2) { i = m; }
       else { float cr1 = px.x+1.0; if (cr1*cr1+ci2 <= 0.0625) i = m; }
@@ -162,27 +154,52 @@ void main() {
       vec2 y2 = ds_sqr(zy);
       mag2 = x2.x + y2.x;
       if (mag2 > 100.0) break;
-      if (u_fractal_type > 1.5) { // burning ship
+      if (u_fractal_type == 2.0) {
+        // burning ship: z = (|re(z)| + i|im(z)|)^2 + c
         vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;
         vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;
         vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), c_val_y);
         vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
         zx = zx_new; zy = zy_new;
-      } else { // mandelbrot / julia
+      } else if (u_fractal_type == 3.0) {
+        // tricorn (mandelbar): z = conj(z)^2 + c  =>  im = -2*re*im + c_im
+        vec2 two_zx_zy = ds_add(ds_mul(zx, zy), ds_mul(zx, zy));
+        vec2 zy_new = ds_add(vec2(-two_zx_zy.x, -two_zx_zy.y), c_val_y);
+        vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+        zx = zx_new; zy = zy_new;
+      } else if (u_fractal_type == 4.0) {
+        // celtic: z = |re(z^2)| + i*im(z^2) + c
+        vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);
+        vec2 diff = ds_add(x2, vec2(-y2.x, -y2.y));
+        vec2 abs_diff = (diff.x < 0.0) ? vec2(-diff.x, -diff.y) : diff;
+        vec2 zx_new = ds_add(abs_diff, c_val_x);
+        zx = zx_new; zy = zy_new;
+      } else if (u_fractal_type == 5.0) {
+        // buffalo: z = |re(z^2)| - i*2|re(z)||im(z)| + c
+        vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;
+        vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;
+        vec2 two_abs = ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy));
+        vec2 zy_new = ds_add(vec2(-two_abs.x, -two_abs.y), c_val_y);
+        vec2 diff = ds_add(x2, vec2(-y2.x, -y2.y));
+        vec2 abs_diff = (diff.x < 0.0) ? vec2(-diff.x, -diff.y) : diff;
+        vec2 zx_new = ds_add(abs_diff, c_val_x);
+        zx = zx_new; zy = zy_new;
+      } else {
+        // mandelbrot / julia: z = z^2 + c
         vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);
         vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
         zx = zx_new; zy = zy_new;
       }
     }
 
-    // path 2: standard float precision.
-    // high-speed path for low zoom levels where 32-bit float mantissa is enough.
+  // path 2: standard 32-bit float precision.
+  // high-speed path for low zoom levels where float mantissa is sufficient.
   } else {
     vec2 center = u_center_hi + u_center_lo;
     vec2 p = vec2((uv.x-0.5)*u_zoom*u_aspect+center.x, (0.5-uv.y)*u_zoom+center.y);
     vec2 c_val = (u_fractal_type == 1.0) ? (u_julia_c_hi + u_julia_c_lo) : p;
     vec2 z = (u_fractal_type == 1.0) ? p : vec2(0.0);
-    if (u_fractal_type < 0.5) { // cardioid rejection
+    if (u_fractal_type < 0.5) { // cardioid rejection (mandelbrot only)
       float cr = p.x - 0.25, ci2 = p.y*p.y, q = cr*cr + ci2;
       if (q*(q+cr) <= 0.25*ci2) { i = m; }
       else { float cr1 = p.x+1.0; if (cr1*cr1+ci2 <= 0.0625) i = m; }
@@ -192,9 +209,20 @@ void main() {
       float x2=z.x*z.x, y2=z.y*z.y;
       mag2 = x2+y2;
       if (mag2 > 100.0) break;
-      if (u_fractal_type > 1.5) {
+      if (u_fractal_type == 2.0) {
+        // burning ship
         z = vec2(x2-y2+c_val.x, 2.0*abs(z.x)*abs(z.y)+c_val.y);
+      } else if (u_fractal_type == 3.0) {
+        // tricorn (mandelbar): negate imaginary part only
+        z = vec2(x2-y2+c_val.x, -2.0*z.x*z.y+c_val.y);
+      } else if (u_fractal_type == 4.0) {
+        // celtic: abs on real part of z^2
+        z = vec2(abs(x2-y2)+c_val.x, 2.0*z.x*z.y+c_val.y);
+      } else if (u_fractal_type == 5.0) {
+        // buffalo: abs on real part of z^2 + negate imaginary
+        z = vec2(abs(x2-y2)+c_val.x, -2.0*abs(z.x)*abs(z.y)+c_val.y);
       } else {
+        // mandelbrot / julia
         z = vec2(x2-y2+c_val.x, 2.0*z.x*z.y+c_val.y);
       }
     }
