@@ -23,7 +23,7 @@ typedef struct {
     TourState m_tour;
     JuliaTourState j_tour;
     int julia_mode;
-    int burning_ship_mode;
+    int base_fractal;
     complex_t julia_c;
     JuliaSession julia_session;
 
@@ -63,7 +63,7 @@ void app_state_reset(AppCommonState* state, app_title_callback set_title_cb);
 void app_state_toggle_julia(AppCommonState* state, app_title_callback set_title_cb);
 
 // toggles burning ship fractal mode
-void app_state_toggle_burning_ship(AppCommonState* state, app_title_callback set_title_cb);
+void app_state_cycle_fractal(AppCommonState* state, app_title_callback set_title_cb);
 
 // cycles to next color palette
 void app_state_cycle_palette(AppCommonState* state);
