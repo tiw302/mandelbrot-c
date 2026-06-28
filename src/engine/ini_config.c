@@ -1,7 +1,7 @@
 /* ini_config.c
  *
- * handles configuration parsing, loading from and writing to config files.
- * stores settings like window size, default iterations, threads, and color palettes.
+ * parser for loading startup settings from configuration files.
+ * reads window size, default iterations, and limits on launch.
  */
 
 #include "ini_config.h"
