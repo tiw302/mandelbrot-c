@@ -1,3 +1,9 @@
+/* shaders.h
+ *
+ * embedded glsl shaders for the webassembly webgl2 pipeline.
+ * matches uniforms and structures with web_main.c layout.
+ */
+
 #ifndef SHADERS_H
 #define SHADERS_H
 
@@ -189,12 +195,32 @@ static const char* fs_gpu_src =
     "            vec2 y2 = ds_sqr(zy);\n"
     "            mag_sq = x2.x + y2.x;\n"
     "            if (mag_sq > 100.0) break;\n"
-    "            if (u_fractal_type > 1.5) {\n"
+    "            if (u_fractal_type == 2.0) {\n"
     "                vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;\n"
     "                vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;\n"
     "                vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), "
     "c_val_y);\n"
     "                vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
+    "                zx = zx_new; zy = zy_new;\n"
+    "            } else if (u_fractal_type == 3.0) {\n"
+    "                vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
+    "                zy_new = vec2(-zy_new.x, -zy_new.y);\n"
+    "                vec2 zx_new = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);\n"
+    "                zx = zx_new; zy = zy_new;\n"
+    "            } else if (u_fractal_type == 4.0) {\n"
+    "                vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
+    "                vec2 diff = ds_add(x2, vec2(-y2.x, -y2.y));\n"
+    "                vec2 abs_diff = (diff.x < 0.0) ? vec2(-diff.x, -diff.y) : diff;\n"
+    "                vec2 zx_new = ds_add(abs_diff, c_val_x);\n"
+    "                zx = zx_new; zy = zy_new;\n"
+    "            } else if (u_fractal_type == 5.0) {\n"
+    "                vec2 abs_zx = (zx.x < 0.0) ? vec2(-zx.x, -zx.y) : zx;\n"
+    "                vec2 abs_zy = (zy.x < 0.0) ? vec2(-zy.x, -zy.y) : zy;\n"
+    "                vec2 zy_new = ds_add(ds_add(ds_mul(abs_zx, abs_zy), ds_mul(abs_zx, abs_zy)), vec2(0.0, 0.0));\n"
+    "                zy_new = ds_add(vec2(-zy_new.x, -zy_new.y), c_val_y);\n"
+    "                vec2 diff = ds_add(x2, vec2(-y2.x, -y2.y));\n"
+    "                vec2 abs_diff = (diff.x < 0.0) ? vec2(-diff.x, -diff.y) : diff;\n"
+    "                vec2 zx_new = ds_add(abs_diff, c_val_x);\n"
     "                zx = zx_new; zy = zy_new;\n"
     "            } else {\n"
     "                vec2 zy_new = ds_add(ds_add(ds_mul(zx, zy), ds_mul(zx, zy)), c_val_y);\n"
@@ -220,8 +246,14 @@ static const char* fs_gpu_src =
     "            float x2 = z.x * z.x, y2 = z.y * z.y;\n"
     "            mag_sq = x2 + y2;\n"
     "            if (mag_sq > escape_sq) break;\n"
-    "            if (u_fractal_type > 1.5) {\n"
+    "            if (u_fractal_type == 2.0) {\n"
     "                z = vec2(x2 - y2 + c_val.x, 2.0 * abs(z.x) * abs(z.y) + c_val.y);\n"
+    "            } else if (u_fractal_type == 3.0) {\n"
+    "                z = vec2(x2 - y2 + c_val.x, -2.0 * z.x * z.y + c_val.y);\n"
+    "            } else if (u_fractal_type == 4.0) {\n"
+    "                z = vec2(abs(x2 - y2) + c_val.x, 2.0 * z.x * z.y + c_val.y);\n"
+    "            } else if (u_fractal_type == 5.0) {\n"
+    "                z = vec2(abs(x2 - y2) + c_val.x, -2.0 * abs(z.x) * abs(z.y) + c_val.y);\n"
     "            } else {\n"
     "                z = vec2(x2 - y2 + c_val.x, 2.0 * z.x * z.y + c_val.y);\n"
     "            }\n"
