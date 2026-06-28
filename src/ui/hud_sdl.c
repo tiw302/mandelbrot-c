@@ -1,3 +1,9 @@
+/* hud_sdl.c
+ *
+ * text and overlay rendering for the sdl2 cpu-mode window.
+ * draws telemetry, active status, and mega screenshot progress bars.
+ */
+
 #include "hud_sdl.h"
 #include "color.h"
 #include "config.h"
@@ -18,8 +24,8 @@ static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text
     SDL_FreeSurface(surface);
 }
 
-void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, const AppCommonState* state,
-                    int win_w, int win_h, int cpu_precision_128, uint32_t now) {
+void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* state, int win_w,
+                    int win_h, int cpu_precision_128, uint32_t now) {
     if (!font) return;
 
     char buf[256];
@@ -70,7 +76,7 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, const AppCommonState
     const char* engine_type = cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
     const char* mode_name = state->julia_mode
                                 ? "Julia"
-                                : (state->burning_ship_mode ? "Burning Ship" : "Mandelbrot");
+                                : (state->base_fractal == RENDER_BURNING_SHIP ? "Burning Ship" : (state->base_fractal == RENDER_TRICORN ? "Tricorn" : (state->base_fractal == RENDER_CELTIC ? "Celtic" : (state->base_fractal == RENDER_BUFFALO ? "Buffalo" : "Mandelbrot"))));
 
     snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms", engine_type,
              mode_name, state->thread_count, state->render_time_ms);
@@ -91,13 +97,13 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, const AppCommonState
              get_palette_name(state->palette_idx % get_palette_count()));
     render_text(renderer, font, buf, x, y, white);
 
-    // Draw stacked notifications overlay in the bottom right corner
+    // draw stacked notifications overlay in the bottom right corner
     int draw_count = 0;
     for (int i = 0; i < 5; i++) {
         if (state->notifications[i].active) {
             uint32_t elapsed = now - state->notifications[i].start_time;
             if (elapsed > 3000) {
-                ((AppCommonState*)state)->notifications[i].active = 0; // Clear the flag
+                state->notifications[i].active = 0;
             } else {
                 float tw = 260.0f;
                 float th = 40.0f;
@@ -106,13 +112,12 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, const AppCommonState
 
                 SDL_Rect t_bg = {(int)trx, (int)try, (int)tw, (int)th};
                 SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-                SDL_SetRenderDrawColor(renderer, 15, 15, 20, 230); // Charcoal background
+                SDL_SetRenderDrawColor(renderer, 15, 15, 20, 230);
                 SDL_RenderFillRect(renderer, &t_bg);
 
-                SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255); // Red border
+                SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255);
                 SDL_RenderDrawRect(renderer, &t_bg);
 
-                // Render text inside the toast box
                 int tx = (int)trx + 20;
                 int ty = (int)try + 10;
                 render_text(renderer, font, state->notifications[i].message, tx, ty, white);
@@ -122,7 +127,7 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, const AppCommonState
         }
     }
 
-    // Draw Mega Screenshot Progress Overlay in the bottom left corner if active
+    // draw mega screenshot progress overlay in the bottom left corner if active
     if (state->mega_screenshot_active == 1) {
         float tw = 260.0f;
         float th = 40.0f;
@@ -131,19 +136,17 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, const AppCommonState
 
         SDL_Rect t_bg = {(int)trx, (int)try, (int)tw, (int)th};
         SDL_SetRenderDrawBlendMode(renderer, SDL_BLENDMODE_BLEND);
-        SDL_SetRenderDrawColor(renderer, 15, 15, 20, 230); // Charcoal background
+        SDL_SetRenderDrawColor(renderer, 15, 15, 20, 230);
         SDL_RenderFillRect(renderer, &t_bg);
 
-        SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255); // Red border
+        SDL_SetRenderDrawColor(renderer, 255, 60, 60, 255);
         SDL_RenderDrawRect(renderer, &t_bg);
 
-        // Draw green progress bar at the bottom of the box
         float pb_w = (tw - 10.0f) * (float)state->mega_screenshot_progress / 100.0f;
         SDL_Rect t_pb = {(int)trx + 5, (int)try + (int)th - 6, (int)pb_w, 3};
-        SDL_SetRenderDrawColor(renderer, 40, 200, 40, 255); // Green progress
+        SDL_SetRenderDrawColor(renderer, 40, 200, 40, 255);
         SDL_RenderFillRect(renderer, &t_pb);
 
-        // Render progress text
         char progress_msg[64];
         snprintf(progress_msg, sizeof(progress_msg), "Generating 8K: %d%%", state->mega_screenshot_progress);
         int tx = (int)trx + 20;
