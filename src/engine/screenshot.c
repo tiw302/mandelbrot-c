@@ -1,8 +1,12 @@
 /* screenshot.c
  *
- * handles screenshot saving and high-resolution "mega screenshot" rendering.
- * supports uncompressed TGA format and exports in vertical strips to control
- * memory usage during large rendering passes.
+ * captures viewport frames and exports png files.
+ * handles asynchronous rendering and saving of mega 8k screenshots.
+ *
+ * features:
+ *   - creates standard viewport frames and writes to PNG using stb_image_write
+ *   - schedules mega screenshot (e.g. 7680x4320) split into horizontal or vertical bands
+ *   - runs high-res render loops incrementally to keep the UI thread responsive
  */
 
 #include "screenshot.h"
@@ -22,10 +26,9 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
                           precise_float re_max, precise_float im_min, precise_float im_max,
                           int max_iterations, int palette_idx, int fractal_type,
                           complex_t julia_c) {
-    char filename[128];
-    time_t now = time(NULL);
-    struct tm* t = localtime(&now);
-    strftime(filename, sizeof(filename), "mega_mandelbrot_%Y%m%d_%H%M%S.tga", t);
+    static uint32_t mega_counter = 0;
+    char filename[256];
+    snprintf(filename, sizeof(filename), "mega_screenshot_%u_%u.tga", (unsigned int)time(NULL), ++mega_counter);
 
     FILE* file = fopen(filename, "wb");
     if (!file) {
@@ -33,7 +36,10 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
         return 0;
     }
 
-    // write tga header (uncompressed true-color image)
+    /* write tga header (uncompressed true-color image).
+     * we choose tga because we can stream it to disk line-by-line or band-by-band
+     * without needing to keep the entire huge image (e.g. 7680x4320 at 4 bytes = 132mb)
+     * in ram. png requires compressing the entire buffer at once, which is too memory-heavy. */
     uint8_t header[18] = {0};
     header[2] = 2;  // uncompressed rgb
     header[12] = (target_width & 0xFF);
@@ -44,8 +50,9 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
     header[17] = 0x20;  // top-down origin
     fwrite(header, 1, 18, file);
 
-    // we render in chunks (strips) to save memory.
-    // say, 256 lines at a time.
+    /* we render in chunks (strips) to save memory.
+     * by allocating a small 256-line buffer instead of the whole target_height,
+     * we bound memory consumption to under 8mb even for massive resolution targets. */
     int chunk_height = 256;
     if (chunk_height > target_height) chunk_height = target_height;
 
@@ -135,7 +142,7 @@ void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* sta
                                 int max_iterations, int palette_idx, int fractal_type,
                                 complex_t julia_c) {
     if (state && state->mega_screenshot_active) {
-        return; // Already rendering
+        return; // already rendering
     }
 
     MegaScreenshotArgs* args = (MegaScreenshotArgs*)malloc(sizeof(MegaScreenshotArgs));
@@ -163,7 +170,7 @@ void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* sta
     if (pthread_create(&thread, NULL, mega_screenshot_thread_func, args) == 0) {
         pthread_detach(thread);
     } else {
-        // Fallback to sync
+        // fallback to sync
         int success = save_mega_screenshot(render_ctx, state, target_width, target_height, re_min, re_max, im_min, im_max,
                                            max_iterations, palette_idx, fractal_type, julia_c);
         if (state) {
@@ -232,7 +239,7 @@ static int check_ffmpeg_installed(void) {
 #endif
 }
 
-int start_video_recording(int width, int height, int fps) {
+int start_video_recording(int width, int height, int fps, int is_bgra_topdown) {
     if (is_recording) return 0;
 
     if (!check_ffmpeg_installed()) {
@@ -250,13 +257,21 @@ int start_video_recording(int width, int height, int fps) {
     strftime(filename, sizeof(filename), "mandelbrot_video_%Y%m%d_%H%M%S.mp4", t);
 
     char command[512];
-    // we pipe raw rgb32 (bgra on little endian) data to ffmpeg.
-    // using ultrafast preset and crf 18 for good quality without bottlenecking the app too much.
-    snprintf(command, sizeof(command),
-             "ffmpeg -y -f rawvideo -vcodec rawvideo -s %dx%d -pix_fmt bgra -r %d "
-             "-i - -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 -preset ultrafast -crf 18 "
-             "-pix_fmt yuv420p \"%s\"",
-             width, height, fps, filename);
+    // use ultrafast preset and crf 18 for good quality without bottlenecking the app too much.
+    if (is_bgra_topdown) {
+        snprintf(command, sizeof(command),
+                 "ffmpeg -y -f rawvideo -vcodec rawvideo -s %dx%d -pix_fmt bgra -r %d "
+                 "-i - -vf \"crop=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 -preset ultrafast -crf 18 "
+                 "-pix_fmt yuv420p \"%s\"",
+                 width, height, fps, filename);
+    } else {
+        // gpu outputs bottom-up rgba. let ffmpeg do the vertical flip and format conversion
+        snprintf(command, sizeof(command),
+                 "ffmpeg -y -f rawvideo -vcodec rawvideo -s %dx%d -pix_fmt rgba -r %d "
+                 "-i - -vf \"vflip,crop=trunc(iw/2)*2:trunc(ih/2)*2\" -c:v libx264 -preset ultrafast -crf 18 "
+                 "-pix_fmt yuv420p \"%s\"",
+                 width, height, fps, filename);
+    }
 
 #ifdef _WIN32
     ffmpeg_pipe = _popen(command, "wb");
@@ -292,7 +307,7 @@ int start_video_recording(int width, int height, int fps) {
     return 1;
 }
 
-void append_video_frame(uint32_t* pixels, int width, int height) {
+void append_video_frame(const uint32_t* pixels, int width, int height) {
     if (!is_recording || !ffmpeg_pipe) return;
 
     // copy frame to memory and queue it for the background thread
@@ -344,75 +359,43 @@ int is_video_recording(void) {
     return is_recording;
 }
 
-void save_screenshot(AppCommonState* state, uint32_t* pixels, int width, int height, uint32_t now) {
-    char filename[64];
-    time_t t_now = time(NULL);
-    struct tm* t = localtime(&t_now);
-    strftime(filename, sizeof(filename), "mandelbrot_%Y%m%d_%H%M%S.png", t);
+void save_screenshot(AppCommonState* state, const uint32_t* pixels, int width, int height, uint32_t now, int is_bgra, int is_bottom_up) {
+    static uint32_t counter = 0;
+    char filename[256];
+    snprintf(filename, sizeof(filename), "screenshot_%u_%u.png", (unsigned int)time(NULL), ++counter);
 
-    // allocate temp buffer for rgba conversion
-    uint32_t* rgba_pixels = (uint32_t*)malloc((size_t)width * height * 4);
-    if (!rgba_pixels) {
-        if (state) app_state_push_notification(state, "Error: Screenshot failed!", now);
-        return;
-    }
+    uint32_t* rgba_pixels = NULL;
 
-    for (int i = 0; i < width * height; i++) {
-        uint32_t p = pixels[i];
-        // swap red (bit 16-23) and blue (bit 0-7)
-        uint8_t b = (p >> 0) & 0xFF;
-        uint8_t g = (p >> 8) & 0xFF;
-        uint8_t r = (p >> 16) & 0xFF;
-        uint8_t a = (p >> 24) & 0xFF;
-        rgba_pixels[i] =
-            (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)a << 24);
-    }
-
-    if (stbi_write_png(filename, width, height, 4, rgba_pixels, width * 4)) {
-        printf("screenshot saved to %s\n", filename);
-        if (state) app_state_push_notification(state, "Screenshot Saved!", now);
-    } else {
-        fprintf(stderr, "error: failed to save screenshot\n");
-        if (state) app_state_push_notification(state, "Error: Screenshot failed!", now);
-    }
-
-    free(rgba_pixels);
-}
-
-static uint32_t* temp_flip_buf = NULL;
-static int temp_flip_w = 0, temp_flip_h = 0;
-
-void process_gpu_frame(AppCommonState* state, const uint32_t* rgba_pixels, int width, int height, int save_shot, uint32_t now) {
-    if (width != temp_flip_w || height != temp_flip_h || !temp_flip_buf) {
-        free(temp_flip_buf);
-        temp_flip_buf = (uint32_t*)malloc((size_t)width * height * sizeof(uint32_t));
-        if (!temp_flip_buf) {
-            fprintf(stderr, "error: failed to allocate temporary flip buffer\n");
-            temp_flip_w = 0;
-            temp_flip_h = 0;
+    // if input is bgra, we need to convert to rgba since stbi_write_png expects rgba
+    if (is_bgra) {
+        rgba_pixels = (uint32_t*)malloc((size_t)width * height * 4);
+        if (!rgba_pixels) {
+            if (state) app_state_push_notification(state, "error: screenshot failed!", now);
             return;
         }
-        temp_flip_w = width;
-        temp_flip_h = height;
-    }
 
-    for (int y = 0; y < height; y++) {
-        int src_y = height - 1 - y;
-        for (int x = 0; x < width; x++) {
-            uint32_t p = rgba_pixels[src_y * width + x];
-            uint8_t r = (p >> 0) & 0xFF;
+        for (int i = 0; i < width * height; i++) {
+            uint32_t p = pixels[i];
+            // swap red and blue
+            uint8_t b = (p >> 0) & 0xFF;
             uint8_t g = (p >> 8) & 0xFF;
-            uint8_t b = (p >> 16) & 0xFF;
+            uint8_t r = (p >> 16) & 0xFF;
             uint8_t a = (p >> 24) & 0xFF;
-            // convert OpenGL RGBA to BGRA
-            temp_flip_buf[y * width + x] = (a << 24) | (r << 16) | (g << 8) | b;
+            rgba_pixels[i] = (uint32_t)r | ((uint32_t)g << 8) | ((uint32_t)b << 16) | ((uint32_t)a << 24);
         }
     }
 
-    if (save_shot) {
-        save_screenshot(state, temp_flip_buf, width, height, now);
+    stbi_flip_vertically_on_write(is_bottom_up);
+
+    if (stbi_write_png(filename, width, height, 4, rgba_pixels ? rgba_pixels : pixels, width * 4)) {
+        printf("screenshot saved to %s\n", filename);
+        if (state) app_state_push_notification(state, "screenshot saved!", now);
+    } else {
+        fprintf(stderr, "error: failed to save screenshot\n");
+        if (state) app_state_push_notification(state, "error: screenshot failed!", now);
     }
-    if (is_video_recording()) {
-        append_video_frame(temp_flip_buf, width, height);
+
+    if (rgba_pixels) {
+        free(rgba_pixels);
     }
 }
