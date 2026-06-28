@@ -1,7 +1,7 @@
 /* tour.c
  *
- * implements automatic animated tours across pre-selected interesting coordinates.
- * handles state transition, interpolation (easing), and camera panning/zooming.
+ * path generation and camera interpolation for animation tours.
+ * calculates smooth transitions between bookmarked coordinates.
  */
 
 #include "tour.h"
