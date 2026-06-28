@@ -1,3 +1,9 @@
+/* hud_sokol.c
+ *
+ * telemetry and notification overlay rendering for sokol pipelines.
+ * renders text using fontstash and processes mouse events.
+ */
+
 #include "hud_sokol.h"
 #include "color.h"
 #include "config.h"
@@ -12,7 +18,7 @@
 #include "tour.h"
 #include <stdio.h>
 
-void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* state,
+void hud_render_sokol_gpu(FONScontext* fons, int font_id, AppCommonState* state,
                           int win_w, int win_h, int gpu_mode, int high_precision_mode,
                           int cpu_precision_128, int active_perturbation_last,
                           int use_perturbation, sgl_pipeline pip_blend, uint32_t now) {
@@ -76,7 +82,7 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         if (state->m_tour.phase != TOUR_IDLE) bg_h += lh;
         float bg_w = 700.0f;
 
-        sgl_c4b(20, 20, 25, 220);  // semi-transparent backdrop
+        sgl_c4b(20, 20, 25, 220);
         sgl_v2f(5.0f, 5.0f);
         sgl_v2f(bg_w, 5.0f);
         sgl_v2f(bg_w, bg_h);
@@ -84,7 +90,6 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         sgl_v2f(5.0f, 5.0f);
         sgl_end();
 
-        // render text telemetry using fontstash
         fonsClearState(fons);
         fonsSetFont(fons, font_id);
         fonsSetSize(fons, visual_font_size);
@@ -92,7 +97,6 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         float x = 15.0f, y = 12.0f;
         char buf[256];
 
-        // telemetry line 1
         fonsSetColor(fons, sfons_rgba(255, 255, 255, 255));
         const char* engine_name = "CPU (64-bit)";
         if (gpu_mode) {
@@ -101,11 +105,11 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
                 engine_name = "GPU (Perturbation)";
             } else if (use_perturbation &&
                        (state->cam.view.zoom < PERTURBATION_ZOOM_THRESHOLD) &&
-                       !state->julia_mode && !state->burning_ship_mode) {
+                       !state->julia_mode && !state->base_fractal) {
                 if ((float)state->cam.view.zoom == 0.0f) {
-                    engine_name = "GPU (Perturbation: No Float!)";
+                    engine_name = "GPU (Perturbation)";
                 } else {
-                    engine_name = "GPU (Perturbation: Fallback)";
+                    engine_name = "GPU (32-bit)";
                 }
             } else {
                 engine_name = high_precision_mode ? "GPU (64-bit emulation)" : "GPU (32-bit)";
@@ -121,12 +125,11 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms",
                  engine_name,
                  state->julia_mode ? "Julia"
-                                     : (state->burning_ship_mode ? "Burning Ship" : "Mandelbrot"),
+                                     : (state->base_fractal == RENDER_BURNING_SHIP ? "Burning Ship" : (state->base_fractal == RENDER_TRICORN ? "Tricorn" : (state->base_fractal == RENDER_CELTIC ? "Celtic" : (state->base_fractal == RENDER_BUFFALO ? "Buffalo" : "Mandelbrot")))),
                  state->thread_count, state->render_time_ms);
         fonsDrawText(fons, x, y, buf, NULL);
         y += lh;
 
-        // telemetry line 2
         if (state->julia_mode) {
             snprintf(buf, sizeof(buf), "[COORD]  C: (%.14f, %.14f)", state->julia_c.re,
                      state->julia_c.im);
@@ -137,19 +140,17 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         fonsDrawText(fons, x, y, buf, NULL);
         y += lh;
 
-        // telemetry line 3
         snprintf(buf, sizeof(buf), "[RENDER] Zoom: %.6g | Iters: %d | Palette: %s",
                  (double)state->cam.view.zoom, state->max_iterations,
                  get_palette_name(state->palette_idx % get_palette_count()));
         fonsDrawText(fons, x, y, buf, NULL);
         y += lh;
 
-        // tour telemetry
         if (state->m_tour.phase != TOUR_IDLE) {
             int t_idx = get_tour_target_idx(&state->m_tour);
-            int t_tot = get_num_tour_targets(state->burning_ship_mode);
-            double t_re = get_tour_target_re(&state->m_tour, state->burning_ship_mode);
-            double t_im = get_tour_target_im(&state->m_tour, state->burning_ship_mode);
+            int t_tot = get_num_tour_targets(state->base_fractal);
+            double t_re = get_tour_target_re(&state->m_tour, state->base_fractal);
+            double t_im = get_tour_target_im(&state->m_tour, state->base_fractal);
             snprintf(buf, sizeof(buf), "[TOUR]   Auto-Zoom [%s] Target #%d/%d (%.4f, %.4f)",
                      get_tour_phase_name(state->m_tour.phase), t_idx + 1, t_tot, t_re, t_im);
             fonsDrawText(fons, x, y, buf, NULL);
@@ -159,13 +160,13 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         sfons_flush(fons);
     }
 
-    // Draw stacked notifications overlay in the bottom right corner
+    // draw stacked notifications overlay in the bottom right corner
     int draw_count = 0;
     for (int i = 0; i < 5; i++) {
         if (state->notifications[i].active) {
             uint32_t elapsed = now - state->notifications[i].start_time;
             if (elapsed > 3000) {
-                ((AppCommonState*)state)->notifications[i].active = 0; // Clear the flag
+                state->notifications[i].active = 0; // clear the flag
             } else {
                 sgl_load_pipeline(pip_blend);
                 sgl_begin_quads();
@@ -174,7 +175,7 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
                 float trx = ((float)win_w - tw) - 20.0f;
                 float try = (float)win_h - th - 20.0f - (float)draw_count * (th + 10.0f);
 
-                sgl_c4b(15, 15, 20, 230); // Charcoal background (black with border)
+                sgl_c4b(15, 15, 20, 230); // charcoal background (black with border)
                 sgl_v2f(trx, try);
                 sgl_v2f(trx + tw, try);
                 sgl_v2f(trx + tw, try + th);
@@ -182,7 +183,7 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
                 sgl_end();
 
                 sgl_begin_lines();
-                sgl_c4b(255, 60, 60, 255); // Red border
+                sgl_c4b(255, 60, 60, 255); // red border
                 sgl_v2f(trx, try); sgl_v2f(trx + tw, try);
                 sgl_v2f(trx + tw, try); sgl_v2f(trx + tw, try + th);
                 sgl_v2f(trx + tw, try + th); sgl_v2f(trx, try + th);
@@ -202,7 +203,7 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         }
     }
 
-    // Draw Mega Screenshot Progress Overlay in the bottom left corner if active
+    // draw mega screenshot progress overlay in the bottom left corner if active
     if (state->mega_screenshot_active == 1) {
         sgl_load_pipeline(pip_blend);
         sgl_begin_quads();
@@ -211,15 +212,15 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         float trx = 20.0f;
         float try = (float)win_h - th - 20.0f;
 
-        sgl_c4b(15, 15, 20, 230); // Charcoal background
+        sgl_c4b(15, 15, 20, 230); // charcoal background
         sgl_v2f(trx, try);
         sgl_v2f(trx + tw, try);
         sgl_v2f(trx + tw, try + th);
         sgl_v2f(trx, try + th);
 
-        // Draw green progress bar at the bottom of the box
+        // draw green progress bar at the bottom of the box
         float pb_w = (tw - 10.0f) * (float)state->mega_screenshot_progress / 100.0f;
-        sgl_c4b(40, 200, 40, 255); // Green progress
+        sgl_c4b(40, 200, 40, 255); // green progress
         sgl_v2f(trx + 5, try + th - 6);
         sgl_v2f(trx + 5 + pb_w, try + th - 6);
         sgl_v2f(trx + 5 + pb_w, try + th - 3);
@@ -227,7 +228,7 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
         sgl_end();
 
         sgl_begin_lines();
-        sgl_c4b(255, 60, 60, 255); // Red border
+        sgl_c4b(255, 60, 60, 255); // red border
         sgl_v2f(trx, try); sgl_v2f(trx + tw, try);
         sgl_v2f(trx + tw, try); sgl_v2f(trx + tw, try + th);
         sgl_v2f(trx + tw, try + th); sgl_v2f(trx, try + th);
@@ -246,7 +247,7 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, const AppCommonState* 
     }
 }
 
-void hud_render_sokol_deep(FONScontext* fons, int font_id, const AppCommonState* state,
+void hud_render_sokol_deep(FONScontext* fons, int font_id, AppCommonState* state,
                            int win_w, int win_h, int high_precision_mode,
                            int active_perturbation_last, int use_perturbation,
                            sgl_pipeline pip_blend, uint32_t now) {
@@ -351,13 +352,13 @@ void hud_render_sokol_deep(FONScontext* fons, int font_id, const AppCommonState*
         sfons_flush(fons);
     }
 
-    // Draw stacked notifications overlay in the bottom right corner
+    // draw stacked notifications overlay in the bottom right corner
     int draw_count = 0;
     for (int i = 0; i < 5; i++) {
         if (state->notifications[i].active) {
             uint32_t elapsed = now - state->notifications[i].start_time;
             if (elapsed > 3000) {
-                ((AppCommonState*)state)->notifications[i].active = 0; // Clear the flag
+                state->notifications[i].active = 0; // clear the flag
             } else {
                 sgl_load_pipeline(pip_blend);
                 sgl_begin_quads();
@@ -366,7 +367,7 @@ void hud_render_sokol_deep(FONScontext* fons, int font_id, const AppCommonState*
                 float trx = ((float)win_w - tw) - 20.0f;
                 float try = (float)win_h - th - 20.0f - (float)draw_count * (th + 10.0f);
 
-                sgl_c4b(15, 15, 20, 230); // Charcoal background (black with border)
+                sgl_c4b(15, 15, 20, 230); // charcoal background (black with border)
                 sgl_v2f(trx, try);
                 sgl_v2f(trx + tw, try);
                 sgl_v2f(trx + tw, try + th);
@@ -374,7 +375,7 @@ void hud_render_sokol_deep(FONScontext* fons, int font_id, const AppCommonState*
                 sgl_end();
 
                 sgl_begin_lines();
-                sgl_c4b(255, 60, 60, 255); // Red border
+                sgl_c4b(255, 60, 60, 255); // red border
                 sgl_v2f(trx, try); sgl_v2f(trx + tw, try);
                 sgl_v2f(trx + tw, try); sgl_v2f(trx + tw, try + th);
                 sgl_v2f(trx + tw, try + th); sgl_v2f(trx, try + th);
@@ -395,7 +396,6 @@ void hud_render_sokol_deep(FONScontext* fons, int font_id, const AppCommonState*
     }
 }
 
-// handle common mouse interactions across sokol platforms
 void sokol_handle_mouse(AppCommonState* state, const struct sapp_event* event) {
     switch (event->type) {
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
@@ -415,7 +415,7 @@ void sokol_handle_mouse(AppCommonState* state, const struct sapp_event* event) {
             if (state->cam.is_panning) {
                 state->needs_redraw = 1;
             } else if (state->julia_mode && !state->cam.is_zooming) {
-                // tracking mouse cursor for real-time julia set update
+                // track mouse for real-time julia
                 app_state_get_mouse_coord(state, state->cam.mouse_x, state->cam.mouse_y,
                                           &state->julia_c.re, &state->julia_c.im);
                 state->needs_redraw = 1;
@@ -435,7 +435,6 @@ void sokol_handle_mouse(AppCommonState* state, const struct sapp_event* event) {
     }
 }
 
-// process generic hotkeys to avoid duplicating logic in app files
 int sokol_handle_common_keydown(AppCommonState* state, const struct sapp_event* event, uint32_t now) {
     if (event->key_code == SAPP_KEYCODE_ESCAPE || event->key_code == SAPP_KEYCODE_Q) {
         sapp_request_quit();
