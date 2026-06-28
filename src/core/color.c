@@ -1,7 +1,7 @@
 /* color.c
  *
- * handles color palette management, lookup tables (LUT), and linear interpolation.
- * parses palette definitions from JSON configurations to generate smooth gradients.
+ * color palette initialization, interpolation, and lookup functions.
+ * generates smooth transitions between colors to prevent color banding.
  */
 
 #include "color.h"
