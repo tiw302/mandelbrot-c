@@ -1,7 +1,7 @@
 /* web_main.c
  *
  * webassembly entry point using emscripten and the sokol framework.
- * manages the bridge between C/WASM logic and the browser's javascript/webgl layer.
+ * manages the bridge between C/WASM logic and the browser's javascript layer.
  */
 
 #include <math.h>
@@ -33,6 +33,8 @@
 #include "sokol/sokol_gfx.h"
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_time.h"
+#undef SOKOL_IMPL
+#include "input_handler.h"
 #include "tour.h"
 
 #if defined(__EMSCRIPTEN__)
@@ -43,13 +45,13 @@
 // javascript interop: updates the web hud with engine telemetry.
 // passes internal state directly to a globally defined js function.
 EM_JS(void, update_debug_info_js,
-      (int gpu_mode, int julia_mode, int burning_ship_mode, int max_iters, double zoom,
+      (int gpu_mode, int julia_mode, int base_fractal, int max_iters, double zoom,
        double center_re, double center_im, int palette_idx, int tour_phase, double julia_re,
        double julia_im, int high_precision, int tour_target_idx, int tour_total_targets,
        double tour_target_re, double tour_target_im),
       {
           if (typeof updateDebugInfo === 'function') {
-              updateDebugInfo(gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re,
+              updateDebugInfo(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re,
                               center_im, palette_idx, tour_phase, julia_re, julia_im,
                               high_precision, tour_target_idx, tour_total_targets, tour_target_re,
                               tour_target_im);
@@ -104,6 +106,10 @@ typedef struct {
     float zero;  // padding/optimization barrier
 } params_t;
 
+#define JULIA_ZOOM 4.0
+
+#include "app_state.h"
+
 // application state context
 typedef struct {
     sg_pipeline pip_cpu, pip_gpu;
@@ -115,37 +121,14 @@ typedef struct {
     uint32_t* pixels;  // staging buffer for cpu-to-texture uploads
     int win_w, win_h;
 
-#define JULIA_ZOOM 4.0
-
-    // navigation state
-    ViewState view;
-    ViewState history[MAX_HISTORY_SIZE];
-    int history_count;
-
-    // runtime flags
-    TourState m_tour;
-    int julia_mode, burning_ship_mode, gpu_mode, high_precision_mode;
-    complex_t julia_c;
-    int julia_c_locked;
-
-    int max_iterations, palette_idx;
-    int needs_redraw;
+    AppCommonState core;
+    
+    // web specific runtime flags
+    int gpu_mode, high_precision_mode;
     int screenshot_requested;
     RendererContext* renderer_ctx;
-
-    // interaction tracking
-    int is_panning, is_zooming;
-    int last_mouse_x, last_mouse_y;
-    int mouse_x, mouse_y;
-    struct {
-        int x, y, w, h;
-    } zoom_rect;
-
-    // session persistence
-    struct {
-        int active;
-        ViewState mandelbrot_view;
-    } julia_session;
+    
+    int julia_c_locked; // javascript toggle
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -234,66 +217,45 @@ static void init(void) {
         .colors[0] = {.load_action = SG_LOADACTION_CLEAR, .clear_value = {0, 0, 0, 1}}};
 
     // initialize or restore state
-    if (ctx.view.zoom == 0.0) {
-        ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-    }
-    if (ctx.julia_c.re == 0.0 && ctx.julia_c.im == 0.0) {
-        ctx.julia_c = (complex_t){-0.8, 0.156};
-    }
-    if (ctx.max_iterations == 0) {
-        ctx.max_iterations = DEFAULT_ITERATIONS;
-    }
+    app_state_init(&ctx.core, ctx.win_w, ctx.win_h);
 
-    ctx.needs_redraw = 1;
     ctx.gpu_mode = 1;
 
     init_fractal_registry();
-    ctx.renderer_ctx = init_renderer(ctx.max_iterations, DEFAULT_PALETTE);
+    ctx.renderer_ctx = init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
     if (!ctx.renderer_ctx) {
         fprintf(stderr, "error: failed to initialize renderer context\n");
         exit(1);
     }
-    ctx.palette_idx = DEFAULT_PALETTE;
 }
 
-// main execution loop dispatched by the browser's requestAnimationFrame
 static void frame(void) {
-    if (ctx.m_tour.phase != TOUR_IDLE) {
-        if (ctx.julia_mode) {
-            // web-exclusive julia animation: circular orbit
-            double t = stm_ms(stm_now()) * 0.0006;
-            double r = 0.7885;
-            ctx.julia_c.re = r * cos(t);
-            ctx.julia_c.im = r * sin(t);
-        } else {
-            update_tour(&ctx.m_tour, &ctx.view, (uint32_t)stm_ms(stm_now()), ctx.burning_ship_mode);
-        }
-        ctx.needs_redraw = 1;
-    }
+    uint32_t now = (uint32_t)stm_ms(stm_now());
+    app_state_update_tours(&ctx.core, now, NULL);
 
     // cpu path: render in workers and upload to webgl texture
-    if (!ctx.gpu_mode && ctx.needs_redraw) {
+    if (!ctx.gpu_mode && ctx.core.needs_redraw) {
         precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
-        precise_float rmin = ctx.view.center_re - (ctx.view.zoom * aspect) / 2;
-        precise_float rmax = ctx.view.center_re + (ctx.view.zoom * aspect) / 2;
-        precise_float im_top = ctx.view.center_im + ctx.view.zoom / 2;
-        precise_float im_bot = ctx.view.center_im - ctx.view.zoom / 2;
+        precise_float rmin = ctx.core.cam.view.center_re - (ctx.core.cam.view.zoom * aspect) / 2;
+        precise_float rmax = ctx.core.cam.view.center_re + (ctx.core.cam.view.zoom * aspect) / 2;
+        precise_float im_top = ctx.core.cam.view.center_im + ctx.core.cam.view.zoom / 2;
+        precise_float im_bot = ctx.core.cam.view.center_im - ctx.core.cam.view.zoom / 2;
 
-        if (ctx.julia_mode) {
+        if (ctx.core.julia_mode) {
             render_julia_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                  im_top, im_bot, ctx.julia_c, ctx.max_iterations);
-        } else if (ctx.burning_ship_mode) {
+                                  im_top, im_bot, ctx.core.julia_c, ctx.core.max_iterations);
+        } else if (ctx.core.base_fractal) {
             render_burning_ship_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
-                                         rmax, im_top, im_bot, ctx.max_iterations);
+                                         rmax, im_top, im_bot, ctx.core.max_iterations);
         } else {
             render_mandelbrot_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                       im_top, im_bot, ctx.max_iterations);
+                                       im_top, im_bot, ctx.core.max_iterations);
         }
 
         sg_update_image(ctx.img, &(sg_image_data){
                                      .mip_levels[0] = {.ptr = ctx.pixels,
                                                        .size = (size_t)ctx.win_w * ctx.win_h * 4}});
-        ctx.needs_redraw = 0;
+        ctx.core.needs_redraw = 0;
     }
 
     sg_begin_pass(&(sg_pass){.action = ctx.pass_action, .swapchain = sglue_swapchain()});
@@ -303,21 +265,21 @@ static void frame(void) {
         sg_apply_pipeline(cur_pip);
         sg_apply_bindings(&ctx.bind);
         if (ctx.gpu_mode) {
-            float chi_re = (float)ctx.view.center_re;
-            float chi_im = (float)ctx.view.center_im;
-            float jhi_re = (float)ctx.julia_c.re;
-            float jhi_im = (float)ctx.julia_c.im;
+            float chi_re = (float)ctx.core.cam.view.center_re;
+            float chi_im = (float)ctx.core.cam.view.center_im;
+            float jhi_re = (float)ctx.core.julia_c.re;
+            float jhi_im = (float)ctx.core.julia_c.im;
             params_t params = {
                 .center_hi = {chi_re, chi_im},
-                .center_lo = {(float)(ctx.view.center_re - chi_re),
-                              (float)(ctx.view.center_im - chi_im)},
+                .center_lo = {(float)(ctx.core.cam.view.center_re - chi_re),
+                              (float)(ctx.core.cam.view.center_im - chi_im)},
                 .julia_c_hi = {jhi_re, jhi_im},
-                .julia_c_lo = {(float)(ctx.julia_c.re - jhi_re), (float)(ctx.julia_c.im - jhi_im)},
-                .zoom = (float)ctx.view.zoom,
-                .iters = (float)ctx.max_iterations,
+                .julia_c_lo = {(float)(ctx.core.julia_c.re - jhi_re), (float)(ctx.core.julia_c.im - jhi_im)},
+                .zoom = (float)ctx.core.cam.view.zoom,
+                .iters = (float)ctx.core.max_iterations,
                 .aspect = (float)ctx.win_w / ctx.win_h,
-                .fractal_type = ctx.julia_mode ? 1.0f : (ctx.burning_ship_mode ? 2.0f : 0.0f),
-                .palette = (float)ctx.palette_idx,
+                .fractal_type = ctx.core.julia_mode ? 1.0f : (float)ctx.core.base_fractal,
+                .palette = (float)ctx.core.palette_idx,
                 .high_precision = ctx.high_precision_mode ? 1.0f : 0.0f,
                 .zero = 0.0f};
             sg_apply_uniforms(0, &SG_RANGE(params));
@@ -366,154 +328,164 @@ static void frame(void) {
     }
 
     // sync state with the external javascript hud
-    int tour_idx = get_tour_target_idx(&ctx.m_tour);
-    int tour_total = get_num_tour_targets(ctx.burning_ship_mode);
-    double tour_re = get_tour_target_re(&ctx.m_tour, ctx.burning_ship_mode);
-    double tour_im = get_tour_target_im(&ctx.m_tour, ctx.burning_ship_mode);
+    int tour_idx = get_tour_target_idx(&ctx.core.m_tour);
+    int tour_total = get_num_tour_targets(ctx.core.base_fractal);
+    double tour_re = get_tour_target_re(&ctx.core.m_tour, ctx.core.base_fractal);
+    double tour_im = get_tour_target_im(&ctx.core.m_tour, ctx.core.base_fractal);
 
-    update_debug_info_js(ctx.gpu_mode, ctx.julia_mode, ctx.burning_ship_mode, ctx.max_iterations,
-                         ctx.view.zoom, ctx.view.center_re, ctx.view.center_im, ctx.palette_idx,
-                         ctx.m_tour.phase, ctx.julia_c.re, ctx.julia_c.im, ctx.high_precision_mode,
+    update_debug_info_js(ctx.gpu_mode, ctx.core.julia_mode, ctx.core.base_fractal, ctx.core.max_iterations,
+                         ctx.core.cam.view.zoom, ctx.core.cam.view.center_re, ctx.core.cam.view.center_im, ctx.core.palette_idx,
+                         ctx.core.m_tour.phase, ctx.core.julia_c.re, ctx.core.julia_c.im, ctx.high_precision_mode,
                          tour_idx, tour_total, tour_re, tour_im);
 }
 
-// handles mouse input events
-static void handle_mouse_event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN) {
-        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
-            ctx.is_panning = 1;
-            ctx.last_mouse_x = (int)ev->mouse_x;
-            ctx.last_mouse_y = (int)ev->mouse_y;
-        } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
-            ctx.is_zooming = 1;
-            ctx.zoom_rect.x = (int)ev->mouse_x;
-            ctx.zoom_rect.y = (int)ev->mouse_y;
-            ctx.zoom_rect.w = ctx.zoom_rect.h = 0;
-            update_zoom_box_js(1, ctx.zoom_rect.x, ctx.zoom_rect.y, 0, 0);
-        }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_UP) {
-        if (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) {
-            ctx.is_panning = 0;
-        } else if (ev->mouse_button == SAPP_MOUSEBUTTON_LEFT) {
-            if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
-                if (ctx.history_count < MAX_HISTORY_SIZE)
-                    ctx.history[ctx.history_count++] = ctx.view;
-                double aspect = (double)ctx.win_w / ctx.win_h;
-                double re_pp = (ctx.view.zoom * aspect) / ctx.win_w;
-                double im_pp = ctx.view.zoom / ctx.win_h;
-                int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
-                int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
-                int zw = abs(ctx.zoom_rect.w), zh = abs(ctx.zoom_rect.h);
-                double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
-                double im_max = ctx.view.center_im + ctx.view.zoom / 2.0;
-                ctx.view.center_re = re_min + (zx + zw / 2.0) * re_pp;
-                ctx.view.center_im = im_max - (zy + zh / 2.0) * im_pp;
-                ctx.view.zoom = fmax(zw * re_pp, zh * im_pp);
-                ctx.needs_redraw = 1;
+static InputKey map_sokol_key(sapp_keycode sym) {
+    switch (sym) {
+        case SAPP_KEYCODE_ESCAPE: return KEY_ESCAPE;
+        case SAPP_KEYCODE_Q: return KEY_Q;
+        case SAPP_KEYCODE_H: return KEY_H;
+        case SAPP_KEYCODE_Z: return KEY_Z;
+        case SAPP_KEYCODE_R: return KEY_R;
+        case SAPP_KEYCODE_P: return KEY_P;
+        case SAPP_KEYCODE_0: return KEY_0;
+        case SAPP_KEYCODE_1: return KEY_1;
+        case SAPP_KEYCODE_2: return KEY_2;
+        case SAPP_KEYCODE_3: return KEY_3;
+        case SAPP_KEYCODE_4: return KEY_4;
+        case SAPP_KEYCODE_5: return KEY_5;
+        case SAPP_KEYCODE_6: return KEY_6;
+        case SAPP_KEYCODE_7: return KEY_7;
+        case SAPP_KEYCODE_8: return KEY_8;
+        case SAPP_KEYCODE_9: return KEY_9;
+        case SAPP_KEYCODE_UP: return KEY_UP;
+        case SAPP_KEYCODE_DOWN: return KEY_DOWN;
+        case SAPP_KEYCODE_N: return KEY_N;
+        case SAPP_KEYCODE_E: return KEY_E;
+        case SAPP_KEYCODE_G: return KEY_G;
+        case SAPP_KEYCODE_F: return KEY_F;
+        case SAPP_KEYCODE_J: return KEY_J;
+        case SAPP_KEYCODE_B: return KEY_B;
+        case SAPP_KEYCODE_S: return KEY_S;
+        case SAPP_KEYCODE_X: return KEY_X;
+        case SAPP_KEYCODE_V: return KEY_V;
+        case SAPP_KEYCODE_M: return KEY_M;
+        case SAPP_KEYCODE_L: return KEY_L;
+        case SAPP_KEYCODE_T: return KEY_T;
+        case SAPP_KEYCODE_LEFT_BRACKET: return KEY_LEFT_BRACKET;
+        case SAPP_KEYCODE_RIGHT_BRACKET: return KEY_RIGHT_BRACKET;
+        case SAPP_KEYCODE_F5: return KEY_F5;
+        default: return KEY_UNKNOWN;
+    }
+}
+
+static void event(const sapp_event* ev) {
+    uint32_t now = (uint32_t)stm_ms(stm_now());
+    AppInputEvent ie = {0};
+    int handled = 0;
+
+    switch (ev->type) {
+        case SAPP_EVENTTYPE_RESIZED:
+            if (ev->framebuffer_width > 0 && ev->framebuffer_height > 0) {
+                ctx.win_w = (int)ev->framebuffer_width;
+                ctx.win_h = (int)ev->framebuffer_height;
+                if (ctx.pixels) free(ctx.pixels);
+                ctx.pixels = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
+                sg_destroy_image(ctx.img);
+                ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w,
+                                                         .height = ctx.win_h,
+                                                         .pixel_format = SG_PIXELFORMAT_RGBA8,
+                                                         .usage = {.dynamic_update = true}});
+                sg_destroy_view(ctx.img_view);
+                ctx.img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.img});
+                ctx.bind.views[0] = ctx.img_view;
+                camera_resize(&ctx.core.cam, ctx.win_w, ctx.win_h);
+                ctx.core.needs_redraw = 1;
             }
-            ctx.is_zooming = 0;
+            handled = 1;
+            break;
+
+        case SAPP_EVENTTYPE_KEY_DOWN:
+            ie.type = INPUT_KEY_DOWN;
+            ie.key = map_sokol_key(ev->key_code);
+            ie.mod_shift = (ev->modifiers & SAPP_MODIFIER_SHIFT) ? 1 : 0;
+            ie.mod_ctrl = (ev->modifiers & SAPP_MODIFIER_CTRL) ? 1 : 0;
+            break;
+
+        case SAPP_EVENTTYPE_KEY_UP:
+            ie.type = INPUT_KEY_UP;
+            ie.key = map_sokol_key(ev->key_code);
+            ie.mod_shift = (ev->modifiers & SAPP_MODIFIER_SHIFT) ? 1 : 0;
+            ie.mod_ctrl = (ev->modifiers & SAPP_MODIFIER_CTRL) ? 1 : 0;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_SCROLL:
+            ie.type = INPUT_MOUSE_SCROLL;
+            ie.scroll_y = ev->scroll_y;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_DOWN:
+            ie.type = INPUT_MOUSE_DOWN;
+            ie.mouse_btn = (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
+            ie.mouse_x = (int)ev->mouse_x;
+            ie.mouse_y = (int)ev->mouse_y;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_MOVE:
+            ie.type = INPUT_MOUSE_MOVE;
+            ie.mouse_x = (int)ev->mouse_x;
+            ie.mouse_y = (int)ev->mouse_y;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_UP:
+            ie.type = INPUT_MOUSE_UP;
+            ie.mouse_btn = (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
+            ie.mouse_x = (int)ev->mouse_x;
+            ie.mouse_y = (int)ev->mouse_y;
+            break;
+
+        default:
+            handled = 1;
+            break;
+    }
+
+    if (!handled) {
+        InputAction action = app_handle_input(&ctx.core, &ie, now);
+        switch (action) {
+            case ACTION_TOGGLE_GPU:
+                ctx.gpu_mode = !ctx.gpu_mode;
+                ctx.core.needs_redraw = 1;
+                break;
+            case ACTION_TOGGLE_PRECISION:
+                if (ctx.gpu_mode) {
+                    ctx.high_precision_mode = !ctx.high_precision_mode;
+                    ctx.core.needs_redraw = 1;
+                }
+                break;
+            case ACTION_QUIT:
+                // do nothing on web
+                break;
+            default:
+                if (ie.type == INPUT_KEY_DOWN && ie.key == KEY_S) {
+                    ctx.screenshot_requested = 1;
+                    ctx.core.needs_redraw = 1;
+                }
+                break;
+        }
+
+        // handle js zoom box 
+        if (ctx.core.cam.is_zooming) {
+            int zx = ctx.core.cam.zoom_rect.w > 0 ? ctx.core.cam.zoom_rect.x : ctx.core.cam.zoom_rect.x + ctx.core.cam.zoom_rect.w;
+            int zy = ctx.core.cam.zoom_rect.h > 0 ? ctx.core.cam.zoom_rect.y : ctx.core.cam.zoom_rect.y + ctx.core.cam.zoom_rect.h;
+            update_zoom_box_js(1, zx, zy, abs(ctx.core.cam.zoom_rect.w), abs(ctx.core.cam.zoom_rect.h));
+        } else {
             update_zoom_box_js(0, 0, 0, 0, 0);
         }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_MOVE) {
-        ctx.mouse_x = (int)ev->mouse_x;
-        ctx.mouse_y = (int)ev->mouse_y;
-        if (ctx.is_panning) {
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            ctx.view.center_re -=
-                (ev->mouse_x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
-            ctx.view.center_im += (ev->mouse_y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
-            ctx.last_mouse_x = (int)ev->mouse_x;
-            ctx.last_mouse_y = (int)ev->mouse_y;
-            ctx.needs_redraw = 1;
-        } else if (ctx.is_zooming) {
-            ctx.zoom_rect.w = (int)ev->mouse_x - ctx.zoom_rect.x;
-            ctx.zoom_rect.h = (int)ev->mouse_y - ctx.zoom_rect.y;
-            int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
-            int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
-            update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
-        } else if (ctx.julia_mode && !ctx.julia_c_locked && ctx.m_tour.phase == TOUR_IDLE) {
-            ctx.julia_c.re = ctx.view.center_re + ((double)ctx.mouse_x / ctx.win_w - 0.5) *
-                                                      ctx.view.zoom *
-                                                      ((double)ctx.win_w / ctx.win_h);
-            ctx.julia_c.im =
-                ctx.view.center_im + (0.5 - (double)ctx.mouse_y / ctx.win_h) * ctx.view.zoom;
-            ctx.needs_redraw = 1;
-        }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        double zoom_factor = (ev->scroll_y > 0) ? 0.9 : 1.1;
-        if (ev->scroll_y != 0.0f) {
-            if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            double mre = ctx.view.center_re +
-                         ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
-            double mim =
-                ctx.view.center_im + (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
-            ctx.view.zoom *= zoom_factor;
-            ctx.view.center_re =
-                mre - ((double)ev->mouse_x / ctx.win_w - 0.5) * ctx.view.zoom * aspect;
-            ctx.view.center_im = mim - (0.5 - (double)ev->mouse_y / ctx.win_h) * ctx.view.zoom;
-            ctx.needs_redraw = 1;
-        }
-    }
-}
 
-// handles keyboard input events
-static void handle_keyboard_event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        if (ev->key_code == SAPP_KEYCODE_G) {
-            ctx.gpu_mode = !ctx.gpu_mode;
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_E) {
-            if (ctx.gpu_mode) {
-                ctx.high_precision_mode = !ctx.high_precision_mode;
-                ctx.needs_redraw = 1;
-            }
-        } else if (ev->key_code == SAPP_KEYCODE_R) {
-            ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_UP) {
-            ctx.max_iterations += ctx.max_iterations / 10;
-            if (ctx.max_iterations > get_config_max_iterations_limit())
-                ctx.max_iterations = get_config_max_iterations_limit();
-            init_color_palette(ctx.max_iterations, ctx.palette_idx);
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_DOWN) {
-            ctx.max_iterations -= ctx.max_iterations / 10;
-            if (ctx.max_iterations < 10) ctx.max_iterations = 10;
-            init_color_palette(ctx.max_iterations, ctx.palette_idx);
-            ctx.needs_redraw = 1;
-        } else if (ev->key_code == SAPP_KEYCODE_B) {
-            ctx.burning_ship_mode = !ctx.burning_ship_mode;
-            ctx.julia_mode = 0;
-            ctx.m_tour.phase = TOUR_IDLE;
-            ctx.needs_redraw = 1;
+        // julia hover picking for web mode
+        if (ie.type == INPUT_MOUSE_MOVE && ctx.core.julia_mode && !ctx.julia_c_locked && ctx.core.m_tour.phase == TOUR_IDLE && !ctx.core.cam.is_panning && !ctx.core.cam.is_zooming) {
+            app_state_get_mouse_coord(&ctx.core, ie.mouse_x, ie.mouse_y, &ctx.core.julia_c.re, &ctx.core.julia_c.im);
+            ctx.core.needs_redraw = 1;
         }
-    }
-}
-
-// maps browser-driven input events to engine state
-static void event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_RESIZED) {
-        if (ev->framebuffer_width > 0 && ev->framebuffer_height > 0) {
-            ctx.win_w = (int)ev->framebuffer_width;
-            ctx.win_h = (int)ev->framebuffer_height;
-            if (ctx.pixels) free(ctx.pixels);
-            ctx.pixels = (uint32_t*)malloc((size_t)ctx.win_w * ctx.win_h * 4);
-            sg_destroy_image(ctx.img);
-            ctx.img = sg_make_image(&(sg_image_desc){.width = ctx.win_w,
-                                                     .height = ctx.win_h,
-                                                     .pixel_format = SG_PIXELFORMAT_RGBA8,
-                                                     .usage = {.dynamic_update = true}});
-            sg_destroy_view(ctx.img_view);
-            ctx.img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.img});
-            ctx.bind.views[0] = ctx.img_view;
-            ctx.needs_redraw = 1;
-        }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
-               ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        handle_mouse_event(ev);
-    } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        handle_keyboard_event(ev);
     }
 }
 
@@ -529,66 +501,57 @@ static void cleanup(void) {
 // exported symbols for javascript control
 EMSCRIPTEN_KEEPALIVE
 void wasm_reset_view(void) {
-    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-    ctx.needs_redraw = 1;
+    app_state_reset(&ctx.core, NULL);
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_view(double re, double im, double zoom) {
-    ctx.view.center_re = re;
-    ctx.view.center_im = im;
-    ctx.view.zoom = zoom;
-    ctx.needs_redraw = 1;
+    ctx.core.cam.view.center_re = re;
+    ctx.core.cam.view.center_im = im;
+    ctx.core.cam.view.zoom = zoom;
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_state(int julia_mode, double jre, double jim, int iters, int palette) {
-    ctx.julia_mode = julia_mode;
-    ctx.julia_c.re = jre;
-    ctx.julia_c.im = jim;
-    if (iters > 0) ctx.max_iterations = iters;
-    if (palette >= 0) ctx.palette_idx = palette % get_palette_count();
-    init_color_palette(ctx.max_iterations, ctx.palette_idx);
-    ctx.needs_redraw = 1;
+    ctx.core.julia_mode = julia_mode;
+    ctx.core.julia_c.re = jre;
+    ctx.core.julia_c.im = jim;
+    if (iters > 0) ctx.core.max_iterations = iters;
+    if (palette >= 0) ctx.core.palette_idx = palette % get_palette_count();
+    init_color_palette(ctx.core.max_iterations, ctx.core.palette_idx);
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_undo_zoom(void) {
-    if (ctx.history_count > 0) {
-        ctx.view = ctx.history[--ctx.history_count];
-        ctx.needs_redraw = 1;
-    }
+    camera_pop_history(&ctx.core.cam);
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_tour(void) {
-    if (ctx.m_tour.phase == TOUR_IDLE)
-        start_tour(&ctx.m_tour, &ctx.view);
-    else
-        stop_tour(&ctx.m_tour);
-    ctx.needs_redraw = 1;
+    app_state_toggle_tour(&ctx.core, (uint32_t)stm_ms(stm_now()), NULL);
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
-    ctx.palette_idx = (ctx.palette_idx + 1) % get_palette_count();
-    init_color_palette(ctx.max_iterations, ctx.palette_idx);
-    ctx.needs_redraw = 1;
+    app_state_cycle_palette(&ctx.core);
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_palette(int idx) {
     if (idx >= 0 && idx < get_palette_count()) {
-        ctx.palette_idx = idx;
-        init_color_palette(ctx.max_iterations, ctx.palette_idx);
-        ctx.needs_redraw = 1;
+        ctx.core.palette_idx = idx;
+        init_color_palette(ctx.core.max_iterations, ctx.core.palette_idx);
+        ctx.core.needs_redraw = 1;
     }
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia_lock(void) {
     ctx.julia_c_locked = !ctx.julia_c_locked;
-    ctx.needs_redraw = 1;
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -598,42 +561,32 @@ int wasm_is_julia_locked(void) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia(void) {
-    ctx.m_tour.phase = TOUR_IDLE;
-    if (!ctx.julia_mode) {
-        ctx.julia_session.mandelbrot_view = ctx.view;
-        ctx.julia_session.active = 1;
-        if (ctx.julia_c.re == 0.0 && ctx.julia_c.im == 0.0) ctx.julia_c = (complex_t){-0.8, 0.156};
-        ctx.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
-        ctx.julia_mode = 1;
-        ctx.history_count = 0;
-    } else {
-        if (ctx.julia_session.active) ctx.view = ctx.julia_session.mandelbrot_view;
-        ctx.julia_mode = 0;
-        ctx.history_count = 0;
-    }
-    ctx.burning_ship_mode = 0;
-    ctx.needs_redraw = 1;
+    app_state_toggle_julia(&ctx.core, NULL);
 }
 
 EMSCRIPTEN_KEEPALIVE
-void wasm_toggle_burning_ship(void) {
-    ctx.burning_ship_mode = !ctx.burning_ship_mode;
-    ctx.julia_mode = 0;
-    ctx.julia_session.active = 0;
-    ctx.m_tour.phase = TOUR_IDLE;
-    ctx.view = (ViewState){INITIAL_CENTER_RE, INITIAL_CENTER_IM, INITIAL_ZOOM};
-    ctx.history_count = 0;
-    ctx.needs_redraw = 1;
+void wasm_cycle_fractal(void) {
+    app_state_cycle_fractal(&ctx.core, NULL);
+}
+
+EMSCRIPTEN_KEEPALIVE
+void wasm_set_fractal_mode(int mode) {
+    if (mode < 0 || mode > 4) mode = 0;
+    ctx.core.base_fractal = mode;
+    ctx.core.julia_mode = 0;
+    ctx.core.julia_session.active = 0;
+    camera_reset(&ctx.core.cam);
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_adjust_iterations(int diff) {
-    ctx.max_iterations += diff;
-    if (ctx.max_iterations < 10) ctx.max_iterations = 10;
-    if (ctx.max_iterations > get_config_max_iterations_limit())
-        ctx.max_iterations = get_config_max_iterations_limit();
-    init_color_palette(ctx.max_iterations, ctx.palette_idx);
-    ctx.needs_redraw = 1;
+    ctx.core.max_iterations += diff;
+    if (ctx.core.max_iterations < 10) ctx.core.max_iterations = 10;
+    if (ctx.core.max_iterations > get_config_max_iterations_limit())
+        ctx.core.max_iterations = get_config_max_iterations_limit();
+    init_color_palette(ctx.core.max_iterations, ctx.core.palette_idx);
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -644,93 +597,68 @@ void wasm_set_resolution(int w, int h) {
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_cancel_zoom(void) {
-    ctx.is_panning = 0;
-    ctx.is_zooming = 0;
+    ctx.core.cam.is_panning = 0;
+    ctx.core.cam.is_zooming = 0;
     update_zoom_box_js(0, 0, 0, 0, 0);
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_down(float x, float y, int button) {
-    if (button == 0) {
-        ctx.is_zooming = 1;
-        ctx.zoom_rect.x = (int)x;
-        ctx.zoom_rect.y = (int)y;
-        ctx.zoom_rect.w = ctx.zoom_rect.h = 0;
-        update_zoom_box_js(1, ctx.zoom_rect.x, ctx.zoom_rect.y, 0, 0);
-    } else if (button == 1) {
-        ctx.is_panning = 1;
-        ctx.last_mouse_x = (int)x;
-        ctx.last_mouse_y = (int)y;
-    }
+    AppInputEvent ie = {0};
+    ie.type = INPUT_MOUSE_DOWN;
+    ie.mouse_btn = (button == 1) ? 3 : 1;
+    ie.mouse_x = (int)x;
+    ie.mouse_y = (int)y;
+    app_handle_input(&ctx.core, &ie, (uint32_t)stm_ms(stm_now()));
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_move(float x, float y) {
-    ctx.mouse_x = (int)x;
-    ctx.mouse_y = (int)y;
-    if (ctx.is_panning) {
-        double aspect = (double)ctx.win_w / ctx.win_h;
-        ctx.view.center_re -= (x - ctx.last_mouse_x) * (ctx.view.zoom * aspect) / ctx.win_w;
-        ctx.view.center_im += (y - ctx.last_mouse_y) * ctx.view.zoom / ctx.win_h;
-        ctx.last_mouse_x = (int)x;
-        ctx.last_mouse_y = (int)y;
-        ctx.needs_redraw = 1;
-    } else if (ctx.is_zooming) {
-        ctx.zoom_rect.w = (int)x - ctx.zoom_rect.x;
-        ctx.zoom_rect.h = (int)y - ctx.zoom_rect.y;
-        int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
-        int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
-        update_zoom_box_js(1, zx, zy, abs(ctx.zoom_rect.w), abs(ctx.zoom_rect.h));
+    AppInputEvent ie = {0};
+    ie.type = INPUT_MOUSE_MOVE;
+    ie.mouse_x = (int)x;
+    ie.mouse_y = (int)y;
+    app_handle_input(&ctx.core, &ie, (uint32_t)stm_ms(stm_now()));
+    
+    if (ctx.core.cam.is_zooming) {
+        int zx = ctx.core.cam.zoom_rect.w > 0 ? ctx.core.cam.zoom_rect.x : ctx.core.cam.zoom_rect.x + ctx.core.cam.zoom_rect.w;
+        int zy = ctx.core.cam.zoom_rect.h > 0 ? ctx.core.cam.zoom_rect.y : ctx.core.cam.zoom_rect.y + ctx.core.cam.zoom_rect.h;
+        update_zoom_box_js(1, zx, zy, abs(ctx.core.cam.zoom_rect.w), abs(ctx.core.cam.zoom_rect.h));
+    } else {
+        update_zoom_box_js(0, 0, 0, 0, 0);
+    }
+    
+    if (ctx.core.julia_mode && !ctx.julia_c_locked && ctx.core.m_tour.phase == TOUR_IDLE && !ctx.core.cam.is_panning && !ctx.core.cam.is_zooming) {
+        app_state_get_mouse_coord(&ctx.core, ie.mouse_x, ie.mouse_y, &ctx.core.julia_c.re, &ctx.core.julia_c.im);
+        ctx.core.needs_redraw = 1;
     }
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_up(float x, float y, int button) {
-    (void)x;
-    (void)y;
-    if (button == 0) {
-        if (ctx.is_zooming && ctx.zoom_rect.w != 0 && ctx.zoom_rect.h != 0) {
-            if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
-            double aspect = (double)ctx.win_w / ctx.win_h;
-            double re_pp = (ctx.view.zoom * aspect) / ctx.win_w;
-            double im_pp = ctx.view.zoom / ctx.win_h;
-            int zx = ctx.zoom_rect.w > 0 ? ctx.zoom_rect.x : ctx.zoom_rect.x + ctx.zoom_rect.w;
-            int zy = ctx.zoom_rect.h > 0 ? ctx.zoom_rect.y : ctx.zoom_rect.y + ctx.zoom_rect.h;
-            int zw = abs(ctx.zoom_rect.w), zh = abs(ctx.zoom_rect.h);
-            double re_min = ctx.view.center_re - (ctx.view.zoom * aspect) / 2.0;
-            double im_max = ctx.view.center_im + ctx.view.zoom / 2.0;
-            ctx.view.center_re = re_min + (zx + zw / 2.0) * re_pp;
-            ctx.view.center_im = im_max - (zy + zh / 2.0) * im_pp;
-            ctx.view.zoom = fmax(zw * re_pp, zh * im_pp);
-            ctx.needs_redraw = 1;
-        }
-        ctx.is_zooming = 0;
-        update_zoom_box_js(0, 0, 0, 0, 0);
-    } else if (button == 1)
-        ctx.is_panning = 0;
+    AppInputEvent ie = {0};
+    ie.type = INPUT_MOUSE_UP;
+    ie.mouse_btn = (button == 1) ? 3 : 1;
+    ie.mouse_x = (int)x;
+    ie.mouse_y = (int)y;
+    app_handle_input(&ctx.core, &ie, (uint32_t)stm_ms(stm_now()));
+    update_zoom_box_js(0, 0, 0, 0, 0);
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_zoom_at(float cx, float cy, float factor) {
-    if (ctx.history_count < MAX_HISTORY_SIZE) ctx.history[ctx.history_count++] = ctx.view;
-    float sw = sapp_widthf(), sh = sapp_heightf();
-    if (sw <= 0 || sh <= 0) return;
-    double aspect = (double)sw / sh;
-    double re = ctx.view.center_re + (cx / sw - 0.5) * ctx.view.zoom * aspect;
-    double im = ctx.view.center_im + (0.5 - cy / sh) * ctx.view.zoom;
-    double min_zoom = (ctx.gpu_mode ? 1e-15 : (ctx.high_precision_mode ? 1e-30 : 1e-15));
-    double next_zoom = ctx.view.zoom * factor;
-    if (next_zoom < min_zoom) factor = min_zoom / ctx.view.zoom;
-    ctx.view.zoom *= factor;
-    ctx.view.center_re = re - (cx / sw - 0.5) * ctx.view.zoom * aspect;
-    ctx.view.center_im = im - (0.5 - cy / sh) * ctx.view.zoom;
-    ctx.needs_redraw = 1;
+    AppInputEvent ie = {0};
+    ie.type = INPUT_MOUSE_SCROLL;
+    ie.scroll_y = (factor > 1.0f) ? -1.0f : 1.0f;
+    ie.mouse_x = (int)cx;
+    ie.mouse_y = (int)cy;
+    app_handle_input(&ctx.core, &ie, (uint32_t)stm_ms(stm_now()));
 }
 
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_gpu(void) {
     ctx.gpu_mode = !ctx.gpu_mode;
-    ctx.needs_redraw = 1;
+    ctx.core.needs_redraw = 1;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -742,7 +670,7 @@ EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_precision(void) {
     ctx.high_precision_mode = !ctx.high_precision_mode;
     set_cpu_precision(ctx.renderer_ctx, ctx.high_precision_mode);
-    ctx.needs_redraw = 1;
+    ctx.core.needs_redraw = 1;
 }
 
 #endif
