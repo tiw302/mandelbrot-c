@@ -1,4 +1,8 @@
-// test_tour.c — unit test for the cinematic tour state machine and phase transitions.
+/* test_tour.c
+ *
+ * unit tests for the cinematic tour state machine.
+ * validates phase transitions and target viewport interpolation.
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -17,7 +21,7 @@ int test_tour_transitions() {
 
     // test update bounded t (now < phase_start shouldn't cause weird behavior)
     uint32_t start_time = 1000;
-    update_tour(&state, &view, start_time, 0);  // initial
+    update_tour(&state, &view, start_time, 0); // initial
     if (state.phase_start != start_time) {
         printf("failed: phase_start not set correctly\n");
         return 0;
@@ -32,7 +36,7 @@ int test_tour_transitions() {
     }
 
     // fast forward to end of zoom out
-    update_tour(&state, &view, start_time + 4000, 0);  // zoom_out is 3200ms
+    update_tour(&state, &view, start_time + 4000, 0); // zoom_out is 3200ms
     if (state.phase != TOUR_PANNING) {
         printf("failed: did not transition to TOUR_PANNING\n");
         return 0;
@@ -59,13 +63,13 @@ int test_julia_tour() {
     }
 
     // dwell time is 1200ms
-    update_julia_tour(&state, &julia_c, 1500);  // 500ms later
+    update_julia_tour(&state, &julia_c, 1500); // 500ms later
     if (state.phase != JULIA_TOUR_DWELLING) {
         printf("failed: julia phase should still be DWELLING\n");
         return 0;
     }
 
-    update_julia_tour(&state, &julia_c, 2300);  // 1300ms later
+    update_julia_tour(&state, &julia_c, 2300); // 1300ms later
     if (state.phase != JULIA_TOUR_MOVING) {
         printf("failed: julia phase should have transitioned to MOVING\n");
         return 0;
