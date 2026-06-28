@@ -30,7 +30,7 @@ let _settingsOpen = false;
 
 // transient state for jit url generation and settings synchronization
 let _currentState = {
-    julia_mode: false, burning_ship_mode: false, iters: 350, zoom: 3.0,
+    julia_mode: false, base_fractal: 0, iters: 350, zoom: 3.0,
     center_re: -0.5, center_im: 0.0, palette_idx: 0,
     julia_re: 0.0, julia_im: 0.0
 };
@@ -136,7 +136,10 @@ function toggleSettings() {
         const setMode = document.getElementById('setFractalModeSelect');
         if (setMode) {
             if (_currentState.julia_mode) setMode.value = 'julia';
-            else if (_currentState.burning_ship_mode) setMode.value = 'ship';
+            else if (_currentState.base_fractal === 1) setMode.value = 'ship';
+            else if (_currentState.base_fractal === 2) setMode.value = 'tricorn';
+            else if (_currentState.base_fractal === 3) setMode.value = 'celtic';
+            else if (_currentState.base_fractal === 4) setMode.value = 'buffalo';
             else setMode.value = 'mandelbrot';
         }
         const setTour = document.getElementById('setTourBtn');
@@ -190,20 +193,23 @@ function toggleJuliaLock() {
 }
 
 function changeFractalMode(val) {
-    const targetJulia = (val === 'julia');
-    const targetShip = (val === 'ship');
-
-    if (_currentState.burning_ship_mode && !targetShip && Module._wasm_toggle_burning_ship) {
-        Module._wasm_toggle_burning_ship();
-    }
-    if (_currentState.julia_mode && !targetJulia && Module._wasm_toggle_julia) {
-        Module._wasm_toggle_julia();
-    }
-    if (!_currentState.burning_ship_mode && targetShip && Module._wasm_toggle_burning_ship) {
-        Module._wasm_toggle_burning_ship();
-    }
-    if (!_currentState.julia_mode && targetJulia && Module._wasm_toggle_julia) {
-        Module._wasm_toggle_julia();
+    if (val === 'julia') {
+        if (!_currentState.julia_mode && Module._wasm_toggle_julia) {
+            Module._wasm_toggle_julia();
+        }
+    } else {
+        if (_currentState.julia_mode && Module._wasm_toggle_julia) {
+            Module._wasm_toggle_julia();
+        }
+        let mode = 0;
+        if (val === 'ship') mode = 1;
+        else if (val === 'tricorn') mode = 2;
+        else if (val === 'celtic') mode = 3;
+        else if (val === 'buffalo') mode = 4;
+        
+        if (Module._wasm_set_fractal_mode) {
+            Module._wasm_set_fractal_mode(mode);
+        }
     }
 }
 
@@ -215,10 +221,13 @@ function changePalette(val) {
 }
 
 // core telemetry callback — called by C engine every frame via EM_JS
-window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im) {
+window.updateDebugInfo = function (gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im) {
     let engine = "mandelbrot";
     if (julia_mode) engine = "julia";
-    else if (burning_ship_mode) engine = "burning ship";
+    else if (base_fractal === 1) engine = "burning ship";
+    else if (base_fractal === 2) engine = "tricorn";
+    else if (base_fractal === 3) engine = "celtic";
+    else if (base_fractal === 4) engine = "buffalo";
 
     if (gpu_mode) engine += high_precision ? " (gpu 64-bit)" : " (gpu 32-bit)";
     else engine += high_precision ? " (cpu 128-bit)" : " (cpu 64-bit)";
@@ -238,7 +247,7 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_
     debugInfo.textContent = html;
 
     // cache state for background tasks (like url generation)
-    _currentState = { julia_mode, burning_ship_mode: !!burning_ship_mode, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
+    _currentState = { julia_mode, base_fractal: base_fractal, iters: max_iters, zoom, center_re, center_im, palette_idx, julia_re, julia_im };
 
     // sync frontend ui with authoritative engine state
     const gpuNow = !!gpu_mode;
@@ -284,7 +293,7 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, burning_ship_mode, max_
         const setMode = document.getElementById('setFractalModeSelect');
         if (setMode) {
             if (julia_mode) setMode.value = 'julia';
-            else if (burning_ship_mode) setMode.value = 'ship';
+            else if (base_fractal) setMode.value = 'ship';
             else setMode.value = 'mandelbrot';
         }
     }
