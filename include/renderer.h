@@ -14,7 +14,7 @@
 #include "config.h"
 #include "core_math.h"
 
-// Opaque declaration of RendererContext
+// opaque declaration of RendererContext
 typedef struct RendererContext RendererContext;
 
 // thread pool lifecycle
