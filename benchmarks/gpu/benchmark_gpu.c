@@ -1,4 +1,8 @@
-// benchmark_gpu.c - automated GPU benchmark using Sokol GFX
+/* benchmark_gpu.c
+ *
+ * automated gpu performance benchmark using sokol gfx.
+ * measures fill rate and fragment shader execution speeds.
+ */
 
 #define SOKOL_IMPL
 #define SOKOL_APP_IMPL
