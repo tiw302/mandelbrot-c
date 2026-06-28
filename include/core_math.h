@@ -17,13 +17,24 @@
 #include <immintrin.h>
 #endif
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+#endif
+
 // shared complex number type used by all math kernels
 typedef struct {
     double re;
     double im;
 } complex_t;
 
-typedef enum { RENDER_MANDELBROT = 0, RENDER_JULIA = 1, RENDER_BURNING_SHIP = 2 } RenderMode;
+typedef enum {
+    RENDER_MANDELBROT = 0,
+    RENDER_JULIA = 1,
+    RENDER_BURNING_SHIP = 2,
+    RENDER_TRICORN = 3,
+    RENDER_CELTIC = 4,
+    RENDER_BUFFALO = 5
+} RenderMode;
 
 // 128-bit double-double type for extreme zoom precision.
 // only available when building with -DUSE_SIMD_F128.
@@ -43,5 +54,8 @@ typedef enum { RENDER_MANDELBROT = 0, RENDER_JULIA = 1, RENDER_BURNING_SHIP = 2 
 #include "fractal.h"
 #include "julia.h"
 #include "mandelbrot.h"
+#include "tricorn.h"
+#include "celtic.h"
+#include "buffalo.h"
 
 #endif
