@@ -1,7 +1,7 @@
 /* desktop_cpu_main.c
  *
  * multi-threaded cpu fractal explorer using sdl2.
- * uses a modular context-based architecture for clean state management.
+ * handles input loops, thread scaling, and video rendering.
  */
 
 #include <SDL.h>
@@ -14,12 +14,13 @@
 #include <time.h>
 
 #include "app_state.h"
-#include "hud_sdl.h"
 #include "bookmark.h"
-#include "camera.h"
 #include "color.h"
 #include "config.h"
+#include "hud_sdl.h"
 #include "ini_config.h"
+#include "input_handler.h"
+#include "tour.h"
 #include "julia.h"
 #include "mandelbrot.h"
 #include "renderer.h"
@@ -28,14 +29,13 @@
 
 // application global context
 typedef struct {
+    AppCommonState core;
     SDL_Window* window;
     SDL_Renderer* renderer;
     SDL_Texture* texture;
     TTF_Font* font;
+    uint32_t* pixels;
     int win_w, win_h;
-
-    // common application state
-    AppCommonState core;
 
     int cpu_precision_128;
     int screenshot_requested;
@@ -52,151 +52,59 @@ static void set_window_title_cb(const char* title) {
 // internal helpers
 static void print_controls(void);
 
-// handles keyboard input events
-static void handle_keydown(AppCtx* ctx, SDL_Event* event) {
-    if (event->key.keysym.sym == SDLK_ESCAPE || event->key.keysym.sym == SDLK_q) {
-        ctx->core.running = 0;
-    } else if (event->key.keysym.sym == SDLK_h || event->key.keysym.sym == SDLK_F1) {
-        ctx->core.show_help = !ctx->core.show_help;
-    } else if (event->key.keysym.sym == SDLK_z && (SDL_GetModState() & KMOD_CTRL)) {
-        if (camera_pop_history(&ctx->core.cam)) {
-            ctx->core.needs_redraw = 1;
-            app_state_push_notification(&ctx->core, "Undo Camera Action", SDL_GetTicks());
-        }
-    } else if (event->key.keysym.sym == SDLK_r) {
-        app_state_reset(&ctx->core, set_window_title_cb);
-        app_state_push_notification(&ctx->core, "View Reset!", SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_j) {
-        app_state_toggle_julia(&ctx->core, set_window_title_cb);
-        app_state_push_notification(&ctx->core, ctx->core.julia_mode ? "Julia Mode: Active" : "Julia Mode: Inactive", SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_b) {
-        app_state_toggle_burning_ship(&ctx->core, set_window_title_cb);
-        app_state_push_notification(&ctx->core, ctx->core.burning_ship_mode ? "Burning Ship Mode" : "Mandelbrot Mode", SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_p) {
-        app_state_cycle_palette(&ctx->core);
-        char buf[64];
-        snprintf(buf, sizeof(buf), "Palette: %s", get_palette_name(ctx->core.palette_idx % get_palette_count()));
-        app_state_push_notification(&ctx->core, buf, SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_e) {
-#ifdef USE_SIMD_F128
-        ctx->cpu_precision_128 = !ctx->cpu_precision_128;
-        set_cpu_precision(ctx->renderer_ctx, ctx->cpu_precision_128);
-        ctx->core.needs_redraw = 1;
-        app_state_push_notification(&ctx->core, ctx->cpu_precision_128 ? "Precision: 128-bit (SIMD)" : "Precision: 64-bit (Double)", SDL_GetTicks());
-#endif
-    } else if (event->key.keysym.sym == SDLK_m) {
-        app_state_save_bookmark(&ctx->core);
-        app_state_push_notification(&ctx->core, "Bookmark Saved!", SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_l) {
-        app_state_load_next_bookmark(&ctx->core);
-        app_state_push_notification(&ctx->core, "Bookmark Loaded!", SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_UP || event->key.keysym.sym == SDLK_DOWN) {
-        int step = ctx->core.max_iterations / 10;
-        if (step < 10) step = 10;
-        if (SDL_GetModState() & KMOD_SHIFT) step *= 10;
-        ctx->core.max_iterations += (event->key.keysym.sym == SDLK_UP) ? step : -step;
-        if (ctx->core.max_iterations < 10) ctx->core.max_iterations = 10;
-        if (ctx->core.max_iterations > get_config_max_iterations_limit())
-            ctx->core.max_iterations = get_config_max_iterations_limit();
-        init_color_palette(ctx->core.max_iterations, ctx->core.palette_idx);
-        ctx->core.needs_redraw = 1;
-    } else if (event->key.keysym.sym == SDLK_s) {
-        ctx->screenshot_requested = 1;
-        ctx->core.needs_redraw = 1;
-    } else if (event->key.keysym.sym == SDLK_x) {
-        if (ctx->core.mega_screenshot_active == 0) {
-            precise_float rmin, rmax, imax, imin;
-            app_state_calculate_boundaries(&ctx->core, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin,
-                                           &imax);
-            save_mega_screenshot_async(
-                ctx->renderer_ctx, &ctx->core, 8192, 8192, rmin, rmax, imin, imax, ctx->core.max_iterations, ctx->core.palette_idx,
-                ctx->core.julia_mode ? 1 : (ctx->core.burning_ship_mode ? 2 : 0), ctx->core.julia_c);
-            ctx->core.needs_redraw = 1;
-            app_state_push_notification(&ctx->core, "Generating 8K Image...", SDL_GetTicks());
-        }
-    } else if (event->key.keysym.sym == SDLK_v) {
-        if (is_video_recording()) {
-            stop_video_recording();
-            app_state_push_notification(&ctx->core, "Video Recording Saved!", SDL_GetTicks());
-        } else {
-            if (start_video_recording(ctx->win_w, ctx->win_h, 60)) {
-                app_state_push_notification(&ctx->core, "Video Recording Started", SDL_GetTicks());
-            } else {
-                app_state_push_notification(&ctx->core, "Error: ffmpeg not found!", SDL_GetTicks());
-            }
-        }
-    } else if (event->key.keysym.sym == SDLK_t) {
-        app_state_toggle_tour(&ctx->core, SDL_GetTicks(), set_window_title_cb);
-        app_state_push_notification(&ctx->core, ctx->core.m_tour.phase != TOUR_IDLE ? "Julia Tour Started" : "Tour Stopped", SDL_GetTicks());
-    } else if (event->key.keysym.sym == SDLK_LEFTBRACKET ||
-               event->key.keysym.sym == SDLK_RIGHTBRACKET) {
-        int threads = get_actual_thread_count(ctx->renderer_ctx);
-        threads += (event->key.keysym.sym == SDLK_RIGHTBRACKET) ? 1 : -1;
-        set_renderer_thread_count(ctx->renderer_ctx, threads);
-        ctx->core.thread_count = get_actual_thread_count(ctx->renderer_ctx);
-        ctx->core.needs_redraw = 1;
-        char buf[64];
-        snprintf(buf, sizeof(buf), "CPU Threads: %d Cores", ctx->core.thread_count);
-        app_state_push_notification(&ctx->core, buf, SDL_GetTicks());
-    }
-}
-
-// handles mouse input events
-static void handle_mouse(AppCtx* ctx, SDL_Event* event) {
-    switch (event->type) {
-        case SDL_MOUSEWHEEL: {
-#if SDL_VERSION_ATLEAST(2, 0, 18)
-            double y_delta = event->wheel.preciseY;
-#else
-            double y_delta = (double)event->wheel.y;
-#endif
-            if (event->wheel.direction == SDL_MOUSEWHEEL_FLIPPED) {
-                y_delta *= -1.0;
-            }
-            int mx = ctx->core.cam.mouse_x;
-            int my = ctx->core.cam.mouse_y;
-#if SDL_VERSION_ATLEAST(2, 0, 26)
-            mx = event->wheel.mouseX;
-            my = event->wheel.mouseY;
-#endif
-            camera_handle_wheel(&ctx->core.cam, y_delta, mx, my);
-            ctx->core.needs_redraw = 1;
-            break;
-        }
-
-        case SDL_MOUSEBUTTONDOWN:
-            camera_handle_mouse_down(&ctx->core.cam, event->button.button, event->button.x,
-                                     event->button.y);
-            break;
-
-        case SDL_MOUSEMOTION:
-            camera_handle_mouse_motion(&ctx->core.cam, event->motion.x, event->motion.y);
-            if (ctx->core.cam.is_panning) {
-                ctx->core.needs_redraw = 1;
-            } else if (ctx->core.julia_mode && !ctx->core.cam.is_zooming) {
-                app_state_get_mouse_coord(&ctx->core, ctx->core.cam.mouse_x, ctx->core.cam.mouse_y,
-                                          &ctx->core.julia_c.re, &ctx->core.julia_c.im);
-                ctx->core.needs_redraw = 1;
-            }
-            break;
-
-        case SDL_MOUSEBUTTONUP:
-            if (camera_handle_mouse_up(&ctx->core.cam, event->button.button)) {
-                ctx->core.needs_redraw = 1;
-            }
-            break;
+static InputKey map_sdl_key(SDL_Keycode sym) {
+    switch (sym) {
+        case SDLK_ESCAPE: return KEY_ESCAPE;
+        case SDLK_q: return KEY_Q;
+        case SDLK_h: case SDLK_F1: return KEY_H;
+        case SDLK_z: return KEY_Z;
+        case SDLK_r: return KEY_R;
+        case SDLK_p: return KEY_P;
+        case SDLK_0: return KEY_0;
+        case SDLK_1: return KEY_1;
+        case SDLK_2: return KEY_2;
+        case SDLK_3: return KEY_3;
+        case SDLK_4: return KEY_4;
+        case SDLK_5: return KEY_5;
+        case SDLK_6: return KEY_6;
+        case SDLK_7: return KEY_7;
+        case SDLK_8: return KEY_8;
+        case SDLK_9: return KEY_9;
+        case SDLK_UP: return KEY_UP;
+        case SDLK_DOWN: return KEY_DOWN;
+        case SDLK_n: return KEY_N;
+        case SDLK_e: return KEY_E;
+        case SDLK_g: return KEY_G;
+        case SDLK_j: return KEY_J;
+        case SDLK_b: return KEY_B;
+        case SDLK_f: return KEY_F;
+        case SDLK_s: return KEY_S;
+        case SDLK_x: return KEY_X;
+        case SDLK_v: return KEY_V;
+        case SDLK_m: return KEY_M;
+        case SDLK_l: return KEY_L;
+        case SDLK_t: return KEY_T;
+        case SDLK_LEFTBRACKET: return KEY_LEFT_BRACKET;
+        case SDLK_RIGHTBRACKET: return KEY_RIGHT_BRACKET;
+        case SDLK_F5: return KEY_F5;
+        default: return KEY_UNKNOWN;
     }
 }
 
 // handles input and updates application state
 static void handle_events(AppCtx* ctx) {
+    uint32_t now = SDL_GetTicks();
     SDL_Event event;
     while (SDL_PollEvent(&event)) {
+        AppInputEvent ie = {0};
+        int handled = 0;
+
         switch (event.type) {
             case SDL_QUIT:
                 ctx->core.running = 0;
+                handled = 1;
                 break;
-
+                
             case SDL_WINDOWEVENT:
                 if (event.window.event == SDL_WINDOWEVENT_RESIZED) {
                     ctx->win_w = event.window.data1 < 1 ? 1 : event.window.data1;
@@ -208,18 +116,112 @@ static void handle_events(AppCtx* ctx) {
                                           SDL_TEXTUREACCESS_STREAMING, ctx->win_w, ctx->win_h);
                     ctx->core.needs_redraw = 1;
                 }
+                handled = 1;
                 break;
 
             case SDL_KEYDOWN:
-                handle_keydown(ctx, &event);
+                ie.type = INPUT_KEY_DOWN;
+                ie.key = map_sdl_key(event.key.keysym.sym);
+                ie.mod_shift = (SDL_GetModState() & KMOD_SHIFT) ? 1 : 0;
+                ie.mod_ctrl = (SDL_GetModState() & KMOD_CTRL) ? 1 : 0;
+                break;
+
+            case SDL_KEYUP:
+                ie.type = INPUT_KEY_UP;
+                ie.key = map_sdl_key(event.key.keysym.sym);
+                ie.mod_shift = (SDL_GetModState() & KMOD_SHIFT) ? 1 : 0;
+                ie.mod_ctrl = (SDL_GetModState() & KMOD_CTRL) ? 1 : 0;
                 break;
 
             case SDL_MOUSEWHEEL:
-            case SDL_MOUSEBUTTONDOWN:
-            case SDL_MOUSEMOTION:
-            case SDL_MOUSEBUTTONUP:
-                handle_mouse(ctx, &event);
+                ie.type = INPUT_MOUSE_SCROLL;
+#if SDL_VERSION_ATLEAST(2, 0, 18)
+                ie.scroll_y = event.wheel.preciseY;
+#else
+                ie.scroll_y = (double)event.wheel.y;
+#endif
+                if (event.wheel.direction == SDL_MOUSEWHEEL_FLIPPED) ie.scroll_y *= -1.0;
                 break;
+
+            case SDL_MOUSEBUTTONDOWN:
+                ie.type = INPUT_MOUSE_DOWN;
+                ie.mouse_btn = event.button.button;
+                ie.mouse_x = event.button.x;
+                ie.mouse_y = event.button.y;
+                break;
+
+            case SDL_MOUSEMOTION:
+                ie.type = INPUT_MOUSE_MOVE;
+                ie.mouse_x = event.motion.x;
+                ie.mouse_y = event.motion.y;
+                break;
+
+            case SDL_MOUSEBUTTONUP:
+                ie.type = INPUT_MOUSE_UP;
+                ie.mouse_btn = event.button.button;
+                ie.mouse_x = event.button.x;
+                ie.mouse_y = event.button.y;
+                break;
+
+            default:
+                handled = 1; // ignore other events
+                break;
+        }
+
+        if (!handled) {
+            InputAction action = app_handle_input(&ctx->core, &ie, now);
+            switch (action) {
+                case ACTION_QUIT:
+                    ctx->core.running = 0;
+                    break;
+                case ACTION_TOGGLE_PRECISION:
+#ifdef USE_SIMD_F128
+                    ctx->cpu_precision_128 = !ctx->cpu_precision_128;
+                    set_cpu_precision(ctx->renderer_ctx, ctx->cpu_precision_128);
+                    ctx->core.needs_redraw = 1;
+                    app_state_push_notification(&ctx->core, ctx->cpu_precision_128 ? "Precision: 128-bit (SIMD)" : "Precision: 64-bit (Double)", now);
+#endif
+                    break;
+                case ACTION_MEGA_SCREENSHOT:
+                    if (ctx->core.mega_screenshot_active == 0) {
+                        precise_float rmin, rmax, imin, imax;
+                        app_state_calculate_boundaries(&ctx->core, ctx->win_w, ctx->win_h, &rmin, &rmax, &imin, &imax);
+                        save_mega_screenshot_async(ctx->renderer_ctx, &ctx->core, 8192, 8192, rmin, rmax, imin, imax, ctx->core.max_iterations, ctx->core.palette_idx, ctx->core.julia_mode ? 1 : (ctx->core.base_fractal ? 2 : 0), ctx->core.julia_c);
+                        ctx->core.needs_redraw = 1;
+                        app_state_push_notification(&ctx->core, "Generating 8K Image...", now);
+                    }
+                    break;
+                case ACTION_TOGGLE_VIDEO:
+                    if (is_video_recording()) {
+                        stop_video_recording();
+                        app_state_push_notification(&ctx->core, "Video Recording Saved!", now);
+                    } else {
+                        if (start_video_recording(ctx->win_w, ctx->win_h, 60, 1)) {
+                            app_state_push_notification(&ctx->core, "Video Recording Started", now);
+                        } else {
+                            app_state_push_notification(&ctx->core, "Error: ffmpeg not found!", now);
+                        }
+                    }
+                    break;
+                case ACTION_RESIZE_THREADS_UP:
+                case ACTION_RESIZE_THREADS_DOWN: {
+                    int threads = get_actual_thread_count(ctx->renderer_ctx);
+                    threads += (action == ACTION_RESIZE_THREADS_UP) ? 1 : -1;
+                    set_renderer_thread_count(ctx->renderer_ctx, threads);
+                    ctx->core.thread_count = get_actual_thread_count(ctx->renderer_ctx);
+                    ctx->core.needs_redraw = 1;
+                    char buf[64];
+                    snprintf(buf, sizeof(buf), "CPU Threads: %d Cores", ctx->core.thread_count);
+                    app_state_push_notification(&ctx->core, buf, now);
+                    break;
+                }
+                default:
+                    if (ie.type == INPUT_KEY_DOWN && ie.key == KEY_S) {
+                        ctx->screenshot_requested = 1;
+                        ctx->core.needs_redraw = 1;
+                    }
+                    break;
+            }
         }
     }
 }
@@ -237,7 +239,7 @@ static void render_frame(AppCtx* ctx) {
             if (ctx->core.julia_mode)
                 render_julia_threaded(ctx->renderer_ctx, pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax, imax, imin,
                                       ctx->core.julia_c, ctx->core.max_iterations);
-            else if (ctx->core.burning_ship_mode)
+            else if (ctx->core.base_fractal)
                 render_burning_ship_threaded(ctx->renderer_ctx, pixels, pitch, ctx->win_w, ctx->win_h, rmin, rmax,
                                              imax, imin, ctx->core.max_iterations);
             else
@@ -247,7 +249,7 @@ static void render_frame(AppCtx* ctx) {
                 append_video_frame(pixels, ctx->win_w, ctx->win_h);
             }
             if (ctx->screenshot_requested) {
-                save_screenshot(&ctx->core, pixels, ctx->win_w, ctx->win_h, SDL_GetTicks());
+                save_screenshot(&ctx->core, pixels, ctx->win_w, ctx->win_h, SDL_GetTicks(), 1, 0);
                 ctx->screenshot_requested = 0;
             }
             SDL_UnlockTexture(ctx->texture);
@@ -409,7 +411,7 @@ static void print_controls(void) {
     puts("  p           : cycle palette    | r           : reset");
     puts("  e           : toggle precision (64/128-bit)");
     puts("  j           : julia mode       | t           : tour");
-    puts("  b           : burning ship     | s           : screenshot");
+    puts("  f           : cycle fractals   | s           : screenshot");
     puts("  m           : save bookmark    | l           : load bookmark");
     puts("  x           : mega screenshot  | v           : record video");
     puts("  [ / ]       : scale threads    | h           : toggle help menu");
