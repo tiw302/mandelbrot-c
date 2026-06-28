@@ -1,4 +1,8 @@
-// test_math.c — unit tests for fractal math kernels.
+/* test_math.c
+ *
+ * unit tests for core fractal math kernels.
+ * validates mandelbrot, julia, and SIMD/F128 accuracy.
+ */
 
 #include <math.h>
 #include <stdio.h>
@@ -230,7 +234,7 @@ void test_f128x4_vs_scalar(void) {
     simd_f128x4 v_cre = simd_f128x4_from_doubles(re[0], re[1], re[2], re[3]);
     simd_f128x4 v_cim = simd_f128x4_from_doubles(im[0], im[1], im[2], im[3]);
 
-    // 1. test mandelbrot x4
+    // test mandelbrot x4
     double res_mandel_x4[4];
     mandelbrot_check_f128x4(v_cre, v_cim, max_iters, res_mandel_x4);
     for (int i = 0; i < 4; i++) {
@@ -240,7 +244,7 @@ void test_f128x4_vs_scalar(void) {
         EXPECT(approx_eq(res_mandel_x4[i], res_scalar));
     }
 
-    // 2. test julia x4
+    // test julia x4
     double res_julia_x4[4];
     complex_t c_julia = {-0.8, 0.156};
     simd_f128 julia_cre = simd_f128_from_double(c_julia.re);
@@ -258,7 +262,7 @@ void test_f128x4_vs_scalar(void) {
         EXPECT(approx_eq(res_julia_x4[i], res_scalar));
     }
 
-    // 3. test burning ship x4
+    // test burning ship x4
     double res_bs_x4[4];
     burning_ship_check_f128x4(v_cre, v_cim, max_iters, res_bs_x4);
     for (int i = 0; i < 4; i++) {
