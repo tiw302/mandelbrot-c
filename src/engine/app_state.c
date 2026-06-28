@@ -1,7 +1,7 @@
 /* app_state.c
  *
- * manages the global application state lifecycle, event dispatch, and UI coordinate mapping.
- * handles coordinate conversions and state transitions between render modes.
+ * shared application state machine and session controller.
+ * manages active modes, notification overlays, and tour updates.
  */
 
 #include "app_state.h"
@@ -22,7 +22,7 @@ void app_state_init(AppCommonState* state, int win_w, int win_h) {
     state->max_iterations = get_config_default_iterations();
     state->palette_idx = get_config_default_palette();
     state->julia_mode = 0;
-    state->burning_ship_mode = 0;
+    state->base_fractal = RENDER_MANDELBROT;
     state->julia_session.active = 0;
     state->current_bookmark_idx = -1;
     state->running = 1;
@@ -71,13 +71,52 @@ void app_state_toggle_julia(AppCommonState* state, app_title_callback set_title_
 }
 
 // toggle burning ship mode and reset camera to default
-void app_state_toggle_burning_ship(AppCommonState* state, app_title_callback set_title_cb) {
-    state->burning_ship_mode = !state->burning_ship_mode;
+void app_state_cycle_fractal(AppCommonState* state, app_title_callback set_title_cb) {
+
+    if (state->base_fractal == RENDER_MANDELBROT) state->base_fractal = RENDER_BURNING_SHIP;
+    else if (state->base_fractal == RENDER_BURNING_SHIP) state->base_fractal = RENDER_TRICORN;
+    else if (state->base_fractal == RENDER_TRICORN) state->base_fractal = RENDER_CELTIC;
+    else if (state->base_fractal == RENDER_CELTIC) state->base_fractal = RENDER_BUFFALO;
+    else state->base_fractal = RENDER_MANDELBROT;
+
     state->julia_mode = 0;
     state->julia_session.active = 0;
-    camera_reset(&state->cam);
+    state->cam.history_count = 0;
+
+    // each fractal has its own natural default view
+    if (state->base_fractal == RENDER_BURNING_SHIP) {
+        // burning ship: main body is in the lower half-plane; flip y to see the ship
+        state->cam.view.center_re = -0.4;
+        state->cam.view.center_im = -0.6;
+        state->cam.view.zoom = 3.5;
+    } else if (state->base_fractal == RENDER_TRICORN) {
+        // tricorn (mandelbar): symmetric about the real axis, looks best centered slightly left
+        state->cam.view.center_re = -0.1;
+        state->cam.view.center_im = 0.0;
+        state->cam.view.zoom = 3.5;
+    } else if (state->base_fractal == RENDER_CELTIC) {
+        // celtic: similar to mandelbrot but with abs on real part, interesting near -0.5
+        state->cam.view.center_re = -0.5;
+        state->cam.view.center_im = 0.0;
+        state->cam.view.zoom = 3.5;
+    } else if (state->base_fractal == RENDER_BUFFALO) {
+        // buffalo: combines celtic + burning ship abs operations, center near -0.4
+        state->cam.view.center_re = -0.4;
+        state->cam.view.center_im = 0.0;
+        state->cam.view.zoom = 4.0;
+    } else {
+        // mandelbrot: classic view
+        state->cam.view.center_re = -0.5;
+        state->cam.view.center_im = 0.0;
+        state->cam.view.zoom = 3.0;
+    }
+
     if (set_title_cb) {
-        set_title_cb(state->burning_ship_mode ? "Burning Ship Explorer" : "Mandelbrot Explorer");
+        if (state->base_fractal == RENDER_BURNING_SHIP) set_title_cb("Burning Ship Explorer");
+        else if (state->base_fractal == RENDER_TRICORN) set_title_cb("Tricorn Explorer");
+        else if (state->base_fractal == RENDER_CELTIC) set_title_cb("Celtic Explorer");
+        else if (state->base_fractal == RENDER_BUFFALO) set_title_cb("Buffalo Explorer");
+        else set_title_cb("Mandelbrot Explorer");
     }
     state->needs_redraw = 1;
 }
@@ -95,7 +134,7 @@ void app_state_save_bookmark(AppCommonState* state) {
                   state->cam.view.center_im,
                   state->cam.view.zoom,
                   state->max_iterations,
-                  state->julia_mode ? 1 : (state->burning_ship_mode ? 2 : 0),
+                  state->julia_mode ? 1 : (state->base_fractal ? 2 : 0),
                   state->julia_c};
     save_bookmark(&b);
 }
@@ -111,7 +150,7 @@ void app_state_load_next_bookmark(AppCommonState* state) {
             state->cam.view = (ViewState){b.center_re, b.center_im, b.zoom};
             state->max_iterations = b.max_iterations;
             state->julia_mode = (b.fractal_type == 1);
-            state->burning_ship_mode = (b.fractal_type == 2);
+            state->base_fractal = (b.fractal_type == 2);
             state->julia_c = b.julia_c;
             init_renderer(state->max_iterations, state->palette_idx);
             state->needs_redraw = 1;
@@ -135,11 +174,15 @@ void app_state_toggle_tour(AppCommonState* state, uint32_t now, app_title_callba
             state->julia_mode = state->julia_session.active = 0;
             camera_reset(&state->cam);
             start_tour(&state->m_tour, &state->cam.view);
-            if (set_title_cb) set_title_cb("Mandelbrot Explorer  [Auto-Zoom]");
+            if (set_title_cb) {
+                set_title_cb(state->base_fractal == RENDER_BURNING_SHIP ? "Burning Ship Explorer  [Auto-Zoom]" : (state->base_fractal == RENDER_TRICORN ? "Tricorn Explorer  [Auto-Zoom]" : (state->base_fractal == RENDER_CELTIC ? "Celtic Explorer  [Auto-Zoom]" : (state->base_fractal == RENDER_BUFFALO ? "Buffalo Explorer  [Auto-Zoom]" : "Mandelbrot Explorer  [Auto-Zoom]"))));
+            }
         } else {
             stop_tour(&state->m_tour);
             camera_reset(&state->cam);
-            if (set_title_cb) set_title_cb("Mandelbrot Explorer");
+            if (set_title_cb) {
+                set_title_cb(state->base_fractal == RENDER_BURNING_SHIP ? "Burning Ship Explorer" : (state->base_fractal == RENDER_TRICORN ? "Tricorn Explorer" : (state->base_fractal == RENDER_CELTIC ? "Celtic Explorer" : (state->base_fractal == RENDER_BUFFALO ? "Buffalo Explorer" : "Mandelbrot Explorer"))));
+            }
             state->needs_redraw = 1;
         }
     }
@@ -154,7 +197,7 @@ void app_state_update_tours(AppCommonState* state, uint32_t now, app_title_callb
         }
     } else {
         if (state->m_tour.phase != TOUR_IDLE) {
-            update_tour(&state->m_tour, &state->cam.view, now, state->burning_ship_mode);
+            update_tour(&state->m_tour, &state->cam.view, now, state->base_fractal);
             state->needs_redraw = 1;
         }
     }
@@ -182,11 +225,11 @@ void app_state_calculate_boundaries(const AppCommonState* state, int width, int 
 }
 
 void app_state_push_notification(AppCommonState* state, const char* msg, uint32_t now) {
-    // Shift active notifications UP (from bottom/index 0 upwards)
+    // shift active notifications up (from bottom/index 0 upwards)
     for (int i = 4; i > 0; i--) {
         state->notifications[i] = state->notifications[i - 1];
     }
-    // Put the newest notification at index 0 (bottom of the stack)
+    // put the newest notification at index 0 (bottom of the stack)
     snprintf(state->notifications[0].message, sizeof(state->notifications[0].message), "%s", msg);
     state->notifications[0].start_time = now;
     state->notifications[0].active = 1;
