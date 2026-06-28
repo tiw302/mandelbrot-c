@@ -1,7 +1,14 @@
 /* mandelbrot.c
  *
- * core mathematical kernels for computing the mandelbrot set.
- * provides scalar double, avx2, avx512, wasm-simd128, and high-precision simd-f128 paths.
+ * mathematical kernels for computing the mandelbrot set.
+ * uses cardioid rejection and vectorized simd paths for high speed.
+ *
+ * formula: z_{n+1} = z_{n}^2 + c (where c is the current coordinate on the complex plane)
+ *
+ * optimization features:
+ *   - cardioid and period-2 bulb check (skips expensive loops for inside pixels)
+ *   - mandelbrot_simd_f64   — vectorized double-precision using avx2/avx512/neon/wasm
+ *   - mandelbrot_simd_f128  — vectorized 128-bit using custom SIMD math wrappers
  */
 
 #include "core_math.h"
@@ -246,15 +253,86 @@ void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, d
 }
 #endif
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+// arm neon vectorized path:
+// processes 2 pixels simultaneously using 64-bit float vectors.
+void mandelbrot_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results) {
+    float64x2_t cre_m_025 = vsubq_f64(cre, vdupq_n_f64(0.25));
+    float64x2_t cim2 = vmulq_f64(cim, cim);
+    float64x2_t q = vaddq_f64(vmulq_f64(cre_m_025, cre_m_025), cim2);
+    uint64x2_t cardioid_mask = vcleq_f64(vmulq_f64(q, vaddq_f64(q, cre_m_025)),
+                                         vmulq_f64(vdupq_n_f64(0.25), cim2));
+
+    float64x2_t cre_p_1 = vaddq_f64(cre, vdupq_n_f64(1.0));
+    uint64x2_t bulb_mask = vcleq_f64(vaddq_f64(vmulq_f64(cre_p_1, cre_p_1), cim2),
+                                     vdupq_n_f64(0.0625));
+
+    uint64x2_t in_set_mask = vorrq_u64(cardioid_mask, bulb_mask);
+
+    float64x2_t zre = vdupq_n_f64(0.0);
+    float64x2_t zim = vdupq_n_f64(0.0);
+    float64x2_t iters = vdupq_n_f64(0.0);
+    float64x2_t esc_radius_sq = vdupq_n_f64(ESCAPE_RADIUS * ESCAPE_RADIUS);
+    uint64x2_t escaped_mask = in_set_mask;
+    float64x2_t final_mag_sq = vdupq_n_f64(0.0);
+    float64x2_t one = vdupq_n_f64(1.0);
+
+    for (int i = 0; i < max_iterations; i++) {
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+
+        float64x2_t zre2 = vmulq_f64(zre, zre);
+        float64x2_t zim2 = vmulq_f64(zim, zim);
+        float64x2_t mag_sq = vaddq_f64(zre2, zim2);
+
+        uint64x2_t mask = vcgtq_f64(mag_sq, esc_radius_sq);
+        uint64x2_t just_escaped = vbicq_u64(mask, escaped_mask);
+
+        // vbslq_f64(mask, true_val, false_val) -> bitwise select
+        final_mag_sq = vbslq_f64(just_escaped, mag_sq, final_mag_sq);
+        escaped_mask = vorrq_u64(escaped_mask, mask);
+        
+        // iters += (1.0 where not escaped)
+        float64x2_t iters_inc = vbslq_f64(escaped_mask, vdupq_n_f64(0.0), one);
+        iters = vaddq_f64(iters, iters_inc);
+
+        float64x2_t zre_zim = vmulq_f64(zre, zim);
+        zim = vaddq_f64(vaddq_f64(zre_zim, zre_zim), cim);
+        zre = vaddq_f64(vsubq_f64(zre2, zim2), cre);
+    }
+
+    double res_iters[2], res_mag_sq[2];
+    uint64_t res_in_set[2];
+    vst1q_f64(res_iters, iters);
+    vst1q_f64(res_mag_sq, final_mag_sq);
+    vst1q_u64(res_in_set, in_set_mask);
+
+    for (int i = 0; i < 2; i++) {
+        if (res_in_set[i] || res_iters[i] >= max_iterations) {
+            results[i] = (double)max_iterations;
+        } else {
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
+        }
+    }
+}
+#endif
+
 #ifdef USE_SIMD_F128
 /* high-precision 128-bit path (double-double):
+ *
  * utilizes simd intrinsics for single-pixel precision enhancement.
- * used for deep zooming (beyond 10^14) where standard 64-bit float degrades. */
+ * emulates 128-bit floats by splitting numbers into a high part (most significant)
+ * and a low part (residual error). this allows zooming beyond the 10^14 limit
+ * of standard 64-bit doubles without immediate performance collapse.
+ */
 double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     double cre_hi, cre_lo, cim_hi, cim_lo;
     simd_f128_extract(cre, &cre_hi, &cre_lo);
     simd_f128_extract(cim, &cim_hi, &cim_lo);
 
+    /* early rejection on high part coordinates.
+     * cardioid and period-2 checks are done on double-precision components
+     * since the boundary is well within 64-bit resolution limits. */
     double cr_minus_025 = cre_hi - 0.25;
     double im_sq = cim_hi * cim_hi;
     double q = cr_minus_025 * cr_minus_025 + im_sq;
@@ -272,6 +350,9 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
+    /* core 128-bit double-double iteration loop.
+     * arithmetic functions (add, sub, mul, sqr) handle error propagation
+     * using dekker/knuth split techniques on double-precision pairs. */
     while (iterations < max_iterations) {
         simd_f128 zre2 = simd_f128_sqr(zre);
         simd_f128 zim2 = simd_f128_sqr(zim);
@@ -281,11 +362,12 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
         simd_f128_extract(mag_sq, &mag_hi, &mag_lo);
 
         if (mag_hi > escape_radius_sq) {
-            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
-             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            /* smooth coloring algorithm.
+             * guards against log2(0) by using fmax(2.0, mag_hi). */
             return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_hi)));
         }
 
+        // z = z^2 + c -> z_re = zre^2 - zim^2 + cre, z_im = 2*zre*zim + cim
         simd_f128 zre_zim = simd_f128_mul(zre, zim);
         zim = simd_f128_add(simd_f128_add(zre_zim, zre_zim), cim);
         zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
@@ -297,8 +379,11 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
 
 #ifdef __AVX2__
 /* avx2 high-precision 128-bit mandelbrot path:
+ *
  * processes 4 pixels simultaneously with double-double precision.
- * prevents pixelation for extremely deep zooms with high throughput. */
+ * prevents pixelation for extremely deep zooms with high throughput.
+ * uses 4-way registers to run double-double arithmetic in parallel.
+ */
 void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations,
                              double* results) {
     simd_f128x4 zre = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
@@ -310,6 +395,7 @@ void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iteration
     __m256d one = _mm256_set1_pd(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
+        // movemask checks if all 4 pixels have escaped; if so, aborts early
         if (_mm256_movemask_pd(escaped_mask) == 0xF) break;
 
         simd_f128x4 zre2 = simd_f128x4_sqr(zre);
@@ -321,9 +407,11 @@ void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iteration
         __m256d mask = _mm256_cmp_pd(mag_hi, esc_radius_sq, _CMP_GT_OQ);
         __m256d just_escaped = _mm256_andnot_pd(escaped_mask, mask);
 
+        // capture magnitude at escape point for smooth coloring calculations
         final_mag_sq = _mm256_or_pd(final_mag_sq, _mm256_and_pd(just_escaped, mag_hi));
         escaped_mask = _mm256_or_pd(escaped_mask, mask);
 
+        // increment iteration counters only for active lanes
         iters = _mm256_add_pd(iters, _mm256_andnot_pd(escaped_mask, one));
 
         simd_f128x4 zre_zim = simd_f128x4_mul(zre, zim);
@@ -339,8 +427,6 @@ void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iteration
         if (res_iters[i] >= max_iterations) {
             results[i] = (double)max_iterations;
         } else {
-            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
-             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
             results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
         }
     }
