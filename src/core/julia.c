@@ -1,7 +1,15 @@
 /* julia.c
  *
- * core mathematical kernels for computing the julia set.
- * provides scalar double, avx2, avx512, wasm-simd128, and high-precision simd-f128 paths.
+ * mathematical kernels for computing the julia set of mandelbrot.
+ * supports scalar, avx2, avx512, neon, wasm, and 128-bit precision.
+ *
+ * formula: z_{n+1} = z_{n}^2 + c (where c is a constant parameter tracked by the mouse cursor)
+ *
+ * paths provided:
+ *   - julia_double     — standard scalar double-precision loop
+ *   - julia_simd_f64   — vectorized double-precision using avx2/avx512/neon/wasm
+ *   - julia_f128       — high-precision 128-bit float using __float128
+ *   - julia_simd_f128  — vectorized 128-bit using custom SIMD math wrappers
  */
 
 #include "core_math.h"
@@ -191,14 +199,69 @@ void julia_check_avx2(__m256d zre, __m256d zim, complex_t c, int max_iterations,
 }
 #endif
 
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+// arm neon vectorized path:
+// processes 2 pixels simultaneously using 64-bit float vectors.
+void julia_check_neon(float64x2_t zre, float64x2_t zim, float64x2_t cre, float64x2_t cim,
+                      int max_iterations, double* results) {
+    float64x2_t iters = vdupq_n_f64(0.0);
+    float64x2_t esc_radius_sq = vdupq_n_f64(ESCAPE_RADIUS * ESCAPE_RADIUS);
+    uint64x2_t escaped_mask = vdupq_n_u64(0);
+    float64x2_t final_mag_sq = vdupq_n_f64(0.0);
+    float64x2_t one = vdupq_n_f64(1.0);
+
+    for (int i = 0; i < max_iterations; i++) {
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+
+        float64x2_t zre2 = vmulq_f64(zre, zre);
+        float64x2_t zim2 = vmulq_f64(zim, zim);
+        float64x2_t mag_sq = vaddq_f64(zre2, zim2);
+
+        uint64x2_t mask = vcgtq_f64(mag_sq, esc_radius_sq);
+        uint64x2_t just_escaped = vbicq_u64(mask, escaped_mask);
+
+        final_mag_sq = vbslq_f64(just_escaped, mag_sq, final_mag_sq);
+        escaped_mask = vorrq_u64(escaped_mask, mask);
+
+        float64x2_t iters_inc = vbslq_f64(escaped_mask, vdupq_n_f64(0.0), one);
+        iters = vaddq_f64(iters, iters_inc);
+
+        float64x2_t zre_zim = vmulq_f64(zre, zim);
+        float64x2_t next_im = vaddq_f64(vaddq_f64(zre_zim, zre_zim), cim);
+        zre = vaddq_f64(vsubq_f64(zre2, zim2), cre);
+        zim = next_im;
+    }
+
+    double res_iters[2], res_mag_sq[2];
+    vst1q_f64(res_iters, iters);
+    vst1q_f64(res_mag_sq, final_mag_sq);
+
+    for (int i = 0; i < 2; i++) {
+        if (res_iters[i] >= max_iterations) {
+            results[i] = (double)max_iterations;
+        } else {
+            results[i] = res_iters[i] + 2.0 - log2(log(fmax(2.0, res_mag_sq[i])));
+        }
+    }
+}
+#endif
+
 #ifdef USE_SIMD_F128
-// high-precision 128-bit julia path:
-// prevents pixelation for extreme deep zooms in julia mode.
+/* high-precision 128-bit julia path:
+ *
+ * prevents pixelation for extreme deep zooms in julia mode.
+ * emulates 128-bit floats by splitting numbers into a high part (most significant)
+ * and a low part (residual error). this allows zooming beyond the 10^14 limit.
+ */
 double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 cim,
                         int max_iterations) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
+    /* core 128-bit double-double iteration loop.
+     * arithmetic functions (add, sub, mul, sqr) handle error propagation
+     * using dekker/knuth split techniques on double-precision pairs. */
     while (iterations < max_iterations) {
         simd_f128 zre2 = simd_f128_sqr(zre);
         simd_f128 zim2 = simd_f128_sqr(zim);
@@ -208,11 +271,12 @@ double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 c
         simd_f128_extract(mag_sq, &mag_hi, &mag_lo);
 
         if (mag_hi > escape_radius_sq) {
-            /* smooth coloring guards against log2(0) by ensuring log input is strictly > 1.
-             * mag_sq is already > 100 due to the escape radius, so this is purely defensive. */
+            /* smooth coloring algorithm.
+             * guards against log2(0) by using fmax(2.0, mag_hi). */
             return (double)iterations + 2.0 - log2(log(fmax(2.0, mag_hi)));
         }
 
+        // z = z^2 + c -> z_re = zre^2 - zim^2 + cre, z_im = 2*zre*zim + cim
         simd_f128 zre_zim = simd_f128_mul(zre, zim);
         simd_f128 next_im = simd_f128_add(simd_f128_add(zre_zim, zre_zim), cim);
         zre = simd_f128_add(simd_f128_sub(zre2, zim2), cre);
@@ -226,8 +290,11 @@ double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 c
 
 #ifdef __AVX2__
 /* avx2 high-precision 128-bit julia path:
- * processes 4 pixels simultaneously with 128-bit precision.
- * prevents pixelation for deep zooms while maintaining high throughput. */
+ *
+ * processes 4 pixels simultaneously with double-double precision.
+ * prevents pixelation for extremely deep zooms with high throughput.
+ * uses 4-way registers to run double-double arithmetic in parallel.
+ */
 void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_f128x4 cim,
                         int max_iterations, double* results) {
     __m256d iters = _mm256_setzero_pd();
@@ -237,6 +304,7 @@ void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_
     __m256d one = _mm256_set1_pd(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
+        // movemask checks if all 4 pixels have escaped; if so, aborts early
         if (_mm256_movemask_pd(escaped_mask) == 0xF) break;
 
         simd_f128x4 zre2 = simd_f128x4_sqr(zre);
@@ -247,9 +315,11 @@ void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_
         __m256d mask = _mm256_cmp_pd(mag_hi, esc_radius_sq, _CMP_GT_OQ);
         __m256d just_escaped = _mm256_andnot_pd(escaped_mask, mask);
 
+        // capture magnitude at escape point for smooth coloring calculations
         final_mag_sq = _mm256_or_pd(final_mag_sq, _mm256_and_pd(just_escaped, mag_hi));
         escaped_mask = _mm256_or_pd(escaped_mask, mask);
 
+        // increment iteration counters only for active lanes
         iters = _mm256_add_pd(iters, _mm256_andnot_pd(escaped_mask, one));
 
         simd_f128x4 next_im = simd_f128x4_add(simd_f128x4_mul2(simd_f128x4_mul(zre, zim)), cim);
