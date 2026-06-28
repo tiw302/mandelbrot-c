@@ -30,7 +30,7 @@
             <button onclick="toggleGpu()" id="gpuBtn">gpu ✓</button>
             <button onclick="togglePrecision()" id="precisionBtn">32-bit</button>
             <button onclick="Module._wasm_toggle_julia()" id="juliaBtn">julia</button>
-            <button onclick="Module._wasm_toggle_burning_ship()" id="shipBtn">ship</button>
+            <button onclick="Module._wasm_cycle_fractal()" id="fractalBtn">fractal</button>
             <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
             <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
             <button onclick="copyLink()" id="copyBtn">copy link</button>
@@ -56,6 +56,9 @@
                 <option value="mandelbrot">mandelbrot</option>
                 <option value="julia">julia</option>
                 <option value="ship">burning ship</option>
+                <option value="tricorn">tricorn</option>
+                <option value="celtic">celtic</option>
+                <option value="buffalo">buffalo</option>
             </select>
         </div>
         <div class="settings-row">
@@ -146,7 +149,7 @@
     <div id="zoom-box"></div>
 
     <div id="info">
-        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | B=Ship | T=Tour | G=GPU | <span
+        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | F=Fractal | T=Tour | G=GPU | <span
                 id="help-e-hint">E=Prec | </span>S=Shot | Ctrl+Z=Undo | Arrows=Iter</span>
         <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
     </div>
