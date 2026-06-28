@@ -1,7 +1,7 @@
 /* cjsonx_impl.c
  *
- * defines the implementation of cjsonx header-only JSON library.
- * should not define CJSONX_IMPLEMENTATION anywhere else.
+ * wrapper file to compile the cJSON parser implementation.
+ * overrides default memory allocators with custom handlers if needed.
  */
 
 #define CJSONX_IMPLEMENTATION
