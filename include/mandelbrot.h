@@ -49,3 +49,7 @@ void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iteration
 #endif
 
 #endif
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+void mandelbrot_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results);
+#endif
