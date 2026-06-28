@@ -1,7 +1,12 @@
 /* renderer.c
  *
- * handles multi-threaded and vectorized CPU rendering of fractal sets.
- * orchestrates the thread pool, tile-based parallel rendering, and pixel formats.
+ * multi-threaded cpu rendering pipeline and worker pool.
+ * splits viewport into rows and assigns them dynamically to workers.
+ *
+ * systems:
+ *   - pthread pool lifecycle management (allocation, execution, synchronization)
+ *   - dynamic load balancing using row-by-row work distribution
+ *   - pixel color conversion and packing into argb8888 framebuffers
  */
 
 #include "renderer.h"
@@ -401,6 +406,33 @@ static void process_rows(RendererContext* ctx) {
                     }
                 }
             }
+#elif defined(__ARM_NEON)
+            for (; x <= x_end - 2; x += 2) {
+                double iterations[2];
+                double x_arr[2] = { (double)pool.re_min + (double)x * re_factor, (double)pool.re_min + (double)(x + 1) * re_factor };
+                float64x2_t v_re = vld1q_f64(x_arr);
+                float64x2_t v_im = vdupq_n_f64((double)pool.im_top + (double)y * im_factor);
+
+                fd->check_neon(v_re, v_im, pool.julia_c, pool.max_iterations, iterations);
+
+                for (int i = 0; i < 2; i++) {
+                    if (iterations[i] >= pool.max_iterations || !lut) {
+                        pool.pixels[y * pitch_words + (x + i)] = 0xFF000000;
+                    } else {
+                        int idx = (int)(iterations[i] * 256.0);
+                        if (idx < 0) idx = 0;
+                        if (idx > max_idx) idx = max_idx;
+                        uint32_t col = lut[idx];
+#if defined(__EMSCRIPTEN__)
+                        uint32_t r = (col >> 16) & 0xFF;
+                        uint32_t b = col & 0xFF;
+                        pool.pixels[y * pitch_words + (x + i)] = (col & 0xFF00FF00) | (b << 16) | r;
+#else
+                        pool.pixels[y * pitch_words + (x + i)] = col;
+#endif
+                    }
+                }
+            }
 #endif
 
             // scalar tail
@@ -431,7 +463,12 @@ static void process_rows(RendererContext* ctx) {
 }
 
 #if !defined(__EMSCRIPTEN__)
-// persistent worker thread — parks between frames, wakes on broadcast
+/* persistent worker thread loop:
+ *
+ * workers remain alive throughout the application lifecycle to avoid thread creation overhead.
+ * they park on a condition variable when idle, and wake up simultaneously via broadcast
+ * when a new frame is dispatched.
+ */
 static void* worker_thread(void* arg) {
     RendererContext* ctx = (RendererContext*)arg;
     #define pool (*ctx)
@@ -439,6 +476,8 @@ static void* worker_thread(void* arg) {
 
     pthread_mutex_lock(&pool.mutex);
     while (1) {
+        /* wait until a new frame is requested or shutdown is initiated.
+         * using frame_id comparison protects against spurious wakeups. */
         while (!atomic_load(&pool.shutdown) && pool.frame_id == last_frame)
             pthread_cond_wait(&pool.work_ready, &pool.mutex);
 
@@ -450,9 +489,14 @@ static void* worker_thread(void* arg) {
         last_frame = pool.frame_id;
         pthread_mutex_unlock(&pool.mutex);
 
-        process_rows(ctx);  // hot loop — no lock held
+        /* dynamic workload loop (process_rows):
+         * workers pull row indices atomically, ensuring automatic load balancing.
+         * no mutex is held here to prevent contention on the thread-pool lock. */
+        process_rows(ctx);
 
         pthread_mutex_lock(&pool.mutex);
+        /* increment the idle counter. if this was the last thread to finish,
+         * signal the main thread that the entire frame is fully rendered. */
         if (++pool.threads_idle == pool.thread_count) pthread_cond_signal(&pool.work_done);
     }
     #undef pool
@@ -576,7 +620,6 @@ int set_renderer_thread_count(RendererContext* ctx, int count) {
         pthread_mutex_unlock(&pool.dispatch_mutex);
         return 0;
     }
-
     for (int i = 0; i < pool.thread_count; i++) {
         if (pthread_create(&pool.threads[i], NULL, worker_thread, ctx) != 0) {
             fprintf(stderr, "error: failed to spawn worker thread %d during resize\n", i);
