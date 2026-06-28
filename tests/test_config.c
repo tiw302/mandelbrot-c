@@ -1,4 +1,8 @@
-// test_config.c — unit test for ini configuration parser.
+/* test_config.c
+ *
+ * unit tests for ini configuration parser.
+ * validates loading, key-value parsing, and range clamping limits.
+ */
 #include <stdio.h>
 #include <stdlib.h>
 
