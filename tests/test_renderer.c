@@ -1,4 +1,8 @@
-// test_renderer.c — unit test for the multithreaded renderer dispatch pool.
+/* test_renderer.c
+ *
+ * unit tests for the multithreaded renderer thread pool.
+ * validates thread pool dispatch and rendering output changes.
+ */
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
