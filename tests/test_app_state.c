@@ -1,4 +1,8 @@
-// test_app_state.c — unit test for the common application state manager.
+/* test_app_state.c
+ *
+ * unit tests for the common application state manager.
+ * validates state initialization, julia toggling, and boundaries.
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
