@@ -1,4 +1,8 @@
-// test_color.c — unit test for color palette initialization and interpolation.
+/* test_color.c
+ *
+ * unit tests for color palette initialization and interpolation.
+ * validates color bounds, mapping, and smooth color transitions.
+ */
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -53,7 +57,7 @@ void test_color_smoothness(void) {
     uint8_t r_mid, g_mid, b_mid;
     int max_iters = 100;
 
-    init_color_palette(max_iters, 1);  // use grayscale for predictable linearity
+    init_color_palette(max_iters, 1); // use grayscale for predictable linearity
 
     get_color(10.0, max_iters, &r1, &g1, &b1);
     get_color(11.0, max_iters, &r2, &g2, &b2);
