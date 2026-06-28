@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 
-#include "config.h"    // For MAX_HISTORY_SIZE
-#include "renderer.h"  // For ViewState
+#include "config.h"    // for MAX_HISTORY_SIZE
+#include "renderer.h"  // for ViewState
 
-// Rect structure avoiding SDL dependency
+// rect structure avoiding SDL dependency
 typedef struct {
     int x, y, w, h;
 } CamRect;
