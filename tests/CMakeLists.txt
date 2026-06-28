@@ -1,79 +1,54 @@
 # tests/CMakeLists.txt - Build configuration for unit tests
 
-# allow testing
 enable_testing()
-
-# shared include directories for all tests
-include_directories(../src/core ../src/engine ../src/app ../include)
-include_directories(SYSTEM ../third_party/simd-f128)
 
 # inherit compiler flags from parent (ARCH_FLAGS)
 set(TEST_FLAGS "${ARCH_FLAGS}")
 
-# 1. test_math (core math kernels)
-add_executable(test_math test_math.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c)
+# 1. test_math (core math kernels, including 128-bit via global USE_SIMD_F128)
+add_executable(test_math test_math.c)
 target_compile_options(test_math PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_math PRIVATE m)
+target_link_libraries(test_math PRIVATE mandelbrot_lib m)
 add_test(NAME math_kernels COMMAND test_math)
 
 # 2. test_color (palette logic)
-add_executable(test_color test_color.c ../src/core/color.c ../src/engine/cjsonx_impl.c)
+add_executable(test_color test_color.c)
 target_compile_options(test_color PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_color PRIVATE m)
+target_link_libraries(test_color PRIVATE mandelbrot_lib m)
 add_test(NAME color_interpolation COMMAND test_color)
 
 # 3. test_bookmark (save/load precision)
-add_executable(test_bookmark test_bookmark.c ../src/engine/bookmark.c ../src/engine/ini_config.c ../src/engine/cjsonx_impl.c ../src/core/color.c)
+add_executable(test_bookmark test_bookmark.c)
 target_compile_options(test_bookmark PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_bookmark PRIVATE m)
+target_link_libraries(test_bookmark PRIVATE mandelbrot_lib m)
 add_test(NAME bookmark_io COMMAND test_bookmark)
 
 # 4. test_config (ini parser)
-add_executable(test_config test_config.c ../src/engine/ini_config.c ../src/core/color.c ../src/engine/cjsonx_impl.c)
+add_executable(test_config test_config.c)
 target_compile_options(test_config PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_config PRIVATE m)
+target_link_libraries(test_config PRIVATE mandelbrot_lib m)
 add_test(NAME config_parser COMMAND test_config)
 
-# 5. test_math_f128 (128-bit precision math)
-add_executable(test_math_f128 test_math.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c)
-target_compile_definitions(test_math_f128 PRIVATE USE_SIMD_F128)
-target_compile_options(test_math_f128 PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_math_f128 PRIVATE m)
-add_test(NAME math_kernels_128bit COMMAND test_math_f128)
-
-# 6. test_tour (tour state machine logic)
-add_executable(test_tour test_tour.c ../src/engine/tour.c)
+# 5. test_tour (tour state machine logic)
+add_executable(test_tour test_tour.c)
 target_compile_options(test_tour PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_tour PRIVATE m)
+target_link_libraries(test_tour PRIVATE mandelbrot_lib m)
 add_test(NAME tour_state_machine COMMAND test_tour)
 
-# 7. test_renderer (thread pool dispatch logic)
-add_executable(test_renderer test_renderer.c ../src/engine/renderer.c ../src/engine/ini_config.c ../src/core/mandelbrot.c ../src/core/julia.c ../src/core/burning_ship.c ../src/core/color.c ../src/core/fractal.c ../src/engine/cjsonx_impl.c)
+# 6. test_renderer (thread pool dispatch logic)
+add_executable(test_renderer test_renderer.c)
 target_compile_options(test_renderer PRIVATE ${TEST_FLAGS} -pthread)
-target_link_libraries(test_renderer PRIVATE m pthread)
+target_link_libraries(test_renderer PRIVATE mandelbrot_lib m pthread)
 add_test(NAME renderer_pool COMMAND test_renderer)
 
-# 8. test_app_state (common state transitions)
-add_executable(test_app_state test_app_state.c
-    ../src/engine/app_state.c
-    ../src/engine/camera.c
-    ../src/engine/tour.c
-    ../src/engine/bookmark.c
-    ../src/engine/ini_config.c
-    ../src/core/color.c
-    ../src/engine/cjsonx_impl.c
-    ../src/engine/renderer.c
-    ../src/core/fractal.c
-    ../src/core/mandelbrot.c
-    ../src/core/julia.c
-    ../src/core/burning_ship.c
-)
+# 7. test_app_state (common state transitions)
+add_executable(test_app_state test_app_state.c)
 target_compile_options(test_app_state PRIVATE ${TEST_FLAGS} -pthread)
-target_link_libraries(test_app_state PRIVATE m pthread)
+target_link_libraries(test_app_state PRIVATE mandelbrot_lib m pthread)
 add_test(NAME app_state_manager COMMAND test_app_state)
 
-# 9. test_perturbation (perturbation theory reference orbit logic)
+# 8. test_perturbation (perturbation theory reference orbit logic)
 add_executable(test_perturbation test_perturbation.c ../src/engine/perturbation.c)
 target_compile_options(test_perturbation PRIVATE ${TEST_FLAGS})
-target_link_libraries(test_perturbation PRIVATE m)
+target_link_libraries(test_perturbation PRIVATE mandelbrot_lib m)
 add_test(NAME perturbation_orbit COMMAND test_perturbation)
