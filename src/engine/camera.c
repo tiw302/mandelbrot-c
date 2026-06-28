@@ -1,7 +1,7 @@
 /* camera.c
  *
- * handles interactive navigation, viewport calculations, coordinate mapping,
- * and maintains a historical stack of visited coordinates for undo functionality.
+ * viewport navigation, coordinate mapping, and zoom history.
+ * tracks mouse movement to adjust center coordinates and zoom levels.
  */
 
 #include "camera.h"
@@ -20,13 +20,13 @@ void camera_init(Camera* cam, int win_w, int win_h) {
     cam->mouse_x = 0;
     cam->mouse_y = 0;
     cam->zoom_rect = (CamRect){0, 0, 0, 0};
-    /* clamp window dimensions to prevent division by zero */
+    // clamp window size to prevent division by zero
     cam->win_w = win_w < 1 ? 1 : win_w;
     cam->win_h = win_h < 1 ? 1 : win_h;
 }
 
 void camera_resize(Camera* cam, int win_w, int win_h) {
-    /* clamp window dimensions to prevent division by zero */
+    // clamp window size to prevent division by zero
     cam->win_w = win_w < 1 ? 1 : win_w;
     cam->win_h = win_h < 1 ? 1 : win_h;
 }
@@ -67,8 +67,7 @@ void camera_reset(Camera* cam) {
 void camera_handle_wheel(Camera* cam, double y_delta, int mouse_x, int mouse_y) {
     if (y_delta == 0.0) return;
 
-    // Zoom factor based on wheel delta (continuous)
-    // Positive delta = zoom in = factor < 1
+    // zoom factor based on wheel delta
     double factor = pow(0.9, y_delta);
 
     camera_push_history(cam);
