@@ -1,5 +1,8 @@
-// benchmark_screenshot.c — measures image encoding and disk I/O performance.
-// tests both stbi_write_png and chunked mega screenshot saving.
+/* benchmark_screenshot.c
+ *
+ * performance benchmarking for screenshot image encoding and disk i/o.
+ * tests standard png saving vs chunked mega screenshot tga saving.
+ */
 
 #include <stdint.h>
 #include <stdio.h>
@@ -51,7 +54,7 @@ int main(void) {
     complex_t dummy = {0};
     AppCommonState dummy_state = {0};
 
-    // --- 1. Standard PNG Screenshot (1080p) ---
+    // standard png screenshot (1080p)
     int width_1080 = 1920;
     int height_1080 = 1080;
     printf("1. Standard PNG Screenshot (%dx%d)\n", width_1080, height_1080);
@@ -65,7 +68,7 @@ int main(void) {
 
         printf("   Saving PNG to disk...\n");
         double start = get_time_sec();
-        save_screenshot(NULL, pixels, width_1080, height_1080, 0);
+        save_screenshot(NULL, pixels, width_1080, height_1080, 0, 0, 0);
         double end = get_time_sec();
 
         printf("   -> Time taken: %.4f seconds\n\n", end - start);
@@ -73,7 +76,7 @@ int main(void) {
         free(pixels);
     }
 
-    // --- 2. Mega Screenshot (8K TGA) ---
+    // mega screenshot (8k tga)
     // 8K UHD is 7680x4320
     int width_8k = 7680;
     int height_8k = 4320;
