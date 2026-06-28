@@ -1,4 +1,8 @@
-// test_bookmark.c — unit test for bookmark serialization and file io.
+/* test_bookmark.c
+ *
+ * unit tests for bookmark serialization and file i/o.
+ * validates JSON storage precision and boundary values.
+ */
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -15,7 +19,7 @@
     }
 
 static int approx_eq(double a, double b) {
-    return fabs(a - b) < 1e-12;  // high precision check for bookmarks
+    return fabs(a - b) < 1e-12; // high precision check for bookmarks
 }
 
 void test_bookmark_io(void) {
