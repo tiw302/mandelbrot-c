@@ -1,11 +1,13 @@
 /* fractal.c
  *
- * centralized registry for all fractal math kernels.
- * provides an abstract pluggable interface for registering and switching
- * between different types of fractals (Mandelbrot, Julia, Burning Ship, etc.).
+ * central registry and dispatch functions for base fractals.
+ * connects render loops to correct mathematical kernels.
  */
 
 #include "fractal.h"
+#include "tricorn.h"
+#include "celtic.h"
+#include "buffalo.h"
 
 #include <stdio.h>
 #include <string.h>
@@ -70,6 +72,13 @@ static void mandelbrot_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int 
 }
 #endif
 
+#ifdef __ARM_NEON
+static void mandelbrot_neon_wrap(float64x2_t cre, float64x2_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    mandelbrot_check_neon(cre, cim, max_iterations, results);
+}
+#endif
+
 #ifdef USE_SIMD_F128
 static double mandelbrot_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre,
                                    simd_f128 julia_cim, int max_iterations) {
@@ -111,6 +120,12 @@ static void julia_avx512_wrap(__m512d zre, __m512d zim, complex_t julia_c, int m
 static void julia_wasm_wrap(v128_t zre, v128_t zim, complex_t julia_c, int max_iterations,
                             double* results) {
     julia_check_wasm_simd128(zre, zim, julia_c, max_iterations, results);
+}
+#endif
+
+#ifdef __ARM_NEON
+static void julia_neon_wrap(float64x2_t zre, float64x2_t zim, complex_t julia_c, int max_iterations, double* results) {
+    julia_check_neon(zre, zim, vdupq_n_f64(julia_c.re), vdupq_n_f64(julia_c.im), max_iterations, results);
 }
 #endif
 
@@ -158,6 +173,13 @@ static void burning_ship_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, in
 }
 #endif
 
+#ifdef __ARM_NEON
+static void burning_ship_neon_wrap(float64x2_t cre, float64x2_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    burning_ship_check_neon(cre, cim, max_iterations, results);
+}
+#endif
+
 #ifdef USE_SIMD_F128
 static double burning_ship_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre,
                                      simd_f128 julia_cim, int max_iterations) {
@@ -177,6 +199,133 @@ static void burning_ship_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128
 #endif
 
 // registers the standard default fractals into the registry
+
+// tricorn wrappers
+static double tricorn_scalar_wrap(complex_t c, complex_t julia_c, int max_iterations) {
+    (void)julia_c;
+    return tricorn_check(c, max_iterations);
+}
+#ifdef __AVX2__
+static void tricorn_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    tricorn_check_avx2(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __AVX512F__
+static void tricorn_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    tricorn_check_avx512(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __wasm_simd128__
+static void tricorn_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    tricorn_check_wasm_simd128(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __ARM_NEON
+static void tricorn_neon_wrap(float64x2_t cre, float64x2_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    tricorn_check_neon(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef USE_SIMD_F128
+static double tricorn_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations) {
+    (void)julia_cre; (void)julia_cim;
+    return tricorn_check_f128(cre, cim, max_iterations);
+}
+#ifdef __AVX2__
+static void tricorn_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results) {
+    (void)julia_cre; (void)julia_cim;
+    tricorn_check_f128x4(cre, cim, max_iterations, results);
+}
+#endif
+#endif
+
+// celtic wrappers
+static double celtic_scalar_wrap(complex_t c, complex_t julia_c, int max_iterations) {
+    (void)julia_c;
+    return celtic_check(c, max_iterations);
+}
+#ifdef __AVX2__
+static void celtic_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    celtic_check_avx2(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __AVX512F__
+static void celtic_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    celtic_check_avx512(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __wasm_simd128__
+static void celtic_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    celtic_check_wasm_simd128(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __ARM_NEON
+static void celtic_neon_wrap(float64x2_t cre, float64x2_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    celtic_check_neon(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef USE_SIMD_F128
+static double celtic_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations) {
+    (void)julia_cre; (void)julia_cim;
+    return celtic_check_f128(cre, cim, max_iterations);
+}
+#ifdef __AVX2__
+static void celtic_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results) {
+    (void)julia_cre; (void)julia_cim;
+    celtic_check_f128x4(cre, cim, max_iterations, results);
+}
+#endif
+#endif
+
+// buffalo wrappers
+static double buffalo_scalar_wrap(complex_t c, complex_t julia_c, int max_iterations) {
+    (void)julia_c;
+    return buffalo_check(c, max_iterations);
+}
+#ifdef __AVX2__
+static void buffalo_avx2_wrap(__m256d cre, __m256d cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    buffalo_check_avx2(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __AVX512F__
+static void buffalo_avx512_wrap(__m512d cre, __m512d cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    buffalo_check_avx512(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __wasm_simd128__
+static void buffalo_wasm_wrap(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    buffalo_check_wasm_simd128(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef __ARM_NEON
+static void buffalo_neon_wrap(float64x2_t cre, float64x2_t cim, complex_t julia_c, int max_iterations, double* results) {
+    (void)julia_c;
+    buffalo_check_neon(cre, cim, max_iterations, results);
+}
+#endif
+#ifdef USE_SIMD_F128
+static double buffalo_f128_wrap(simd_f128 cre, simd_f128 cim, simd_f128 julia_cre, simd_f128 julia_cim, int max_iterations) {
+    (void)julia_cre; (void)julia_cim;
+    return buffalo_check_f128(cre, cim, max_iterations);
+}
+#ifdef __AVX2__
+static void buffalo_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 julia_cre, simd_f128x4 julia_cim, int max_iterations, double* results) {
+    (void)julia_cre; (void)julia_cim;
+    buffalo_check_f128x4(cre, cim, max_iterations, results);
+}
+#endif
+#endif
+
 void init_fractal_registry(void) {
     if (is_initialized) return;
 
@@ -193,6 +342,9 @@ void init_fractal_registry(void) {
 #endif
 #ifdef __wasm_simd128__
         .check_wasm_simd128 = mandelbrot_wasm_wrap,
+#endif
+#ifdef __ARM_NEON
+        .check_neon = mandelbrot_neon_wrap,
 #endif
 #ifdef USE_SIMD_F128
         .check_scalar_f128 = mandelbrot_f128_wrap,
@@ -217,6 +369,9 @@ void init_fractal_registry(void) {
 #ifdef __wasm_simd128__
         .check_wasm_simd128 = julia_wasm_wrap,
 #endif
+#ifdef __ARM_NEON
+        .check_neon = julia_neon_wrap,
+#endif
 #ifdef USE_SIMD_F128
         .check_scalar_f128 = julia_f128_wrap,
 #ifdef __AVX2__
@@ -240,6 +395,9 @@ void init_fractal_registry(void) {
 #ifdef __wasm_simd128__
         .check_wasm_simd128 = burning_ship_wasm_wrap,
 #endif
+#ifdef __ARM_NEON
+        .check_neon = burning_ship_neon_wrap,
+#endif
 #ifdef USE_SIMD_F128
         .check_scalar_f128 = burning_ship_f128_wrap,
 #ifdef __AVX2__
@@ -248,6 +406,85 @@ void init_fractal_registry(void) {
 #endif
     };
     register_fractal(&burning_ship_def);
+
+
+    // 4. tricorn
+    FractalDefinition tricorn_def = {
+        .mode = RENDER_TRICORN,
+        .name = "tricorn",
+        .check_scalar = tricorn_scalar_wrap,
+#ifdef __AVX2__
+        .check_avx2 = tricorn_avx2_wrap,
+#endif
+#ifdef __AVX512F__
+        .check_avx512 = tricorn_avx512_wrap,
+#endif
+#ifdef __wasm_simd128__
+        .check_wasm_simd128 = tricorn_wasm_wrap,
+#endif
+#ifdef __ARM_NEON
+        .check_neon = tricorn_neon_wrap,
+#endif
+#ifdef USE_SIMD_F128
+        .check_scalar_f128 = tricorn_f128_wrap,
+#ifdef __AVX2__
+        .check_avx2_f128 = tricorn_f128x4_wrap,
+#endif
+#endif
+    };
+    register_fractal(&tricorn_def);
+
+    // 5. celtic
+    FractalDefinition celtic_def = {
+        .mode = RENDER_CELTIC,
+        .name = "celtic",
+        .check_scalar = celtic_scalar_wrap,
+#ifdef __AVX2__
+        .check_avx2 = celtic_avx2_wrap,
+#endif
+#ifdef __AVX512F__
+        .check_avx512 = celtic_avx512_wrap,
+#endif
+#ifdef __wasm_simd128__
+        .check_wasm_simd128 = celtic_wasm_wrap,
+#endif
+#ifdef __ARM_NEON
+        .check_neon = celtic_neon_wrap,
+#endif
+#ifdef USE_SIMD_F128
+        .check_scalar_f128 = celtic_f128_wrap,
+#ifdef __AVX2__
+        .check_avx2_f128 = celtic_f128x4_wrap,
+#endif
+#endif
+    };
+    register_fractal(&celtic_def);
+
+    // 6. buffalo
+    FractalDefinition buffalo_def = {
+        .mode = RENDER_BUFFALO,
+        .name = "buffalo",
+        .check_scalar = buffalo_scalar_wrap,
+#ifdef __AVX2__
+        .check_avx2 = buffalo_avx2_wrap,
+#endif
+#ifdef __AVX512F__
+        .check_avx512 = buffalo_avx512_wrap,
+#endif
+#ifdef __wasm_simd128__
+        .check_wasm_simd128 = buffalo_wasm_wrap,
+#endif
+#ifdef __ARM_NEON
+        .check_neon = buffalo_neon_wrap,
+#endif
+#ifdef USE_SIMD_F128
+        .check_scalar_f128 = buffalo_f128_wrap,
+#ifdef __AVX2__
+        .check_avx2_f128 = buffalo_f128x4_wrap,
+#endif
+#endif
+    };
+    register_fractal(&buffalo_def);
 
     is_initialized = 1;
 }
