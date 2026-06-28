@@ -23,6 +23,10 @@ typedef struct {
     void (*check_wasm_simd128)(v128_t cre, v128_t cim, complex_t julia_c, int max_iterations,
                                double* results);
 #endif
+#ifdef __ARM_NEON
+    void (*check_neon)(float64x2_t cre, float64x2_t cim, complex_t julia_c, int max_iterations,
+                       double* results);
+#endif
 
     // high-precision 128-bit kernels
 #ifdef USE_SIMD_F128
