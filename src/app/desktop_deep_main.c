@@ -1,7 +1,7 @@
 /* desktop_deep_main.c
  *
  * high-performance deep-zoom mandelbrot renderer using gpu perturbation theory.
- * minimal standalone binary without cpu rendering, julia/burning ship modes, or tours.
+ * runs as a minimal standalone binary using sokol for fast iteration.
  */
 
 #define SOKOL_IMPL
@@ -10,17 +10,16 @@
 #define SOKOL_GLUE_IMPL
 #define SOKOL_TIME_IMPL
 #define SOKOL_GL_IMPL
-#define FONTSTASH_IMPLEMENTATION
-#define SOKOL_FONTSTASH_IMPL
-
 #include "app_state.h"
-#include "hud_sokol.h"
+#include "tour.h"
+#include "input_handler.h"
 #include "camera.h"
 #include "color.h"
 #include "config.h"
 #include "renderer.h"
 #include "screenshot.h"
 #include "perturbation.h"
+#include "hud_sokol.h"
 #include "ini_config.h"
 
 // clang-format off
@@ -29,8 +28,11 @@
 #include "sokol/sokol_glue.h"
 #include "sokol/sokol_time.h"
 #include "sokol/sokol_gl.h"
+#define FONTSTASH_IMPLEMENTATION
+#define SOKOL_FONTSTASH_IMPL
 #include "fons/fontstash.h"
 #include "sokol/sokol_fontstash.h"
+#undef SOKOL_IMPL
 // clang-format on
 
 // clang-format off
@@ -209,16 +211,27 @@ static void reload_shaders(void) {
 
 static void init(void) {
     sg_setup(&(sg_desc){.environment = sglue_environment()});
-    sgl_desc_t sgl_desc = {0};
-    sgl_setup(&sgl_desc);
+    sgl_setup(&(sgl_desc_t){0});
     stm_setup();
+
+    ctx.fons = sfons_create(&(sfons_desc_t){.width = 512, .height = 512});
+    const char* font_paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2,
+                                FONT_PATH_3,     FONT_PATH_4, NULL};
+    ctx.font_id = FONS_INVALID;
+    for (int i = 0; font_paths[i] && font_paths[i][0]; i++) {
+        ctx.font_id = fonsAddFont(ctx.fons, "sans", font_paths[i]);
+        if (ctx.font_id != FONS_INVALID) break;
+    }
+    if (ctx.font_id == FONS_INVALID) {
+        fprintf(stderr, "error: failed to load font\n");
+    }
 
     ctx.win_w = sapp_width();
     ctx.win_h = sapp_height();
 
     app_state_init(&ctx.core, ctx.win_w, ctx.win_h);
     ctx.core.julia_mode = 0;
-    ctx.core.burning_ship_mode = 0;
+    ctx.core.base_fractal = 0;
 
     ctx.high_precision_mode = 1;
     ctx.screenshot_requested = 0;
@@ -259,15 +272,6 @@ static void init(void) {
     ctx.use_perturbation = 1;
 
     reload_shaders();
-
-    ctx.fons = sfons_create(&(sfons_desc_t){.width = 512, .height = 512});
-    const char* font_paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2,
-                                FONT_PATH_3,     FONT_PATH_4, NULL};
-    ctx.font_id = FONS_INVALID;
-    for (int i = 0; font_paths[i] && font_paths[i][0]; i++) {
-        ctx.font_id = fonsAddFont(ctx.fons, "sans", font_paths[i]);
-        if (ctx.font_id != FONS_INVALID) break;
-    }
 
     ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
         .colors[0].blend = {.enabled = true,
@@ -374,11 +378,10 @@ static void frame(void) {
     sg_apply_bindings(&ctx.bind);
     sg_draw(0, 6, 1);
 
-    // capture screenshot if requested (do it before HUD/SokolGL overlay is drawn to keep it clean)
     if (ctx.screenshot_requested) {
         if (ensure_capture_buffers()) {
             glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ctx.capture_buf);
-            process_gpu_frame(&ctx.core, ctx.capture_buf, ctx.win_w, ctx.win_h, ctx.screenshot_requested, now);
+            save_screenshot(&ctx.core, ctx.capture_buf, ctx.win_w, ctx.win_h, now, 0, 1);
             ctx.screenshot_requested = 0;
         } else {
             ctx.screenshot_requested = 0;
@@ -399,12 +402,9 @@ static void frame(void) {
         sgl_v2f(x0, y1); sgl_v2f(x0, y0);
         sgl_end();
     }
-
-    if (DEBUG_INFO && ctx.font_id != FONS_INVALID) {
-        hud_render_sokol_deep(ctx.fons, ctx.font_id, &ctx.core, ctx.win_w, ctx.win_h,
-                              ctx.high_precision_mode, ctx.active_perturbation_last,
-                              ctx.use_perturbation, ctx.pip_blend, (uint32_t)stm_ms(stm_now()));
-    }
+    
+    hud_render_sokol_deep(ctx.fons, ctx.font_id, &ctx.core, ctx.win_w, ctx.win_h,
+                          0, 0, 1, ctx.pip_blend, now);
 
     sgl_draw();
 
@@ -417,46 +417,131 @@ static void frame(void) {
     sg_commit();
 }
 
-static void handle_mouse(const sapp_event* event) {
-    sokol_handle_mouse(&ctx.core, event);
-}
-
-static void handle_keydown(const sapp_event* event) {
-    uint32_t now = (uint32_t)stm_ms(stm_now());
-    if (sokol_handle_common_keydown(&ctx.core, event, now)) {
-        return;
-    }
-
-    if (event->key_code == SAPP_KEYCODE_N) {
-        ctx.use_perturbation = !ctx.use_perturbation;
-        ctx.core.needs_redraw = 1;
-        app_state_push_notification(&ctx.core, ctx.use_perturbation ? "Perturbation: Enabled" : "Perturbation: Disabled", now);
-    } else if (event->key_code == SAPP_KEYCODE_E) {
-        ctx.high_precision_mode = !ctx.high_precision_mode;
-        ctx.core.needs_redraw = 1;
-        app_state_push_notification(&ctx.core, ctx.high_precision_mode ? "Precision: 128-bit (Perturb)" : "Precision: 64-bit (Double)", now);
-    } else if (event->key_code == SAPP_KEYCODE_S) {
-        ctx.screenshot_requested = 1;
-        ctx.core.needs_redraw = 1;
-    } else if (event->key_code == SAPP_KEYCODE_F5) {
-        reload_shaders();
-        ctx.core.needs_redraw = 1;
+static InputKey map_sokol_key(sapp_keycode sym) {
+    switch (sym) {
+        case SAPP_KEYCODE_ESCAPE: return KEY_ESCAPE;
+        case SAPP_KEYCODE_Q: return KEY_Q;
+        case SAPP_KEYCODE_H: return KEY_H;
+        case SAPP_KEYCODE_Z: return KEY_Z;
+        case SAPP_KEYCODE_R: return KEY_R;
+        case SAPP_KEYCODE_P: return KEY_P;
+        case SAPP_KEYCODE_0: return KEY_0;
+        case SAPP_KEYCODE_1: return KEY_1;
+        case SAPP_KEYCODE_2: return KEY_2;
+        case SAPP_KEYCODE_3: return KEY_3;
+        case SAPP_KEYCODE_4: return KEY_4;
+        case SAPP_KEYCODE_5: return KEY_5;
+        case SAPP_KEYCODE_6: return KEY_6;
+        case SAPP_KEYCODE_7: return KEY_7;
+        case SAPP_KEYCODE_8: return KEY_8;
+        case SAPP_KEYCODE_9: return KEY_9;
+        case SAPP_KEYCODE_UP: return KEY_UP;
+        case SAPP_KEYCODE_DOWN: return KEY_DOWN;
+        case SAPP_KEYCODE_N: return KEY_N;
+        case SAPP_KEYCODE_E: return KEY_E;
+        case SAPP_KEYCODE_G: return KEY_G;
+        case SAPP_KEYCODE_J: return KEY_J;
+        case SAPP_KEYCODE_B: return KEY_B;
+        case SAPP_KEYCODE_S: return KEY_S;
+        case SAPP_KEYCODE_X: return KEY_X;
+        case SAPP_KEYCODE_V: return KEY_V;
+        case SAPP_KEYCODE_M: return KEY_M;
+        case SAPP_KEYCODE_L: return KEY_L;
+        case SAPP_KEYCODE_T: return KEY_T;
+        case SAPP_KEYCODE_LEFT_BRACKET: return KEY_LEFT_BRACKET;
+        case SAPP_KEYCODE_RIGHT_BRACKET: return KEY_RIGHT_BRACKET;
+        case SAPP_KEYCODE_F5: return KEY_F5;
+        default: return KEY_UNKNOWN;
     }
 }
 
 static void event(const sapp_event* ev) {
-    if (ev->type == SAPP_EVENTTYPE_RESIZED) {
-        if (ev->window_width > 0 && ev->window_height > 0) {
-            ctx.win_w = ev->framebuffer_width;
-            ctx.win_h = ev->framebuffer_height;
-            camera_resize(&ctx.core.cam, ctx.win_w, ctx.win_h);
-            ctx.core.needs_redraw = 1;
+    uint32_t now = (uint32_t)stm_ms(stm_now());
+    AppInputEvent ie = {0};
+    int handled = 0;
+
+    switch (ev->type) {
+        case SAPP_EVENTTYPE_RESIZED:
+            if (ev->window_width > 0 && ev->window_height > 0) {
+                ctx.win_w = ev->framebuffer_width;
+                ctx.win_h = ev->framebuffer_height;
+                camera_resize(&ctx.core.cam, ctx.win_w, ctx.win_h);
+                ctx.core.needs_redraw = 1;
+            }
+            handled = 1;
+            break;
+
+        case SAPP_EVENTTYPE_KEY_DOWN:
+            ie.type = INPUT_KEY_DOWN;
+            ie.key = map_sokol_key(ev->key_code);
+            ie.mod_shift = (ev->modifiers & SAPP_MODIFIER_SHIFT) ? 1 : 0;
+            ie.mod_ctrl = (ev->modifiers & SAPP_MODIFIER_CTRL) ? 1 : 0;
+            break;
+
+        case SAPP_EVENTTYPE_KEY_UP:
+            ie.type = INPUT_KEY_UP;
+            ie.key = map_sokol_key(ev->key_code);
+            ie.mod_shift = (ev->modifiers & SAPP_MODIFIER_SHIFT) ? 1 : 0;
+            ie.mod_ctrl = (ev->modifiers & SAPP_MODIFIER_CTRL) ? 1 : 0;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_SCROLL:
+            ie.type = INPUT_MOUSE_SCROLL;
+            ie.scroll_y = ev->scroll_y;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_DOWN:
+            ie.type = INPUT_MOUSE_DOWN;
+            ie.mouse_btn = (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
+            ie.mouse_x = (int)ev->mouse_x;
+            ie.mouse_y = (int)ev->mouse_y;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_MOVE:
+            ie.type = INPUT_MOUSE_MOVE;
+            ie.mouse_x = (int)ev->mouse_x;
+            ie.mouse_y = (int)ev->mouse_y;
+            break;
+
+        case SAPP_EVENTTYPE_MOUSE_UP:
+            ie.type = INPUT_MOUSE_UP;
+            ie.mouse_btn = (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
+            ie.mouse_x = (int)ev->mouse_x;
+            ie.mouse_y = (int)ev->mouse_y;
+            break;
+
+        default:
+            handled = 1;
+            break;
+    }
+
+    if (!handled) {
+        InputAction action = app_handle_input(&ctx.core, &ie, now);
+        switch (action) {
+            case ACTION_QUIT:
+                sapp_request_quit();
+                break;
+            case ACTION_TOGGLE_PERTURBATION:
+                ctx.use_perturbation = !ctx.use_perturbation;
+                ctx.core.needs_redraw = 1;
+                app_state_push_notification(&ctx.core, ctx.use_perturbation ? "Perturbation: Enabled" : "Perturbation: Disabled", now);
+                break;
+            case ACTION_TOGGLE_PRECISION:
+                ctx.high_precision_mode = !ctx.high_precision_mode;
+                ctx.core.needs_redraw = 1;
+                app_state_push_notification(&ctx.core, ctx.high_precision_mode ? "Precision: 128-bit (Perturb)" : "Precision: 64-bit (Double)", now);
+                break;
+            case ACTION_RELOAD_SHADERS:
+                reload_shaders();
+                ctx.core.needs_redraw = 1;
+                break;
+            default:
+                if (ie.type == INPUT_KEY_DOWN && ie.key == KEY_S) {
+                    ctx.screenshot_requested = 1;
+                    ctx.core.needs_redraw = 1;
+                }
+                break;
         }
-    } else if (ev->type == SAPP_EVENTTYPE_MOUSE_DOWN || ev->type == SAPP_EVENTTYPE_MOUSE_UP ||
-               ev->type == SAPP_EVENTTYPE_MOUSE_MOVE || ev->type == SAPP_EVENTTYPE_MOUSE_SCROLL) {
-        handle_mouse(ev);
-    } else if (ev->type == SAPP_EVENTTYPE_KEY_DOWN) {
-        handle_keydown(ev);
     }
 }
 
