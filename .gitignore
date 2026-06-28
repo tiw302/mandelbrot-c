@@ -113,3 +113,4 @@ test_*
 # user data & local configuration
 settings.txt
 bookmarks.json
+imgui.ini
