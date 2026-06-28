@@ -42,3 +42,8 @@ void julia_check_f128x4(simd_f128x4 zre, simd_f128x4 zim, simd_f128x4 cre, simd_
 #endif
 
 #endif
+
+#ifdef __ARM_NEON
+#include <arm_neon.h>
+void julia_check_neon(float64x2_t zre, float64x2_t zim, float64x2_t cre, float64x2_t cim, int max_iterations, double* results);
+#endif
