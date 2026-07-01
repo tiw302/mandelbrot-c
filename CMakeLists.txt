@@ -80,6 +80,37 @@ macro(find_system_libs target)
     endif()
 endmacro()
 
+# --- shader automation ---
+set(GENERATED_SHADERS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
+file(MAKE_DIRECTORY ${GENERATED_SHADERS_DIR})
+
+add_custom_command(
+    OUTPUT ${GENERATED_SHADERS_DIR}/desktop_gpu_vs.h
+    COMMAND ${CMAKE_COMMAND} -DGLSL_FILE=${CMAKE_CURRENT_SOURCE_DIR}/shaders/desktop_gpu_vs.glsl -DHEADER_FILE=${GENERATED_SHADERS_DIR}/desktop_gpu_vs.h -DVAR_NAME=dg_vs -P ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_shader.cmake
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/desktop_gpu_vs.glsl ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_shader.cmake
+    COMMENT "Embedding vertex shader..."
+)
+
+add_custom_command(
+    OUTPUT ${GENERATED_SHADERS_DIR}/desktop_gpu_fs_cpu.h
+    COMMAND ${CMAKE_COMMAND} -DGLSL_FILE=${CMAKE_CURRENT_SOURCE_DIR}/shaders/desktop_gpu_fs_cpu.glsl -DHEADER_FILE=${GENERATED_SHADERS_DIR}/desktop_gpu_fs_cpu.h -DVAR_NAME=dg_fs_cpu -P ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_shader.cmake
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/desktop_gpu_fs_cpu.glsl ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_shader.cmake
+    COMMENT "Embedding CPU display fragment shader..."
+)
+
+add_custom_command(
+    OUTPUT ${GENERATED_SHADERS_DIR}/desktop_gpu_fs_gpu.h
+    COMMAND ${CMAKE_COMMAND} -DGLSL_FILE=${CMAKE_CURRENT_SOURCE_DIR}/shaders/desktop_gpu_fs_gpu.glsl -DHEADER_FILE=${GENERATED_SHADERS_DIR}/desktop_gpu_fs_gpu.h -DVAR_NAME=dg_fs_gpu -P ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_shader.cmake
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/desktop_gpu_fs_gpu.glsl ${CMAKE_CURRENT_SOURCE_DIR}/scripts/embed_shader.cmake
+    COMMENT "Embedding GPU fragment shader..."
+)
+
+set(GENERATED_SHADERS
+    ${GENERATED_SHADERS_DIR}/desktop_gpu_vs.h
+    ${GENERATED_SHADERS_DIR}/desktop_gpu_fs_cpu.h
+    ${GENERATED_SHADERS_DIR}/desktop_gpu_fs_gpu.h
+)
+
 # --- 1. cpu engine ---
 if(BUILD_CPU)
     find_package(PkgConfig REQUIRED)
@@ -102,26 +133,28 @@ if(BUILD_GPU)
         # sokol_app.h uses cocoa on macos, so its implementation file must be compiled as objective-c
         set_source_files_properties(src/app/desktop_gpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
     endif()
-    add_executable(mandelbrot_gpu src/engine/screenshot.c src/ui/hud_sokol.c src/app/desktop_gpu_main.c)
-    target_compile_definitions(mandelbrot_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
+    add_executable(mandelbrot_gpu src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/app/desktop_gpu_main.c ${GENERATED_SHADERS})
+    target_compile_definitions(mandelbrot_gpu PRIVATE SOKOL_GLCORE BUILD_PERTURBATION=1)
     target_compile_options(mandelbrot_gpu PRIVATE -pthread)
-    target_include_directories(mandelbrot_gpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app)
+    target_include_directories(mandelbrot_gpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app ${GENERATED_SHADERS_DIR})
     find_system_libs(mandelbrot_gpu)
     target_link_libraries(mandelbrot_gpu PRIVATE mandelbrot_lib)
 endif()
 
+
 # --- 2b. deep / perturbation engine ---
 if(BUILD_DEEP)
     if(APPLE)
-        set_source_files_properties(src/app/desktop_deep_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
+        set_source_files_properties(src/app/desktop_gpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
     endif()
-    add_executable(mandelbrot_deep src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/app/desktop_deep_main.c)
+    add_executable(mandelbrot_deep src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/app/desktop_gpu_main.c ${GENERATED_SHADERS})
     target_compile_definitions(mandelbrot_deep PRIVATE SOKOL_GLCORE BUILD_PERTURBATION=1)
     target_compile_options(mandelbrot_deep PRIVATE -pthread)
-    target_include_directories(mandelbrot_deep PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app)
+    target_include_directories(mandelbrot_deep PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app ${GENERATED_SHADERS_DIR})
     find_system_libs(mandelbrot_deep)
     target_link_libraries(mandelbrot_deep PRIVATE mandelbrot_lib)
 endif()
+
 
 # --- 3. web engine ---
 if(BUILD_WEB)
@@ -143,6 +176,9 @@ if(ipo_supported)
     endif()
     if(BUILD_GPU)
         set_target_properties(mandelbrot_gpu PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
+    if(BUILD_DEEP)
+        set_target_properties(mandelbrot_deep PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
     endif()
 endif()
 

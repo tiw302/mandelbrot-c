@@ -23,10 +23,13 @@ if(BUILD_GPU)
     if(APPLE)
         set_source_files_properties(gpu/benchmark_gpu.c PROPERTIES COMPILE_FLAGS "-x objective-c")
     endif()
-    add_executable(benchmark_gpu gpu/benchmark_gpu.c)
+    add_executable(benchmark_gpu gpu/benchmark_gpu.c
+        ${CMAKE_BINARY_DIR}/generated/desktop_gpu_vs.h
+        ${CMAKE_BINARY_DIR}/generated/desktop_gpu_fs_gpu.h
+    )
     target_compile_definitions(benchmark_gpu PRIVATE SOKOL_GLCORE FORCE_GPU_MODE)
     target_compile_options(benchmark_gpu PRIVATE ${ARCH_FLAGS} -pthread)
-    target_include_directories(benchmark_gpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src/app)
+    target_include_directories(benchmark_gpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/../src/app ${CMAKE_BINARY_DIR}/generated)
     target_link_libraries(benchmark_gpu PRIVATE mandelbrot_lib)
     
     # use the macro defined in the root CMakeLists.txt to link correct platform GL/windowing libs
