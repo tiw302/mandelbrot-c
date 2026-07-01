@@ -1,7 +1,8 @@
 /* desktop_gpu_main.c
  *
- * high-performance gpu entry point using the sokol framework.
- * manages the graphics pipeline, gpgpu shader uniforms, and real-time interaction.
+ * unified high-performance gpu entry point using the sokol framework.
+ * manages cpu rendering fallbacks, gpu shaders, deep-zoom perturbation theory,
+ * and interactive real-time camera movements.
  */
 
 #define SOKOL_IMPL
@@ -23,9 +24,7 @@
 #include "mandelbrot.h"
 #include "renderer.h"
 #include "screenshot.h"
-#ifdef BUILD_PERTURBATION
 #include "perturbation.h"
-#endif
 
 // clang-format off
 #include "sokol/sokol_app.h"
@@ -63,9 +62,13 @@ GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned i
 #include <string.h>
 #include <time.h>
 
-#include "desktop_gpu_shaders.h"
+// Shaders are automatically embedded from .glsl files at build-time
+#include "desktop_gpu_vs.h"
+#include "desktop_gpu_fs_cpu.h"
+#include "desktop_gpu_fs_gpu.h"
 
 #define JULIA_ZOOM 4.0
+#define MIN_ORBIT_LEN 20
 
 // internal logger callback for sokol diagnostics
 static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
@@ -80,8 +83,8 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
     if (message_or_null) printf("[sokol][%d] %s\n", log_level, message_or_null);
 }
 
-// gpu shader uniform block.
-// mirrors the glsl layout exactly to ensure correct memory mapping.
+// GPU shader uniform block.
+// Mirrors the GLSL layout exactly to ensure correct memory mapping.
 typedef struct {
     float center_hi[2];
     float center_lo[2];
@@ -89,11 +92,10 @@ typedef struct {
     float julia_c_lo[2];
     float zoom, iters, aspect;
     float fractal_type, palette, high_precision;
-#ifdef BUILD_PERTURBATION
     float use_perturbation;
     float orbit_len;
     float zoom_lo;  // low part of zoom for Dekker hi-lo in perturbation d0 calc
-#endif
+    float ref_offset[2];
 } params_t;
 
 // application global context
@@ -103,6 +105,8 @@ typedef struct {
     sg_shader shd_cpu, shd_gpu;
     sg_bindings bind;
     sg_pass_action pass_action;
+    
+    // CPU rendering mode resources
     sg_image img;
     sg_view img_view;
     sg_sampler smp;
@@ -117,7 +121,7 @@ typedef struct {
     // common application state
     AppCommonState core;
 
-    // gpu specific modes
+    // modes and telemetry
     int gpu_mode, high_precision_mode;
     int cpu_precision_128;
     int screenshot_requested;
@@ -128,14 +132,20 @@ typedef struct {
     FONScontext* fons;
     int font_id;
 
-#ifdef BUILD_PERTURBATION
+    // GPU perturbation specific resources
     sg_image orbit_tex;
     sg_view orbit_tex_view;
     sg_sampler orbit_smp;
+    sg_image dummy_img; // dummy texture bound to slot 0 when perturbation is active
+    sg_view dummy_img_view;
+    sg_sampler dummy_smp;
     int orbit_len;
     int use_perturbation;
     int active_perturbation_last; // cached result from orbit computation step
-#endif
+    uint32_t last_interaction_time;
+    int was_interacting;
+    float ref_offset_x;
+    float ref_offset_y;
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -186,8 +196,6 @@ static int ensure_capture_buffers(void) {
     return 1;
 }
 
-// screen coordinate conversion is handled by app_state
-
 static char* read_shader_file(const char* path) {
     FILE* f = fopen(path, "rb");
     if (!f) return NULL;
@@ -210,7 +218,7 @@ static char* read_shader_file(const char* path) {
 }
 
 static void reload_shaders(void) {
-    // try to load shaders from files
+    // try to load shaders from files; fallback to embedded variables if not found
     char* vs_src = read_shader_file("shaders/desktop_gpu_vs.glsl");
     char* fs_cpu_src = read_shader_file("shaders/desktop_gpu_fs_cpu.glsl");
     char* fs_gpu_src = read_shader_file("shaders/desktop_gpu_fs_gpu.glsl");
@@ -236,14 +244,12 @@ static void reload_shaders(void) {
         .attrs[1].glsl_name = "uv_in",
         .vertex_func.source = vs_ptr,
         .fragment_func.source = fs_gpu_ptr,
-#ifdef BUILD_PERTURBATION
         .views[0].texture.stage = SG_SHADERSTAGE_FRAGMENT,
         .samplers[0].stage = SG_SHADERSTAGE_FRAGMENT,
         .texture_sampler_pairs[0] = {.stage = SG_SHADERSTAGE_FRAGMENT,
                                      .view_slot = 0,
                                      .sampler_slot = 0,
                                      .glsl_name = "u_orbit"},
-#endif
         .uniform_blocks[0] = {
             .stage = SG_SHADERSTAGE_FRAGMENT,
             .size = sizeof(params_t),
@@ -258,11 +264,10 @@ static void reload_shaders(void) {
                 {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT},
-#ifdef BUILD_PERTURBATION
                 {.glsl_name = "u_use_perturbation", .type = SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name = "u_orbit_len", .type = SG_UNIFORMTYPE_FLOAT},
                 {.glsl_name = "u_zoom_lo", .type = SG_UNIFORMTYPE_FLOAT},
-#endif
+                {.glsl_name = "u_ref_offset", .type = SG_UNIFORMTYPE_FLOAT2},
             }}});
 
     if (sg_query_shader_state(shd_cpu) != SG_RESOURCESTATE_VALID ||
@@ -285,18 +290,20 @@ static void reload_shaders(void) {
     ctx.shd_cpu = shd_cpu;
     ctx.shd_gpu = shd_gpu;
 
-    // generate pipelines linked to new shaders
-    ctx.pip_cpu =
-        sg_make_pipeline(&(sg_pipeline_desc){.shader = ctx.shd_cpu,
-                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .index_type = SG_INDEXTYPE_UINT16});
+    // build Sokol pipelines matching our layout
+    ctx.pip_cpu = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = ctx.shd_cpu,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
+        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
+        .index_type = SG_INDEXTYPE_UINT16
+    });
 
-    ctx.pip_gpu =
-        sg_make_pipeline(&(sg_pipeline_desc){.shader = ctx.shd_gpu,
-                                             .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
-                                             .index_type = SG_INDEXTYPE_UINT16});
+    ctx.pip_gpu = sg_make_pipeline(&(sg_pipeline_desc){
+        .shader = ctx.shd_gpu,
+        .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
+        .layout.attrs[1].format = SG_VERTEXFORMAT_FLOAT2,
+        .index_type = SG_INDEXTYPE_UINT16
+    });
 
     free(vs_src);
     free(fs_cpu_src);
@@ -304,14 +311,12 @@ static void reload_shaders(void) {
     printf("shaders loaded/reloaded successfully.\n");
 }
 
-// initialization callback
 static void init(void) {
-    // initialize backend graphics APIs
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
-    sgl_desc_t sgl_desc = {0};
-    sgl_setup(&sgl_desc);
-    
-    // 7. init hud font
+    sgl_setup(&(sgl_desc_t){0});
+    stm_setup();
+
+    // fontstash initialization
     ctx.fons = sfons_create(&(sfons_desc_t){.width = 512, .height = 512});
     const char* font_paths[] = {FONT_PATH_LOCAL, FONT_PATH_1, FONT_PATH_2,
                                 FONT_PATH_3,     FONT_PATH_4, NULL};
@@ -323,7 +328,6 @@ static void init(void) {
     if (ctx.font_id == FONS_INVALID) {
         fprintf(stderr, "error: failed to load font\n");
     }
-    stm_setup();
 
     ctx.win_w = sapp_width();
     ctx.win_h = sapp_height();
@@ -346,13 +350,26 @@ static void init(void) {
         &(sg_sampler_desc){.min_filter = SG_FILTER_LINEAR, .mag_filter = SG_FILTER_LINEAR});
     ctx.bind.samplers[0] = ctx.smp;
 
-    rebuild_texture();
-    reload_shaders();
-#ifdef BUILD_PERTURBATION
+    // CPU thread pool initialization
+    ctx.renderer_ctx = init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
+    ctx.core.thread_count = get_actual_thread_count(ctx.renderer_ctx);
+
+    // Sokol GL text blending pipeline
+    ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
+        .colors[0].blend = {
+            .enabled = true,
+            .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
+            .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA,
+            .src_factor_alpha = SG_BLENDFACTOR_ONE,
+            .dst_factor_alpha = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA
+        }
+    });
+
+    // GPU perturbation texture bindings
     ctx.orbit_tex = sg_make_image(&(sg_image_desc){
         .width = MAX_ITERATIONS_LIMIT,
         .height = 1,
-        .pixel_format = SG_PIXELFORMAT_RG32F,
+        .pixel_format = SG_PIXELFORMAT_RGBA32F,
         .usage = {.dynamic_update = true}
     });
     ctx.orbit_tex_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.orbit_tex});
@@ -364,127 +381,166 @@ static void init(void) {
     });
     ctx.orbit_len = 0;
     ctx.use_perturbation = 1;
-#endif
+    ctx.active_perturbation_last = 0;
+    ctx.last_interaction_time = 0;
+    ctx.was_interacting = 0;
+    ctx.ref_offset_x = 0.0f;
+    ctx.ref_offset_y = 0.0f;
 
-    ctx.pip_blend = sgl_make_pipeline(&(sg_pipeline_desc){
-        .colors[0].blend = {.enabled = true,
-                            .src_factor_rgb = SG_BLENDFACTOR_SRC_ALPHA,
-                            .dst_factor_rgb = SG_BLENDFACTOR_ONE_MINUS_SRC_ALPHA}});
+    // Sokol dummy texture binding (bound to GPU slot 0 when perturbation is active)
+    static uint32_t dummy_pix[1] = {0xFF000000};
+    ctx.dummy_img = sg_make_image(&(sg_image_desc){
+        .width = 1,
+        .height = 1,
+        .pixel_format = SG_PIXELFORMAT_RGBA8,
+        .data.mip_levels[0] = SG_RANGE(dummy_pix)
+    });
+    ctx.dummy_img_view = sg_make_view(&(sg_view_desc){.texture.image = ctx.dummy_img});
+    ctx.dummy_smp = sg_make_sampler(&(sg_sampler_desc){
+        .min_filter = SG_FILTER_NEAREST, .mag_filter = SG_FILTER_NEAREST
+    });
 
-    init_fractal_registry();
-    ctx.renderer_ctx = init_renderer(ctx.core.max_iterations, ctx.core.palette_idx);
-
-    // print controls console guide at startup
-    puts("mandelbrot explorer (gpu)");
-    puts("  left drag   : zoom selection   | right drag  : pan");
-    puts("  scroll      : zoom at cursor   | ctrl+z      : undo");
-    puts("  up/down     : iterations       | shift+up/dn : x100");
-    puts("  p           : cycle palette    | r           : reset");
-    puts("  e           : toggle precision (32/64-bit)");
-    puts("  j           : julia mode       | t           : tour");
-    puts("  f           : cycle fractals   | s           : screenshot");
-    puts("  m           : save bookmark    | l           : load bookmark");
-    puts("  x           : mega screenshot  | v           : record video");
-    puts("  h           : toggle help menu | q / esc     : quit");
+    rebuild_texture();
+    reload_shaders();
 }
 
-// frame rendering callback
 static void frame(void) {
-    uint32_t now = (uint32_t)stm_ms(stm_now());
-
-    // step animation state machines
+    uint32_t now = (uint32_t)sapp_frame_duration() * 1000;
+    now = (uint32_t)stm_ms(stm_now());
+    
+    // update tour animation state machines
     app_state_update_tours(&ctx.core, now, set_window_title_cb);
 
-    // force redraw to maintain steady frame pacing during video export
-    if (is_video_recording()) {
+    // check if the user is currently panning or zooming
+    int is_interacting = (now - ctx.last_interaction_time < 300);
+    if (is_interacting != ctx.was_interacting) {
         ctx.core.needs_redraw = 1;
+        ctx.was_interacting = is_interacting;
     }
 
-    // fallback: execute multi-threaded cpu render if gpu path is disabled
-    if (!ctx.gpu_mode && ctx.core.needs_redraw && ctx.pixels) {
-        set_cpu_precision(ctx.renderer_ctx, ctx.cpu_precision_128);
-        precise_float rmin, rmax, im_top, im_bot;
-        app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &im_bot,
-                                       &im_top);
-        uint32_t t0 = (uint32_t)stm_ms(stm_now());
-        if (ctx.core.julia_mode)
-            render_julia_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                  im_top, im_bot, ctx.core.julia_c, ctx.core.max_iterations);
-        else if (ctx.core.base_fractal)
-            render_burning_ship_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin,
-                                         rmax, im_top, im_bot, ctx.core.max_iterations);
-        else
-            render_mandelbrot_threaded(ctx.renderer_ctx, ctx.pixels, ctx.win_w * 4, ctx.win_w, ctx.win_h, rmin, rmax,
-                                       im_top, im_bot, ctx.core.max_iterations);
-        ctx.core.render_time_ms = (uint32_t)stm_ms(stm_now()) - t0;
-        // swap red and blue channels for sokol sg_pixelformat_rgba8 texture upload
-        int pixel_count = ctx.win_w * ctx.win_h;
-        for (int i = 0; i < pixel_count; i++) {
-            uint32_t pix = ctx.pixels[i];
-            uint32_t r = (pix >> 16) & 0xFF;
-            uint32_t b = pix & 0xFF;
-            ctx.pixels[i] = (pix & 0xFF00FF00) | (b << 16) | r;
-        }
-        // upload staging buffer to gpu texture
-        sg_update_image(ctx.img, &(sg_image_data){
-                                     .mip_levels[0] = {.ptr = ctx.pixels,
-                                                       .size = (size_t)ctx.win_w * ctx.win_h * 4}});
-        ctx.core.needs_redraw = 0;
-    }
-
-#ifdef BUILD_PERTURBATION
-    // minimum orbit length required for perturbation to give accurate results.
-    // if the reference center escapes in fewer steps, the perturbation approximation
-    // breaks down and we fall back to the dekker double-single rendering path.
-    #define MIN_ORBIT_LEN 20
-
-    // check if all conditions for perturbation mode are currently satisfied.
-    int can_use_perturbation = ctx.gpu_mode && ctx.use_perturbation &&
-                               (ctx.core.cam.view.zoom < PERTURBATION_ZOOM_THRESHOLD) &&
-                               !ctx.core.julia_mode && !ctx.core.base_fractal;
-
-    if (!can_use_perturbation) {
-        // mode changed (julia enabled, zoom out, etc.) — disable immediately.
-        ctx.active_perturbation_last = 0;
-    } else if (ctx.core.needs_redraw) {
-        // view has moved — recompute the reference orbit and re-evaluate quality.
-        precise_float center_re = ctx.core.cam.view.center_re;
-        precise_float center_im = ctx.core.cam.view.center_im;
-        int max_iters = ctx.core.max_iterations;
-        if (max_iters > MAX_ITERATIONS_LIMIT) max_iters = MAX_ITERATIONS_LIMIT;
-
-        RefOrbit* orb = perturbation_compute(center_re, center_im, max_iters);
-        // debug: print orbit quality to terminal so we can see what's happening
-        if (orb) {
-            printf("[PERTURB] center=(%.6Lf, %.6Lf) orbit_len=%d min=%d -> %s\n",
-                   (long double)center_re, (long double)center_im,
-                   orb->len, MIN_ORBIT_LEN,
-                   orb->len >= MIN_ORBIT_LEN ? "USE_PERTURB" : "FALLBACK");
-            fflush(stdout);
-        }
-        if (orb && orb->len >= MIN_ORBIT_LEN) {
-            // orbit is long enough — upload texture and enable perturbation.
-            ctx.orbit_len = orb->len;
-            ctx.active_perturbation_last = 1;
-
-            static ComplexFloat orbit_upload_buf[MAX_ITERATIONS_LIMIT];
-            for (int k = 0; k < orb->len; k++)
-                orbit_upload_buf[k] = orb->zn[k];
-            if (orb->len < MAX_ITERATIONS_LIMIT) {
-                memset(orbit_upload_buf + orb->len, 0,
-                       (MAX_ITERATIONS_LIMIT - orb->len) * sizeof(ComplexFloat));
+    if (ctx.gpu_mode == 0) {
+        // CPU rendering path (runs the thread pool and updates staging texture)
+        if (ctx.core.needs_redraw) {
+            precise_float rmin, rmax, imin, imax;
+            app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &imin, &imax);
+            int pitch = ctx.win_w * 4;
+            if (ctx.core.julia_mode) {
+                render_julia_threaded(ctx.renderer_ctx, ctx.pixels, pitch, ctx.win_w, ctx.win_h, rmin, rmax, imax, imin,
+                                      ctx.core.julia_c, ctx.core.max_iterations);
+            } else if (ctx.core.base_fractal == RENDER_BURNING_SHIP) {
+                render_burning_ship_threaded(ctx.renderer_ctx, ctx.pixels, pitch, ctx.win_w, ctx.win_h, rmin, rmax,
+                                             imax, imin, ctx.core.max_iterations);
+            } else {
+                render_mandelbrot_threaded(ctx.renderer_ctx, ctx.pixels, pitch, ctx.win_w, ctx.win_h, rmin, rmax, imax,
+                                           imin, ctx.core.max_iterations);
             }
-            sg_update_image(ctx.orbit_tex, &(sg_image_data){
-                .mip_levels[0] = {.ptr = orbit_upload_buf,
-                                  .size = sizeof(orbit_upload_buf)}});
-        } else {
-            // center escapes too quickly — perturbation is inaccurate here.
-            // fall back to dekker double-single mode for this view position.
-            ctx.active_perturbation_last = 0;
+            sg_update_image(ctx.img, &(sg_image_data){.mip_levels[0] = {.ptr = ctx.pixels, .size = (size_t)ctx.win_w * ctx.win_h * 4}});
         }
-        if (orb) perturbation_free(orb);
+    } else {
+        // GPU rendering path
+        int can_use_perturbation = ctx.use_perturbation &&
+                                   (ctx.core.cam.view.zoom < PERTURBATION_ZOOM_THRESHOLD);
+
+        if (!can_use_perturbation) {
+            ctx.active_perturbation_last = 0;
+        } else if (ctx.core.needs_redraw) {
+            precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
+            precise_float zoom = ctx.core.cam.view.zoom;
+            precise_float center_re = ctx.core.cam.view.center_re;
+            precise_float center_im = ctx.core.cam.view.center_im;
+            int max_iters = ctx.core.max_iterations;
+            if (max_iters > MAX_ITERATIONS_LIMIT) max_iters = MAX_ITERATIONS_LIMIT;
+
+            // Grid Search to find a reference coordinate with the maximum escape iterations.
+            // We use an 11x11 grid (121 points) at all times (including during mouse interaction)
+            // to ensure we land on thin filaments and prevent early escapes.
+            precise_float best_re = center_re;
+            precise_float best_im = center_im;
+            float best_gx = 0.0f;
+            float best_gy = 0.0f;
+            double best_score = -1.0;
+
+            int grid_size = 11;
+            for (int gy = 0; gy < grid_size; gy++) {
+                float ny = (grid_size > 1) ? ((float)gy / (grid_size - 1) - 0.5f) : 0.0f;
+                for (int gx = 0; gx < grid_size; gx++) {
+                    float nx = (grid_size > 1) ? ((float)gx / (grid_size - 1) - 0.5f) : 0.0f;
+                    precise_float c_re = center_re + (precise_float)nx * zoom * aspect;
+                    precise_float c_im = center_im + (precise_float)ny * zoom;
+
+                    // compute escape iterations for this candidate point on the CPU
+                    int iters = 0;
+                    precise_float z_re = 0.0;
+                    precise_float z_im = 0.0;
+                    const precise_float escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
+                    for (; iters < max_iters; iters++) {
+                        precise_float z_re2 = z_re * z_re;
+                        precise_float z_im2 = z_im * z_im;
+                        if (z_re2 + z_im2 > escape_radius_sq) {
+                            break;
+                        }
+                        z_im = 2.0 * z_re * z_im + c_im;
+                        z_re = z_re2 - z_im2 + c_re;
+                    }
+
+                    // calculate score: favor points that escape later, breaking ties with closeness to center
+                    double dist_sq = (double)(nx * nx + ny * ny);
+                    double score = (double)iters - 1e-5 * dist_sq;
+                    if (score > best_score) {
+                        best_score = score;
+                        best_re = c_re;
+                        best_im = c_im;
+                        best_gx = nx;
+                        best_gy = ny;
+                    }
+                }
+            }
+
+            ctx.ref_offset_x = best_gx;
+            ctx.ref_offset_y = best_gy;
+
+            // Compute the reference orbit starting at the chosen best coordinate
+            RefOrbit* orb = perturbation_compute(best_re, best_im, max_iters);
+
+            // When zoom is deeper than 1e-14, 64-bit emulation underflows and cannot be used as a fallback.
+            // Thus, we decrease the minimum orbit length threshold to 1 so that the engine stays on the
+            // perturbation path even if the reference point escapes early (preventing blocky artifacts).
+            int min_orbit_len = (zoom < 1e-14) ? 1 : MIN_ORBIT_LEN;
+            if (orb && orb->len >= min_orbit_len) {
+                ctx.orbit_len = orb->len;
+                ctx.active_perturbation_last = 1;
+
+                // Split the 64-bit double-precision reference orbit coordinates into high and low float parts
+                // (Dekker split arithmetic). This allows the GPU to reconstruct double-precision (48-bit mantissa)
+                // reference points using standard 32-bit floats, bypassing OpenGL's lack of native fp64.
+                typedef struct {
+                    float re_hi;
+                    float re_lo;
+                    float im_hi;
+                    float im_lo;
+                } OrbitUploadPixel;
+                static OrbitUploadPixel orbit_upload_buf[MAX_ITERATIONS_LIMIT];
+                for (int k = 0; k < orb->len; k++) {
+                    double re = orb->zn[k].re;
+                    double im = orb->zn[k].im;
+                    orbit_upload_buf[k].re_hi = (float)re;
+                    orbit_upload_buf[k].re_lo = (float)(re - (double)orbit_upload_buf[k].re_hi);
+                    orbit_upload_buf[k].im_hi = (float)im;
+                    orbit_upload_buf[k].im_lo = (float)(im - (double)orbit_upload_buf[k].im_hi);
+                }
+                if (orb->len < MAX_ITERATIONS_LIMIT) {
+                    memset(orbit_upload_buf + orb->len, 0,
+                           (MAX_ITERATIONS_LIMIT - orb->len) * sizeof(OrbitUploadPixel));
+                }
+                sg_update_image(ctx.orbit_tex, &(sg_image_data){
+                    .mip_levels[0] = {.ptr = orbit_upload_buf,
+                                      .size = sizeof(orbit_upload_buf)}});
+            } else {
+                ctx.active_perturbation_last = 0;
+            }
+            if (orb) perturbation_free(orb);
+        }
     }
-#endif
 
     // background orchestration (drawing the fractal)
     sgl_viewport(0, 0, ctx.win_w, ctx.win_h, true);
@@ -497,10 +553,10 @@ static void frame(void) {
     if (ctx.gpu_mode) {
         sg_apply_pipeline(ctx.pip_gpu);
 
-        int active_perturbation = 0;
-#ifdef BUILD_PERTURBATION
-        // reuse the decision made during orbit computation to ensure consistency
-        active_perturbation = ctx.active_perturbation_last;
+        // Bind appropriate texture and sampler:
+        // If perturbation is active, we sample from u_orbit texture, and bind dummy_img to slot 0.
+        // Otherwise, we bind the standard texture.
+        int active_perturbation = ctx.active_perturbation_last;
         if (active_perturbation) {
             ctx.bind.views[0] = ctx.orbit_tex_view;
             ctx.bind.samplers[0] = ctx.orbit_smp;
@@ -508,12 +564,7 @@ static void frame(void) {
             ctx.bind.views[0] = ctx.img_view;
             ctx.bind.samplers[0] = ctx.smp;
         }
-#else
-        ctx.bind.views[0] = ctx.img_view;
-        ctx.bind.samplers[0] = ctx.smp;
-#endif
 
-        // calculate uniform parameters
         precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
         precise_float center_re = ctx.core.cam.view.center_re;
         precise_float center_im = ctx.core.cam.view.center_im;
@@ -530,18 +581,14 @@ static void frame(void) {
         params.zoom = (float)ctx.core.cam.view.zoom;
         params.iters = (float)ctx.core.max_iterations;
         params.aspect = (float)aspect;
-        params.fractal_type =
-            (float)(ctx.core.julia_mode ? 1 : ctx.core.base_fractal);
+        params.fractal_type = (float)(ctx.core.julia_mode ? 1 : ctx.core.base_fractal);
         params.palette = (float)ctx.core.palette_idx;
         params.high_precision = (float)ctx.high_precision_mode;
-#ifdef BUILD_PERTURBATION
         params.use_perturbation = (float)active_perturbation;
         params.orbit_len = (float)ctx.orbit_len;
-        // zoom_lo carries the sub-float residual of zoom for Dekker d0 computation
-        // in the perturbation shader. allows d0 to be computed with ~14 decimal digits
-        // of precision instead of the 7 offered by single-precision float alone.
         params.zoom_lo = (float)(ctx.core.cam.view.zoom - (precise_float)params.zoom);
-#endif
+        params.ref_offset[0] = ctx.ref_offset_x;
+        params.ref_offset[1] = ctx.ref_offset_y;
 
         sg_apply_uniforms(0, &SG_RANGE(params));
     } else {
@@ -552,7 +599,7 @@ static void frame(void) {
     sg_apply_bindings(&ctx.bind);
     sg_draw(0, 6, 1);
 
-    // render interactive components using sokol_gl
+    // render interactive components using sokol_gl (e.g. selection rectangle)
     if (ctx.core.cam.is_zooming) {
         sgl_load_pipeline(ctx.pip_blend);
         sgl_begin_lines();
@@ -562,25 +609,17 @@ static void frame(void) {
         float x1 = x0 + (float)ctx.core.cam.zoom_rect.w;
         float y1 = y0 + (float)ctx.core.cam.zoom_rect.h;
         // draw bounds
-        sgl_v2f(x0, y0);
-        sgl_v2f(x1, y0);
-        sgl_v2f(x1, y0);
-        sgl_v2f(x1, y1);
-        sgl_v2f(x1, y1);
-        sgl_v2f(x0, y1);
-        sgl_v2f(x0, y1);
-        sgl_v2f(x0, y0);
+        sgl_v2f(x0, y0); sgl_v2f(x1, y0);
+        sgl_v2f(x1, y0); sgl_v2f(x1, y1);
+        sgl_v2f(x1, y1); sgl_v2f(x0, y1);
+        sgl_v2f(x0, y1); sgl_v2f(x0, y0);
         sgl_end();
     }
 
-    // render hud
+    // render HUD (telemetry overlay)
     hud_render_sokol_gpu(ctx.fons, ctx.font_id, &ctx.core, ctx.win_w, ctx.win_h, ctx.gpu_mode,
                          ctx.high_precision_mode, ctx.cpu_precision_128,
-#ifdef BUILD_PERTURBATION
                          ctx.active_perturbation_last, ctx.use_perturbation,
-#else
-                         0, 0,
-#endif
                          ctx.pip_blend, now);
 
     sgl_draw();
@@ -597,7 +636,6 @@ static void frame(void) {
                 ctx.screenshot_requested = 0;
             }
         } else {
-            // make sure we don't spin forever trying to take a screenshot if allocation fails
             ctx.screenshot_requested = 0;
         }
     }
@@ -684,6 +722,7 @@ static void event(const sapp_event* ev) {
         case SAPP_EVENTTYPE_MOUSE_SCROLL:
             ie.type = INPUT_MOUSE_SCROLL;
             ie.scroll_y = ev->scroll_y;
+            ctx.last_interaction_time = now;
             break;
 
         case SAPP_EVENTTYPE_MOUSE_DOWN:
@@ -691,12 +730,16 @@ static void event(const sapp_event* ev) {
             ie.mouse_btn = (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
             ie.mouse_x = (int)ev->mouse_x;
             ie.mouse_y = (int)ev->mouse_y;
+            ctx.last_interaction_time = now;
             break;
 
         case SAPP_EVENTTYPE_MOUSE_MOVE:
             ie.type = INPUT_MOUSE_MOVE;
             ie.mouse_x = (int)ev->mouse_x;
             ie.mouse_y = (int)ev->mouse_y;
+            if (ctx.core.cam.is_panning) {
+                ctx.last_interaction_time = now;
+            }
             break;
 
         case SAPP_EVENTTYPE_MOUSE_UP:
@@ -718,11 +761,9 @@ static void event(const sapp_event* ev) {
                 sapp_request_quit();
                 break;
             case ACTION_TOGGLE_PERTURBATION:
-#ifdef BUILD_PERTURBATION
                 ctx.use_perturbation = !ctx.use_perturbation;
                 ctx.core.needs_redraw = 1;
                 app_state_push_notification(&ctx.core, ctx.use_perturbation ? "Perturbation: Enabled" : "Perturbation: Disabled", now);
-#endif
                 break;
             case ACTION_TOGGLE_GPU:
                 ctx.gpu_mode = !ctx.gpu_mode;
@@ -798,11 +839,12 @@ static void cleanup(void) {
     sfons_destroy(ctx.fons);
     if (ctx.shd_cpu.id) sg_destroy_shader(ctx.shd_cpu);
     if (ctx.shd_gpu.id) sg_destroy_shader(ctx.shd_gpu);
-#ifdef BUILD_PERTURBATION
     if (ctx.orbit_tex.id) sg_destroy_view(ctx.orbit_tex_view);
     if (ctx.orbit_tex.id) sg_destroy_image(ctx.orbit_tex);
     if (ctx.orbit_smp.id) sg_destroy_sampler(ctx.orbit_smp);
-#endif
+    if (ctx.dummy_img.id) sg_destroy_view(ctx.dummy_img_view);
+    if (ctx.dummy_img.id) sg_destroy_image(ctx.dummy_img);
+    if (ctx.dummy_smp.id) sg_destroy_sampler(ctx.dummy_smp);
     sgl_shutdown();
     sg_shutdown();
 }

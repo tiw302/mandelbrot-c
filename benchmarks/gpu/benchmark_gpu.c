@@ -20,7 +20,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "desktop_gpu_shaders.h"
+#include "desktop_gpu_vs.h"
+#include "desktop_gpu_fs_gpu.h"
 
 #define BENCHMARK_FRAMES 200
 
