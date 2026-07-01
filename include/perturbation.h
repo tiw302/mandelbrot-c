@@ -12,8 +12,8 @@
 
 // single-precision complex number format for gpu texture compatibility
 typedef struct {
-    float re;
-    float im;
+    double re;
+    double im;
 } ComplexFloat;
 
 // represents the stored reference orbit path for the center coordinate

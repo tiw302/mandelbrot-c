@@ -39,8 +39,8 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
     precise_float z_im = 0.0;
 
     // initial orbit element z0 = 0.0 + 0.0i
-    orbit->zn[0].re = (float)z_re;
-    orbit->zn[0].im = (float)z_im;
+    orbit->zn[0].re = (double)z_re;
+    orbit->zn[0].im = (double)z_im;
 
     int len = 1;
     const precise_float escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
@@ -62,9 +62,9 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
         z_im = 2.0 * z_re * z_im + center_im;
         z_re = z_re2 - z_im2 + center_re;
 
-        // store as float for gpu texture upload
-        orbit->zn[i].re = (float)z_re;
-        orbit->zn[i].im = (float)z_im;
+        // store as double for gpu texture upload
+        orbit->zn[i].re = (double)z_re;
+        orbit->zn[i].im = (double)z_im;
         len++;
     }
 
