@@ -27,6 +27,7 @@ typedef struct {
     double target_re, target_im, deep_zoom;  // the point of interest to zoom into
     uint32_t phase_start;                    // timestamp of current phase beginning
     int last_zoom_idx;                       // index of the target in the target array
+    int is_dynamic;                          // 1 if using bookmarks, 0 if using presets
 } TourState;
 
 // state tracking for the julia parameter tour
@@ -39,11 +40,11 @@ typedef struct {
 } JuliaTourState;
 
 // core update logic — called once per frame to advance animations
-void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning_ship);
+void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fractal);
 void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now);
 
 // lifecycle management for mandelbrot tours
-void start_tour(TourState* state, ViewState* view);
+void start_tour(TourState* state, ViewState* view, int base_fractal);
 void stop_tour(TourState* state);
 
 // lifecycle management for julia parameter tours
@@ -53,9 +54,9 @@ void stop_julia_tour(JuliaTourState* state);
 // utility helpers for ui feedback and state inspection
 const char* get_tour_phase_name(TourPhase phase);
 int get_tour_target_idx(const TourState* state);
-int get_num_tour_targets(int is_burning_ship);
-double get_tour_target_re(const TourState* state, int is_burning_ship);
-double get_tour_target_im(const TourState* state, int is_burning_ship);
+int get_num_tour_targets(int base_fractal);
+double get_tour_target_re(const TourState* state, int base_fractal);
+double get_tour_target_im(const TourState* state, int base_fractal);
 int get_julia_tour_target_idx(const JuliaTourState* state);
 
 #endif

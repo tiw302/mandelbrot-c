@@ -11,6 +11,7 @@
 #include <stdlib.h>
 
 #include "config.h"
+#include "bookmark.h"
 
 // tour configuration constants
 #define TOUR_ZOOM_DEPTH 6000.0   // target zoom depth (relative to current)
@@ -66,6 +67,43 @@ static const struct {
 };
 #define NUM_SHIP_ZOOM_TARGETS (int)(sizeof(SHIP_ZOOM_TARGETS) / sizeof(SHIP_ZOOM_TARGETS[0]))
 
+// preset coordinates for the tricorn fractal tour
+static const struct {
+    double re, im;
+} TRICORN_ZOOM_TARGETS[] = {
+    {-0.743643887074537, 0.131825904145753},
+    {-0.162736800339303, 0.878583137739572},
+    {0.0, 1.0},
+    {-1.25, 0.02},
+    {-0.458345355141416, -0.633156886463435},
+    {-1.768778833, 0.0}
+};
+#define NUM_TRICORN_ZOOM_TARGETS (int)(sizeof(TRICORN_ZOOM_TARGETS) / sizeof(TRICORN_ZOOM_TARGETS[0]))
+
+// preset coordinates for the celtic fractal tour
+static const struct {
+    double re, im;
+} CELTIC_ZOOM_TARGETS[] = {
+    {-0.5, 0.5},
+    {-0.162736800339303, 0.878583137739572},
+    {0.275275641098809, 0.006942671571179},
+    {-0.743643887074537, 0.131825904145753},
+    {-0.1, 0.838}
+};
+#define NUM_CELTIC_ZOOM_TARGETS (int)(sizeof(CELTIC_ZOOM_TARGETS) / sizeof(CELTIC_ZOOM_TARGETS[0]))
+
+// preset coordinates for the buffalo fractal tour
+static const struct {
+    double re, im;
+} BUFFALO_ZOOM_TARGETS[] = {
+    {-1.75, -0.03},
+    {-1.86, -0.005},
+    {-1.745, -0.04},
+    {-1.797, -0.02},
+    {-0.4, 0.4}
+};
+#define NUM_BUFFALO_ZOOM_TARGETS (int)(sizeof(BUFFALO_ZOOM_TARGETS) / sizeof(BUFFALO_ZOOM_TARGETS[0]))
+
 #define JULIA_TOUR_MOVE_MS 3000.0   // duration of parameter interpolation
 #define JULIA_TOUR_DWELL_MS 1200.0  // duration of pause at keyframes
 
@@ -96,8 +134,66 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
+// loads and filters bookmarks by fractal type, picking one randomly
+static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im, double* out_zoom, int* out_idx, int* out_count) {
+    int total = get_bookmark_count();
+    int match_count = 0;
+    
+    for (int i = 0; i < total; i++) {
+        Bookmark b;
+        if (load_bookmark(i, &b)) {
+            if (b.fractal_type == base_fractal) {
+                match_count++;
+            }
+        }
+    }
+    
+    if (match_count == 0) {
+        return 0; // No matching bookmarks
+    }
+    
+    double* candidates_re = malloc(sizeof(double) * match_count);
+    double* candidates_im = malloc(sizeof(double) * match_count);
+    double* candidates_zoom = malloc(sizeof(double) * match_count);
+    int* candidates_orig_idx = malloc(sizeof(int) * match_count);
+    if (!candidates_re || !candidates_im || !candidates_zoom || !candidates_orig_idx) {
+        free(candidates_re);
+        free(candidates_im);
+        free(candidates_zoom);
+        free(candidates_orig_idx);
+        return 0;
+    }
+    
+    int idx = 0;
+    for (int i = 0; i < total; i++) {
+        Bookmark b;
+        if (load_bookmark(i, &b)) {
+            if (b.fractal_type == base_fractal) {
+                candidates_re[idx] = b.center_re;
+                candidates_im[idx] = b.center_im;
+                candidates_zoom[idx] = b.zoom;
+                candidates_orig_idx[idx] = i;
+                idx++;
+            }
+        }
+    }
+    
+    int picked = rand() % match_count;
+    *out_re = candidates_re[picked];
+    *out_im = candidates_im[picked];
+    *out_zoom = candidates_zoom[picked];
+    *out_idx = candidates_orig_idx[picked];
+    *out_count = match_count;
+    
+    free(candidates_re);
+    free(candidates_im);
+    free(candidates_zoom);
+    free(candidates_orig_idx);
+    return 1;
+}
+
 // advances the main fractal tour state machine based on current timestamp
-void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning_ship) {
+void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fractal) {
     if (state->phase == TOUR_IDLE) return;
     if (state->phase_start == 0) {
         state->phase_start = now;
@@ -146,15 +242,52 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
                 view->center_im = state->home_im;
                 view->zoom = state->home_zoom;
 
-                // select a new random target for the next loop
-                if (is_burning_ship) {
-                    state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_SHIP_ZOOM_TARGETS);
-                    state->target_re = SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
-                    state->target_im = SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
+                // select a new random target for the next loop depending on the fractal type
+                double dyn_re = 0.0;
+                double dyn_im = 0.0;
+                double dyn_zoom = 0.0;
+                int dyn_idx = 0;
+                int dyn_count = 0;
+                if (get_dynamic_targets(base_fractal, &dyn_re, &dyn_im, &dyn_zoom, &dyn_idx, &dyn_count)) {
+                    state->is_dynamic = 1;
+                    state->last_zoom_idx = dyn_idx;
+                    state->target_re = dyn_re;
+                    state->target_im = dyn_im;
+                    if (dyn_zoom < 0.0005) {
+                        state->deep_zoom = dyn_zoom;
+                    } else {
+                        state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
+                    }
                 } else {
-                    state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_ZOOM_TARGETS);
-                    state->target_re = ZOOM_TARGETS[state->last_zoom_idx].re;
-                    state->target_im = ZOOM_TARGETS[state->last_zoom_idx].im;
+                    state->is_dynamic = 0;
+                    switch (base_fractal) {
+                        case RENDER_BURNING_SHIP:
+                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_SHIP_ZOOM_TARGETS);
+                            state->target_re = SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
+                            state->target_im = SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
+                            break;
+                        case RENDER_TRICORN:
+                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_TRICORN_ZOOM_TARGETS);
+                            state->target_re = TRICORN_ZOOM_TARGETS[state->last_zoom_idx].re;
+                            state->target_im = TRICORN_ZOOM_TARGETS[state->last_zoom_idx].im;
+                            break;
+                        case RENDER_CELTIC:
+                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_CELTIC_ZOOM_TARGETS);
+                            state->target_re = CELTIC_ZOOM_TARGETS[state->last_zoom_idx].re;
+                            state->target_im = CELTIC_ZOOM_TARGETS[state->last_zoom_idx].im;
+                            break;
+                        case RENDER_BUFFALO:
+                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_BUFFALO_ZOOM_TARGETS);
+                            state->target_re = BUFFALO_ZOOM_TARGETS[state->last_zoom_idx].re;
+                            state->target_im = BUFFALO_ZOOM_TARGETS[state->last_zoom_idx].im;
+                            break;
+                        default:
+                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_ZOOM_TARGETS);
+                            state->target_re = ZOOM_TARGETS[state->last_zoom_idx].re;
+                            state->target_im = ZOOM_TARGETS[state->last_zoom_idx].im;
+                            break;
+                    }
+                    state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
                 }
                 state->phase = TOUR_PANNING;
                 state->phase_start = now;
@@ -166,14 +299,65 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int is_burning
 }
 
 // initializes tour state based on the current viewport
-void start_tour(TourState* state, ViewState* view) {
+void start_tour(TourState* state, ViewState* view, int base_fractal) {
     state->home_re = view->center_re;
     state->home_im = view->center_im;
     state->home_zoom = view->zoom;
-    state->deep_zoom = view->zoom / TOUR_ZOOM_DEPTH;
-    state->target_re = view->center_re;
-    state->target_im = view->center_im;
-    state->phase = TOUR_ZOOMING_OUT;  // start with a reset move
+    
+    // Pick the first target coordinate immediately
+    double dyn_re = 0.0;
+    double dyn_im = 0.0;
+    double dyn_zoom = 0.0;
+    int dyn_idx = 0;
+    int dyn_count = 0;
+    if (get_dynamic_targets(base_fractal, &dyn_re, &dyn_im, &dyn_zoom, &dyn_idx, &dyn_count)) {
+        state->is_dynamic = 1;
+        state->last_zoom_idx = dyn_idx;
+        state->target_re = dyn_re;
+        state->target_im = dyn_im;
+        if (dyn_zoom < 0.0005) {
+            state->deep_zoom = dyn_zoom;
+        } else {
+            state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
+        }
+    } else {
+        state->is_dynamic = 0;
+        switch (base_fractal) {
+            case RENDER_BURNING_SHIP:
+                state->last_zoom_idx = pick_idx(-1, NUM_SHIP_ZOOM_TARGETS);
+                state->target_re = SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
+                state->target_im = SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
+                break;
+            case RENDER_TRICORN:
+                state->last_zoom_idx = pick_idx(-1, NUM_TRICORN_ZOOM_TARGETS);
+                state->target_re = TRICORN_ZOOM_TARGETS[state->last_zoom_idx].re;
+                state->target_im = TRICORN_ZOOM_TARGETS[state->last_zoom_idx].im;
+                break;
+            case RENDER_CELTIC:
+                state->last_zoom_idx = pick_idx(-1, NUM_CELTIC_ZOOM_TARGETS);
+                state->target_re = CELTIC_ZOOM_TARGETS[state->last_zoom_idx].re;
+                state->target_im = CELTIC_ZOOM_TARGETS[state->last_zoom_idx].im;
+                break;
+            case RENDER_BUFFALO:
+                state->last_zoom_idx = pick_idx(-1, NUM_BUFFALO_ZOOM_TARGETS);
+                state->target_re = BUFFALO_ZOOM_TARGETS[state->last_zoom_idx].re;
+                state->target_im = BUFFALO_ZOOM_TARGETS[state->last_zoom_idx].im;
+                break;
+            default:
+                state->last_zoom_idx = pick_idx(-1, NUM_ZOOM_TARGETS);
+                state->target_re = ZOOM_TARGETS[state->last_zoom_idx].re;
+                state->target_im = ZOOM_TARGETS[state->last_zoom_idx].im;
+                break;
+        }
+        state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
+    }
+    
+    // Smooth start: if already zoomed out, pan directly. Otherwise, zoom out first.
+    if (view->zoom >= 0.1) {
+        state->phase = TOUR_PANNING;
+    } else {
+        state->phase = TOUR_ZOOMING_OUT;
+    }
     state->phase_start = 0;
 }
 
@@ -232,36 +416,58 @@ const char* get_tour_phase_name(TourPhase phase) {
 }
 
 int get_tour_target_idx(const TourState* state) {
+    if (state->is_dynamic) {
+        int total = get_bookmark_count();
+        int match_idx = 0;
+        for (int i = 0; i <= state->last_zoom_idx && i < total; i++) {
+            Bookmark target_b;
+            if (load_bookmark(state->last_zoom_idx, &target_b)) {
+                Bookmark b_cur;
+                if (load_bookmark(i, &b_cur)) {
+                    if (b_cur.fractal_type == target_b.fractal_type) {
+                        match_idx++;
+                    }
+                }
+            }
+        }
+        return (match_idx > 0) ? (match_idx - 1) : 0;
+    }
     return state->last_zoom_idx;
 }
 
-int get_num_tour_targets(int is_burning_ship) {
-    return is_burning_ship ? NUM_SHIP_ZOOM_TARGETS : NUM_ZOOM_TARGETS;
+int get_num_tour_targets(int base_fractal) {
+    int total = get_bookmark_count();
+    int match_count = 0;
+    for (int i = 0; i < total; i++) {
+        Bookmark b;
+        if (load_bookmark(i, &b)) {
+            if (b.fractal_type == base_fractal) {
+                match_count++;
+            }
+        }
+    }
+    if (match_count > 0) {
+        return match_count;
+    }
+
+    switch (base_fractal) {
+        case RENDER_BURNING_SHIP: return NUM_SHIP_ZOOM_TARGETS;
+        case RENDER_TRICORN: return NUM_TRICORN_ZOOM_TARGETS;
+        case RENDER_CELTIC: return NUM_CELTIC_ZOOM_TARGETS;
+        case RENDER_BUFFALO: return NUM_BUFFALO_ZOOM_TARGETS;
+        default: return NUM_ZOOM_TARGETS;
+    }
 }
 
 // retrieves current target coordinate for hud telemetry
-double get_tour_target_re(const TourState* state, int is_burning_ship) {
+double get_tour_target_re(const TourState* state, int base_fractal) {
     if (state->phase == TOUR_IDLE) return 0.0;
-    if (is_burning_ship) {
-        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_SHIP_ZOOM_TARGETS)
-            return SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
-    } else {
-        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_ZOOM_TARGETS)
-            return ZOOM_TARGETS[state->last_zoom_idx].re;
-    }
-    return 0.0;
+    return state->target_re;
 }
 
-double get_tour_target_im(const TourState* state, int is_burning_ship) {
+double get_tour_target_im(const TourState* state, int base_fractal) {
     if (state->phase == TOUR_IDLE) return 0.0;
-    if (is_burning_ship) {
-        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_SHIP_ZOOM_TARGETS)
-            return SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
-    } else {
-        if (state->last_zoom_idx >= 0 && state->last_zoom_idx < NUM_ZOOM_TARGETS)
-            return ZOOM_TARGETS[state->last_zoom_idx].im;
-    }
-    return 0.0;
+    return state->target_im;
 }
 
 int get_julia_tour_target_idx(const JuliaTourState* state) {

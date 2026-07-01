@@ -11,11 +11,11 @@
 
 int test_tour_transitions() {
     TourState state = {0};
-    ViewState view = {0.0, 0.0, 1.0};
+    ViewState view = {0.0, 0.0, 0.01};
 
-    start_tour(&state, &view);
+    start_tour(&state, &view, 0);
     if (state.phase != TOUR_ZOOMING_OUT) {
-        printf("failed: initial phase should be TOUR_ZOOMING_OUT\n");
+        printf("failed: initial phase should be TOUR_ZOOMING_OUT (got %d)\n", state.phase);
         return 0;
     }
 
