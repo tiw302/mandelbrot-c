@@ -173,7 +173,7 @@ void app_state_toggle_tour(AppCommonState* state, uint32_t now, app_title_callba
         if (state->m_tour.phase == TOUR_IDLE) {
             state->julia_mode = state->julia_session.active = 0;
             camera_reset(&state->cam);
-            start_tour(&state->m_tour, &state->cam.view);
+            start_tour(&state->m_tour, &state->cam.view, state->base_fractal);
             if (set_title_cb) {
                 set_title_cb(state->base_fractal == RENDER_BURNING_SHIP ? "Burning Ship Explorer  [Auto-Zoom]" : (state->base_fractal == RENDER_TRICORN ? "Tricorn Explorer  [Auto-Zoom]" : (state->base_fractal == RENDER_CELTIC ? "Celtic Explorer  [Auto-Zoom]" : (state->base_fractal == RENDER_BUFFALO ? "Buffalo Explorer  [Auto-Zoom]" : "Mandelbrot Explorer  [Auto-Zoom]"))));
             }

@@ -7,6 +7,7 @@ uniform float u_zoom;
 uniform float u_zoom_lo;  // low part of zoom for Dekker hi-lo d0 calculation
 uniform float u_iters;
 uniform float u_aspect;
+uniform vec2 u_ref_offset;
 uniform float u_fractal_type;  // 0=mandelbrot, 1=julia, 2=burning_ship, 3=tricorn, 4=celtic, 5=buffalo
 uniform float u_palette;
 uniform float u_high_precision;
@@ -45,7 +46,8 @@ vec2 ds_mul(vec2 dsa, vec2 dsb) {
   precise float t2  = dsa.y * dsb.y + ((c2 - e) + (c11 - (t1 - e))) + c21;
   precise float t3  = t1 + t2;
   return vec2(t3, t2 - (t3 - t1));
-}
+}as a static C string literal in a header file.
+# Usage: cmake -DGLSL_FILE=input.glsl -DHEADER_FILE=output.h -DVAR_NAME=
 
 // dekker double-single squaring.
 // splits the operand only once to save multiple float operations
@@ -113,19 +115,30 @@ void main() {
   if (u_use_perturbation > 0.5 && u_fractal_type < 0.5) {
     vec2 zoom_ds = vec2(u_zoom, u_zoom_lo);
     vec2 d0 = vec2(
-        ds_mul(vec2(uv.x - 0.5, 0.0), ds_mul(zoom_ds, vec2(u_aspect, 0.0))).x,
-        ds_mul(vec2(0.5 - uv.y, 0.0), zoom_ds).x
+        ds_mul(vec2(uv.x - 0.5 - u_ref_offset.x, 0.0), ds_mul(zoom_ds, vec2(u_aspect, 0.0))).x,
+        ds_mul(vec2(0.5 - uv.y - u_ref_offset.y, 0.0), zoom_ds).x
     );
     vec2 dn = d0;
     int orbit_n = int(u_orbit_len);
     for (; i < 2000; i++) {
       if (i >= orbit_n || i >= m) break;
-      vec2 Zn = texture(u_orbit, vec2((float(i) + 0.5) / 10000.0, 0.5)).rg;
-      vec2 Wn = Zn + dn;
+      vec4 Zn_data = texture(u_orbit, vec2((float(i) + 0.5) / 10000.0, 0.5));
+      vec2 Zn_re = vec2(Zn_data.r, Zn_data.g);
+      vec2 Zn_im = vec2(Zn_data.b, Zn_data.a);
+      vec2 Wn = vec2(Zn_re.x, Zn_im.x) + dn;
       mag2 = dot(Wn, Wn);
       if (mag2 > 100.0) break;
       vec2 dn_sq = vec2(dn.x * dn.x - dn.y * dn.y, 2.0 * dn.x * dn.y);
-      vec2 Zn_dn = vec2(Zn.x * dn.x - Zn.y * dn.y, Zn.x * dn.y + Zn.y * dn.x);
+      vec2 dn_re = vec2(dn.x, 0.0);
+      vec2 dn_im = vec2(dn.y, 0.0);
+      vec2 term1 = ds_mul(Zn_re, dn_re);
+      vec2 term2 = ds_mul(Zn_im, dn_im);
+      vec2 term3 = ds_mul(Zn_re, dn_im);
+      vec2 term4 = ds_mul(Zn_im, dn_re);
+      vec2 Zn_dn = vec2(
+          ds_add(term1, vec2(-term2.x, -term2.y)).x,
+          ds_add(term3, term4).x
+      );
       dn = 2.0 * Zn_dn + dn_sq + d0;
     }
 
