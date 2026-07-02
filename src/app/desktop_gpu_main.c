@@ -406,6 +406,20 @@ static void init(void) {
 
     rebuild_texture();
     reload_shaders();
+
+    printf("mandelbrot gpu explorer\n");
+    printf("  left drag   : zoom selection   | right drag  : pan\n");
+    printf("  scroll      : zoom at cursor   | ctrl+z      : undo\n");
+    printf("  up/down     : iterations       | shift+up/dn : x100\n");
+    printf("  p           : cycle palette    | r           : reset\n");
+    printf("  e           : toggle precision (32/64-bit gpu)\n");
+    printf("  g           : toggle cpu/gpu   | n           : perturbation\n");
+    printf("  j           : julia mode       | t           : tour\n");
+    printf("  f           : cycle fractals   | s           : screenshot\n");
+    printf("  m           : save bookmark    | l           : load bookmark\n");
+    printf("  x           : mega screenshot  | v           : record video\n");
+    printf("  i           : settings panel   | h           : toggle help\n");
+    printf("  q / esc     : quit\n");
 }
 
 static void frame(void) {
@@ -628,7 +642,9 @@ static void frame(void) {
 
     // render settings panel (if open)
     settings_panel_render(&ctx.settings, ctx.fons, ctx.font_id, &ctx.core,
-                          ctx.win_w, ctx.win_h, ctx.pip_blend, now);
+                          ctx.win_w, ctx.win_h,
+                          ctx.gpu_mode, ctx.use_perturbation,
+                          ctx.pip_blend, now);
 
     sgl_draw();
 
@@ -741,10 +757,26 @@ static void event(const sapp_event* ev) {
             ie.mouse_y = (int)ev->mouse_y;
             ctx.last_interaction_time = now;
             // let the settings panel consume the click first
-            if (settings_panel_handle_mouse_down(&ctx.settings, &ctx.core,
-                                                  ie.mouse_x, ie.mouse_y,
-                                                  ctx.win_w, ctx.win_h)) {
-                handled = 1;
+            {
+                SettingsMouseAction sa = settings_panel_handle_mouse_down(
+                    &ctx.settings, &ctx.core, ie.mouse_x, ie.mouse_y, ctx.win_w, ctx.win_h);
+                if (sa == SETTINGS_ACTION_TOGGLE_GPU) {
+                    ctx.gpu_mode = !ctx.gpu_mode;
+                    ctx.core.needs_redraw = 1;
+                    app_state_push_notification(&ctx.core, ctx.gpu_mode ? "Engine: GPU" : "Engine: CPU", now);
+                    handled = 1;
+                } else if (sa == SETTINGS_ACTION_TOGGLE_PERTURB) {
+                    if (ctx.gpu_mode) {
+                        ctx.use_perturbation = !ctx.use_perturbation;
+                        ctx.core.needs_redraw = 1;
+                        app_state_push_notification(&ctx.core, ctx.use_perturbation ? "Perturbation: Enabled" : "Perturbation: Disabled", now);
+                    } else {
+                        app_state_push_notification(&ctx.core, "Perturbation requires GPU mode", now);
+                    }
+                    handled = 1;
+                } else if (sa != SETTINGS_ACTION_NONE) {
+                    handled = 1;
+                }
             }
             break;
 
