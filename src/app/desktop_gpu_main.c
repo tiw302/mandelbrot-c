@@ -25,6 +25,7 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "perturbation.h"
+#include "settings_panel.h"
 
 // clang-format off
 #include "sokol/sokol_app.h"
@@ -146,6 +147,9 @@ typedef struct {
     int was_interacting;
     float ref_offset_x;
     float ref_offset_y;
+
+    // settings panel
+    SettingsPanel settings;
 } GlobalCtx;
 
 static GlobalCtx ctx;
@@ -622,6 +626,10 @@ static void frame(void) {
                          ctx.active_perturbation_last, ctx.use_perturbation,
                          ctx.pip_blend, now);
 
+    // render settings panel (if open)
+    settings_panel_render(&ctx.settings, ctx.fons, ctx.font_id, &ctx.core,
+                          ctx.win_w, ctx.win_h, ctx.pip_blend, now);
+
     sgl_draw();
 
     // capture video frame or screenshot if requested
@@ -683,6 +691,7 @@ static InputKey map_sokol_key(sapp_keycode sym) {
         case SAPP_KEYCODE_LEFT_BRACKET: return KEY_LEFT_BRACKET;
         case SAPP_KEYCODE_RIGHT_BRACKET: return KEY_RIGHT_BRACKET;
         case SAPP_KEYCODE_F5: return KEY_F5;
+        case SAPP_KEYCODE_I: return KEY_I;
         default: return KEY_UNKNOWN;
     }
 }
@@ -731,12 +740,24 @@ static void event(const sapp_event* ev) {
             ie.mouse_x = (int)ev->mouse_x;
             ie.mouse_y = (int)ev->mouse_y;
             ctx.last_interaction_time = now;
+            // let the settings panel consume the click first
+            if (settings_panel_handle_mouse_down(&ctx.settings, &ctx.core,
+                                                  ie.mouse_x, ie.mouse_y,
+                                                  ctx.win_w, ctx.win_h)) {
+                handled = 1;
+            }
             break;
 
         case SAPP_EVENTTYPE_MOUSE_MOVE:
             ie.type = INPUT_MOUSE_MOVE;
             ie.mouse_x = (int)ev->mouse_x;
             ie.mouse_y = (int)ev->mouse_y;
+            // forward drag to settings panel slider
+            if (settings_panel_handle_mouse_move(&ctx.settings, &ctx.core, ie.mouse_x)) {
+                ctx.core.needs_redraw = 1;
+                handled = 1;
+                break;
+            }
             if (ctx.core.cam.is_panning) {
                 ctx.last_interaction_time = now;
             }
@@ -747,6 +768,7 @@ static void event(const sapp_event* ev) {
             ie.mouse_btn = (ev->mouse_button == SAPP_MOUSEBUTTON_RIGHT) ? 3 : 1;
             ie.mouse_x = (int)ev->mouse_x;
             ie.mouse_y = (int)ev->mouse_y;
+            settings_panel_handle_mouse_up(&ctx.settings, &ctx.core);
             break;
 
         default:
@@ -759,6 +781,12 @@ static void event(const sapp_event* ev) {
         switch (action) {
             case ACTION_QUIT:
                 sapp_request_quit();
+                break;
+            case ACTION_TOGGLE_SETTINGS:
+                ctx.settings.visible = !ctx.settings.visible;
+                app_state_push_notification(&ctx.core,
+                    ctx.settings.visible ? "Settings: Open (drag slider | click palette)" : "Settings: Closed", now);
+                ctx.core.needs_redraw = 1;
                 break;
             case ACTION_TOGGLE_PERTURBATION:
                 ctx.use_perturbation = !ctx.use_perturbation;

@@ -72,7 +72,8 @@ void hud_render_sokol_gpu(FONScontext* fons, int font_id, AppCommonState* state,
         fonsDrawText(fons, tx, ty, "B            : Toggle Burning Ship Mode", NULL); ty += lh;
         fonsDrawText(fons, tx, ty, "N            : Toggle Perturbation Theory Mode", NULL); ty += lh;
         fonsDrawText(fons, tx, ty, "S            : Capture Screenshot", NULL); ty += lh;
-        fonsDrawText(fons, tx, ty, "V            : Start / Stop Video Recording", NULL);
+        fonsDrawText(fons, tx, ty, "V            : Start / Stop Video Recording", NULL); ty += lh;
+        fonsDrawText(fons, tx, ty, "I            : Open / Close Settings Panel", NULL);
 
         sfons_flush(fons);
     } else {

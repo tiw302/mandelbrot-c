@@ -253,11 +253,8 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
                     state->last_zoom_idx = dyn_idx;
                     state->target_re = dyn_re;
                     state->target_im = dyn_im;
-                    if (dyn_zoom < 0.0005) {
-                        state->deep_zoom = dyn_zoom;
-                    } else {
-                        state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
-                    }
+                    // always zoom 6000x deep regardless of the saved bookmark zoom level
+                    state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
                 } else {
                     state->is_dynamic = 0;
                     switch (base_fractal) {
@@ -315,11 +312,8 @@ void start_tour(TourState* state, ViewState* view, int base_fractal) {
         state->last_zoom_idx = dyn_idx;
         state->target_re = dyn_re;
         state->target_im = dyn_im;
-        if (dyn_zoom < 0.0005) {
-            state->deep_zoom = dyn_zoom;
-        } else {
-            state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
-        }
+        // always zoom 6000x deep regardless of the saved bookmark zoom level
+        state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
     } else {
         state->is_dynamic = 0;
         switch (base_fractal) {

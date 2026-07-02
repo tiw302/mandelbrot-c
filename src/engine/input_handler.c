@@ -149,6 +149,9 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
             case KEY_F5:
                 return ACTION_RELOAD_SHADERS;
 
+            case KEY_I:
+                return ACTION_TOGGLE_SETTINGS;
+
             default:
                 break;
         }
