@@ -46,8 +46,7 @@ vec2 ds_mul(vec2 dsa, vec2 dsb) {
   precise float t2  = dsa.y * dsb.y + ((c2 - e) + (c11 - (t1 - e))) + c21;
   precise float t3  = t1 + t2;
   return vec2(t3, t2 - (t3 - t1));
-}as a static C string literal in a header file.
-# Usage: cmake -DGLSL_FILE=input.glsl -DHEADER_FILE=output.h -DVAR_NAME=
+}
 
 // dekker double-single squaring.
 // splits the operand only once to save multiple float operations
