@@ -117,7 +117,7 @@ if(BUILD_CPU)
     pkg_check_modules(SDL2 REQUIRED sdl2)
     pkg_check_modules(SDL2_TTF REQUIRED SDL2_ttf)
 
-    add_executable(mandelbrot_cpu src/engine/screenshot.c src/ui/hud_sdl.c src/app/desktop_cpu_main.c)
+    add_executable(mandelbrot_cpu src/engine/screenshot.c src/ui/hud_sdl.c src/ui/settings_panel_sdl.c src/app/desktop_cpu_main.c)
     target_compile_definitions(mandelbrot_cpu PRIVATE SOKOL_GLCORE USE_SDL2)
     target_compile_options(mandelbrot_cpu PRIVATE -pthread)
     target_include_directories(mandelbrot_cpu PRIVATE ${SDL2_INCLUDE_DIRS} ${SDL2_TTF_INCLUDE_DIRS} ${CMAKE_CURRENT_SOURCE_DIR}/src/app)

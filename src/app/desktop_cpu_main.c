@@ -20,6 +20,7 @@
 #include "hud_sdl.h"
 #include "ini_config.h"
 #include "input_handler.h"
+#include "settings_panel_sdl.h"
 #include "tour.h"
 #include "julia.h"
 #include "mandelbrot.h"
@@ -40,6 +41,7 @@ typedef struct {
     int cpu_precision_128;
     int screenshot_requested;
     RendererContext* renderer_ctx;
+    SettingsPanelSdl settings;
 } AppCtx;
 
 static SDL_Window* g_window = NULL;
@@ -87,6 +89,7 @@ static InputKey map_sdl_key(SDL_Keycode sym) {
         case SDLK_LEFTBRACKET: return KEY_LEFT_BRACKET;
         case SDLK_RIGHTBRACKET: return KEY_RIGHT_BRACKET;
         case SDLK_F5: return KEY_F5;
+        case SDLK_i: return KEY_I;
         default: return KEY_UNKNOWN;
     }
 }
@@ -148,12 +151,42 @@ static void handle_events(AppCtx* ctx) {
                 ie.mouse_btn = event.button.button;
                 ie.mouse_x = event.button.x;
                 ie.mouse_y = event.button.y;
+                {
+                    SdlPanelAction sa = settings_panel_sdl_mouse_down(
+                        &ctx->settings, &ctx->core, ie.mouse_x, ie.mouse_y,
+                        ctx->win_w, ctx->win_h);
+                    if (sa == SDL_PANEL_ACTION_TOGGLE_PRECISION) {
+#ifdef USE_SIMD_F128
+                        ctx->cpu_precision_128 = !ctx->cpu_precision_128;
+                        set_cpu_precision(ctx->renderer_ctx, ctx->cpu_precision_128);
+                        ctx->core.needs_redraw = 1;
+                        app_state_push_notification(&ctx->core, ctx->cpu_precision_128 ? "Precision: 128-bit (SIMD)" : "Precision: 64-bit (Double)", now);
+#endif
+                        handled = 1;
+                    } else if (sa == SDL_PANEL_ACTION_THREADS_UP || sa == SDL_PANEL_ACTION_THREADS_DOWN) {
+                        int threads = get_actual_thread_count(ctx->renderer_ctx);
+                        threads += (sa == SDL_PANEL_ACTION_THREADS_UP) ? 1 : -1;
+                        set_renderer_thread_count(ctx->renderer_ctx, threads);
+                        ctx->core.thread_count = get_actual_thread_count(ctx->renderer_ctx);
+                        ctx->core.needs_redraw = 1;
+                        char tbuf[64];
+                        snprintf(tbuf, sizeof(tbuf), "CPU Threads: %d Cores", ctx->core.thread_count);
+                        app_state_push_notification(&ctx->core, tbuf, now);
+                        handled = 1;
+                    } else if (sa != SDL_PANEL_ACTION_NONE) {
+                        handled = 1;
+                    }
+                }
                 break;
 
             case SDL_MOUSEMOTION:
                 ie.type = INPUT_MOUSE_MOVE;
                 ie.mouse_x = event.motion.x;
                 ie.mouse_y = event.motion.y;
+                if (settings_panel_sdl_mouse_move(&ctx->settings, &ctx->core, ie.mouse_x)) {
+                    ctx->core.needs_redraw = 1;
+                    handled = 1;
+                }
                 break;
 
             case SDL_MOUSEBUTTONUP:
@@ -161,6 +194,7 @@ static void handle_events(AppCtx* ctx) {
                 ie.mouse_btn = event.button.button;
                 ie.mouse_x = event.button.x;
                 ie.mouse_y = event.button.y;
+                settings_panel_sdl_mouse_up(&ctx->settings, &ctx->core);
                 break;
 
             default:
@@ -218,6 +252,11 @@ static void handle_events(AppCtx* ctx) {
                 default:
                     if (ie.type == INPUT_KEY_DOWN && ie.key == KEY_S) {
                         ctx->screenshot_requested = 1;
+                        ctx->core.needs_redraw = 1;
+                    } else if (ie.type == INPUT_KEY_DOWN && ie.key == KEY_I) {
+                        ctx->settings.visible = !ctx->settings.visible;
+                        app_state_push_notification(&ctx->core,
+                            ctx->settings.visible ? "Settings: Open" : "Settings: Closed", now);
                         ctx->core.needs_redraw = 1;
                     }
                     break;
@@ -280,8 +319,12 @@ static void render_frame(AppCtx* ctx) {
 
 // draws the debug heads-up display (hud)
 static void render_hud(AppCtx* ctx) {
+    uint32_t now = SDL_GetTicks();
     hud_render_sdl(ctx->renderer, ctx->font, &ctx->core, ctx->win_w, ctx->win_h,
-                   ctx->cpu_precision_128, SDL_GetTicks());
+                   ctx->cpu_precision_128, now);
+    settings_panel_sdl_render(&ctx->settings, ctx->renderer, ctx->font, &ctx->core,
+                               ctx->win_w, ctx->win_h,
+                               ctx->cpu_precision_128, ctx->core.thread_count, now);
 }
 
 int main(int argc, char* argv[]) {
@@ -415,5 +458,5 @@ static void print_controls(void) {
     puts("  m           : save bookmark    | l           : load bookmark");
     puts("  x           : mega screenshot  | v           : record video");
     puts("  [ / ]       : scale threads    | h           : toggle help menu");
-    puts("  q / esc     : quit");
+    puts("  i           : settings panel   | q / esc     : quit");
 }
