@@ -91,11 +91,9 @@ The URL format encodes the following parameters:
 Example: `?re=-0.74364388797764&im=0.13182590414575&z=1.234568e+4&it=500&p=0`
 
 - **Hi-Lo Precision GPU Math:** 64-bit precision emulation in GLSL shaders for deep-zoom exploration without pixelation artifacts.
-- **Interactive Tour Mode:** Automated exploration with two independent tour systems. The Mandelbrot tour dynamically loads targets from `bookmarks.json` (falling back to 20 built-in presets) using a three-phase sequence — Pan (1.8s), Zoom In (4.0s), Zoom Out (3.2s) — with smoothstep easing and a fixed 6000× zoom depth regardless of the bookmark's saved zoom level. Both tours pick the next target randomly without repeating the previous one. On desktop, the Julia tour interpolates between 12 preset c-parameter keyframes (3.0s move, 1.2s dwell). On web, the Julia tour uses a continuous circular orbit (`c = 0.7885 × e^(it)`) for smooth real-time animation.
+- **Interactive Tour Mode:** Automated exploration with two independent tour systems. The Mandelbrot tour cycles through 10 hand-picked deep-zoom coordinates using a three-phase sequence — Pan (1.8s), Zoom In (4.0s), Zoom Out (3.2s) — with smoothstep easing between phases and a zoom depth of 6000x. Both tours pick the next target randomly without repeating the previous one. On desktop, the Julia tour interpolates between 12 preset c-parameter keyframes (3.0s move, 1.2s dwell). On web, the Julia tour uses a continuous circular orbit (`c = 0.7885 × e^(it)`) for smooth real-time animation.
 - **Professional Screenshot System:** Deferred capture logic that ensures high-fidelity PNG exports by synchronizing with the GPU rendering cycle. Both desktop and web save screenshots as `mandelbrot_YYYYMMDD_HHMMSS.png`. On desktop, stb_image_write handles PNG encoding with automatic ARGB-to-RGBA conversion. On web, the browser generates and downloads the file directly from the canvas.
-- **Async Video Recording:** Export smooth 60 fps MP4 videos directly from the GPU framebuffer. Press `V` to start/stop; encoding is handled by an ffmpeg background thread so the app stays fully interactive.
-- **Settings Panel:** Press `I` to open a real-time settings panel. Drag the iterations slider, click a palette swatch to switch colors instantly, or pick a fractal type with a single click — all without leaving the fractal view.
-- **Dynamic HUD:** A responsive Heads-Up Display showing 14-decimal precision coordinates, engine mode, iteration count, and live tour status.
+- **Dynamic HUD:** A redesigned, responsive Heads-Up Display showing 14-decimal precision coordinates.
 
 ---
 
@@ -110,11 +108,9 @@ Example: `?re=-0.74364388797764&im=0.13182590414575&z=1.234568e+4&it=500&p=0`
 | **Mega Screenshot (8K)** | `X` | - | - |
 | **Record Video** | `V` | - | - |
 | **Tour Mode** | `T` | `T` | "Tour" Button |
-| **Settings Panel** | `I` | - | - |
 | **GPU/CPU Toggle** | `G` | `G` | "GPU" Button |
 | **Precision Toggle** | `E` (CPU: 64/128-bit, GPU: 32/64-bit) | `E` | "32-bit / 64-bit" Button |
 | **Julia Toggle** | `J` | `J` | "Julia" Button |
-| **Cycle Fractal Type** | `F` | - | - |
 | **Burning Ship Toggle** | `B` | `B` | - |
 | **Palette Cycle** | `P` | `P` | "Palette" Button |
 | **Iterations** | `Up/Down` (`Shift` ×100) | `Up/Down` | `Iter+/Iter-` |

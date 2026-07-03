@@ -5,10 +5,7 @@
 
 // forward declarations to avoid duplicate inclusion of sokol / fontstash headers
 struct FONScontext;
-#ifndef SGL_PIPELINE_DECLARED
-#define SGL_PIPELINE_DECLARED
 typedef struct sgl_pipeline sgl_pipeline;
-#endif
 struct sapp_event;
 
 void hud_render_sokol_gpu(struct FONScontext* fons, int font_id, AppCommonState* state,

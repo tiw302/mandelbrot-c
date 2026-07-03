@@ -39,8 +39,7 @@ typedef enum {
     KEY_T,
     KEY_LEFT_BRACKET,
     KEY_RIGHT_BRACKET,
-    KEY_F5,
-    KEY_I
+    KEY_F5
 } InputKey;
 
 typedef struct {
@@ -63,8 +62,7 @@ typedef enum {
     ACTION_RESIZE_THREADS_DOWN = 6,
     ACTION_TOGGLE_GPU = 7,
     ACTION_TOGGLE_PRECISION = 8,
-    ACTION_TOGGLE_PERTURBATION = 9,
-    ACTION_TOGGLE_SETTINGS = 10
+    ACTION_TOGGLE_PERTURBATION = 9
 } InputAction;
 
 // handles the common event, modifies AppCommonState, and returns any specific action the backend needs to perform
