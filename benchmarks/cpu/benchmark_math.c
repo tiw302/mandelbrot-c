@@ -8,7 +8,7 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "../include/core_math.h"
+#include "core_math.h"
 
 #define MAX_ITERATIONS 1000
 #define GRID_WIDTH 1024

@@ -7,7 +7,7 @@
 #include <stdlib.h>
 
 #include "config.h"
-#include "ini_config.h"
+#include "config_loader.h"
 
 #define TEST_START(name) printf("running test: %s... ", name);
 #define TEST_END() printf("passed!\n");
@@ -20,8 +20,9 @@
 void test_config_defaults(void) {
     TEST_START("config defaults & clamping");
 
-    // we will just read whatever is in settings.txt (or recreate it if missing)
-    load_config_from_file("settings.txt");
+    // we will just read whatever is in settings.json (or recreate it if missing)
+    load_config_from_file("settings.json");
+
 
     // check bounds enforcement
     int threads = get_config_default_thread_count();

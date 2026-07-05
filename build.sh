@@ -4,6 +4,7 @@
 # optimized with parallel builds and consistent naming
 
 build_cpu() {
+    ./scripts/compile_shaders.sh || return $?
     cmake -S . -B build_cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
     cmake --build build_cpu --parallel || return $?
     echo ""
@@ -15,6 +16,7 @@ build_cpu() {
 }
 
 build_gpu() {
+    ./scripts/compile_shaders.sh || return $?
     cmake -S . -B build_gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
     cmake --build build_gpu --parallel || return $?
     echo ""
@@ -26,6 +28,7 @@ build_gpu() {
 }
 
 build_web() {
+    ./scripts/compile_shaders.sh || return $?
     if ! command -v emcmake &> /dev/null; then
         echo "error: emscripten not found. please install emsdk."
         return 1
@@ -51,6 +54,7 @@ build_web() {
 }
 
 build_deep() {
+    ./scripts/compile_shaders.sh || return $?
     cmake -S . -B build_deep -DBUILD_DEEP=ON -DCMAKE_BUILD_TYPE=Release || return $?
     cmake --build build_deep --parallel || return $?
     echo ""
@@ -61,7 +65,20 @@ build_deep() {
     echo " "
 }
 
+build_video() {
+    ./scripts/compile_shaders.sh || return $?
+    cmake -S . -B build_video -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
+    cmake --build build_video --target mandelbrot_video --parallel || return $?
+    echo ""
+    echo "===================================================================================="
+    echo " build complete! to run video renderer engine:"
+    echo "  * ./build_video/mandelbrot_video"
+    echo "===================================================================================="
+    echo " "
+}
+
 run_tests() {
+    ./scripts/compile_shaders.sh || return $?
     cmake -S . -B build_test -DBUILD_CPU=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release || return $?
     cmake --build build_test --parallel || return $?
     echo ""
@@ -76,6 +93,7 @@ run_tests() {
 }
 
 run_benchmarks() {
+    ./scripts/compile_shaders.sh || return $?
     cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release || return $?
     cmake --build build_bench --parallel || return $?
     echo ""
@@ -92,11 +110,11 @@ run_benchmarks() {
 }
 
 build_all() {
-    build_cpu && build_gpu && build_web && build_deep
+    build_cpu && build_gpu && build_web && build_deep && build_video
 }
 
 clean() {
-    rm -rf build_cpu build_gpu build_web build_deep build_test build_bench build deploy
+    rm -rf build_cpu build_gpu build_web build_deep build_video build_test build_bench build deploy
     echo "clean complete!"
 }
 
@@ -106,12 +124,13 @@ if [ $# -gt 0 ]; then
         gpu)   build_gpu ;;
         web)   build_web ;;
         deep)  build_deep ;;
+        video) build_video ;;
         test)  run_tests ;;
         bench) run_benchmarks ;;
         all)   build_all ;;
         clean) clean ;;
         *)
-            echo "error: unknown option '$1'. usage: $0 {cpu|gpu|web|deep|test|bench|all|clean}"
+            echo "error: unknown option '$1'. usage: $0 {cpu|gpu|web|deep|video|test|bench|all|clean}"
             exit 1
             ;;
     esac
@@ -125,10 +144,11 @@ echo "  1) cpu (combined 64/128-bit)"
 echo "  2) gpu (combined 32/64-bit)"
 echo "  3) web"
 echo "  4) deep zoom (gpu + perturbation)"
-echo "  5) run tests"
-echo "  6) run benchmarks"
-echo "  7) build all"
-echo "  8) clean"
+echo "  5) video renderer TUI (multithreaded CLI)"
+echo "  6) run tests"
+echo "  7) run benchmarks"
+echo "  8) build all"
+echo "  9) clean"
 echo "  q) quit"
 echo "===================================================================================="
 echo " "
@@ -139,13 +159,14 @@ case $choice in
     2) build_gpu ;;
     3) build_web ;;
     4) build_deep ;;
-    5) run_tests ;;
-    6) run_benchmarks ;;
-    7) build_all ;;
-    8) clean ;;
+    5) build_video ;;
+    6) run_tests ;;
+    7) run_benchmarks ;;
+    8) build_all ;;
+    9) clean ;;
     q|Q) exit 0 ;;
     *)
-        echo "error: invalid choice '$choice'. please enter a number between 1-8, or 'q' to quit."
+        echo "error: invalid choice '$choice'. please enter a number between 1-9, or 'q' to quit."
         exit 1
         ;;
 esac

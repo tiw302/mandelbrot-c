@@ -46,14 +46,26 @@ static void run_benchmark(RendererContext* ctx, const char* name, int width, int
 
     printf("Running %d frames...\n", NUM_RUNS);
 
+    complex_t julia_c = {0.0, 0.0};
+    RenderJob job = {
+        .pixels = pixels,
+        .pitch = width * 4,
+        .window_width = width,
+        .window_height = height,
+        .re_min = x_min,
+        .re_max = x_max,
+        .im_top = y_min,
+        .im_bottom = y_max,
+        .mode = RENDER_MANDELBROT,
+        .julia_c = julia_c,
+        .max_iterations = MAX_ITERATIONS
+    };
     // warm up run
-    render_mandelbrot_threaded(ctx, pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
-                               MAX_ITERATIONS);
+    render_fractal_threaded(ctx, &job);
 
     for (int i = 0; i < NUM_RUNS; i++) {
         double start = get_time_sec();
-        render_mandelbrot_threaded(ctx, pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
-                                   MAX_ITERATIONS);
+        render_fractal_threaded(ctx, &job);
         double end = get_time_sec();
 
         double elapsed = end - start;
@@ -109,17 +121,29 @@ static void run_scaling_sweep(RendererContext* ctx, int width, int height) {
         int t = threads_to_test[idx];
         set_renderer_thread_count(ctx, t);
 
+        complex_t julia_c = {0.0, 0.0};
+        RenderJob job = {
+            .pixels = pixels,
+            .pitch = width * 4,
+            .window_width = width,
+            .window_height = height,
+            .re_min = x_min,
+            .re_max = x_max,
+            .im_top = y_min,
+            .im_bottom = y_max,
+            .mode = RENDER_MANDELBROT,
+            .julia_c = julia_c,
+            .max_iterations = MAX_ITERATIONS
+        };
         // warm up run
-        render_mandelbrot_threaded(ctx, pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
-                                   MAX_ITERATIONS);
+        render_fractal_threaded(ctx, &job);
 
         // measure runs
         double total_time = 0.0;
         int runs = (t == 1) ? 2 : 3; // run less for 1 thread to speed it up
         for (int r = 0; r < runs; r++) {
             double start = get_time_sec();
-            render_mandelbrot_threaded(ctx, pixels, width * 4, width, height, x_min, x_max, y_min, y_max,
-                                       MAX_ITERATIONS);
+            render_fractal_threaded(ctx, &job);
             double end = get_time_sec();
             total_time += (end - start);
         }

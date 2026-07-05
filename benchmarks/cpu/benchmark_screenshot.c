@@ -63,8 +63,22 @@ int main(void) {
     if (pixels) {
         // pre-render an image so we have realistic data to compress
         printf("   (pre-rendering 1080p buffer...)\n");
-        render_mandelbrot_threaded(ctx, pixels, width_1080 * 4, width_1080, height_1080, x_min, x_max,
-                                   y_min, y_max, MAX_ITERATIONS);
+        complex_t julia_c = {0.0, 0.0};
+        RenderJob job = {
+            .pixels = pixels,
+            .pitch = width_1080 * 4,
+            .window_width = width_1080,
+            .window_height = height_1080,
+            .re_min = x_min,
+            .re_max = x_max,
+            .im_top = y_min,
+            .im_bottom = y_max,
+            .mode = RENDER_MANDELBROT,
+            .julia_c = julia_c,
+            .max_iterations = MAX_ITERATIONS
+        };
+        render_fractal_threaded(ctx, &job);
+
 
         printf("   Saving PNG to disk...\n");
         double start = get_time_sec();
