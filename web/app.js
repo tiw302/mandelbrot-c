@@ -21,7 +21,7 @@ addLog("[loader] loading assets/fonts/font.ttf...");
 addLog("[loader] loading WebAssembly runtime...");
 
 // configuration and runtime state
-const PALETTES = ["sine wave", "grayscale", "fire", "electric", "ocean", "inferno", "viridis", "plasma", "twilight"];
+const PALETTES = ["sine wave", "volumetric magma", "viridis", "grayscale", "electric", "ocean", "inferno", "retro binary", "orbit mesh (gpu)", "biomorph trap (gpu)", "conformal ripples (gpu)", "curvature marble (gpu)", "conformal grid (gpu)", "cyber grid (gpu)", "bubble pearl (gpu)", "liquid chrome (gpu)", "refractive 3d glass (gpu)", "ultra fractal classic (gpu)", "pure binary bw", "classic royal blue (gpu)", "classic fire red (gpu)", "silver crimson (gpu)"];
 let _gpuMode = true;
 let _tourActive = false;
 let _juliaMode = false;
@@ -135,12 +135,21 @@ function toggleSettings() {
 
         const setMode = document.getElementById('setFractalModeSelect');
         if (setMode) {
-            if (_currentState.julia_mode) setMode.value = 'julia';
-            else if (_currentState.base_fractal === 1) setMode.value = 'ship';
-            else if (_currentState.base_fractal === 2) setMode.value = 'tricorn';
-            else if (_currentState.base_fractal === 3) setMode.value = 'celtic';
-            else if (_currentState.base_fractal === 4) setMode.value = 'buffalo';
-            else setMode.value = 'mandelbrot';
+            if (_currentState.julia_mode) {
+                setMode.value = 'julia';
+            } else {
+                let name = 'mandelbrot';
+                if (Module._wasm_get_registered_count) {
+                    const count = Module._wasm_get_registered_count();
+                    for (let i = 0; i < count; i++) {
+                        if (Module._wasm_get_registered_mode(i) === _currentState.base_fractal) {
+                            name = UTF8ToString(Module._wasm_get_registered_name(i));
+                            break;
+                        }
+                    }
+                }
+                setMode.value = name;
+            }
         }
         const setTour = document.getElementById('setTourBtn');
         if (setTour) {
@@ -201,11 +210,18 @@ function changeFractalMode(val) {
         if (_currentState.julia_mode && Module._wasm_toggle_julia) {
             Module._wasm_toggle_julia();
         }
+        
         let mode = 0;
-        if (val === 'ship') mode = 1;
-        else if (val === 'tricorn') mode = 2;
-        else if (val === 'celtic') mode = 3;
-        else if (val === 'buffalo') mode = 4;
+        if (Module._wasm_get_registered_count) {
+            const count = Module._wasm_get_registered_count();
+            for (let i = 0; i < count; i++) {
+                const name = UTF8ToString(Module._wasm_get_registered_name(i));
+                if (name === val) {
+                    mode = Module._wasm_get_registered_mode(i);
+                    break;
+                }
+            }
+        }
         
         if (Module._wasm_set_fractal_mode) {
             Module._wasm_set_fractal_mode(mode);
@@ -243,7 +259,7 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, base_fractal, max_iters
     if (julia_mode) html += `c: (${julia_re.toFixed(10)}, ${julia_im.toFixed(10)})\n`;
     else html += `center: (${center_re.toFixed(10)}, ${center_im.toFixed(10)})\n`;
 
-    html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % 9]}${tour_str}`;
+    html += `zoom: ${zoom.toPrecision(4)} | iter: ${max_iters} | palette: ${PALETTES[palette_idx % PALETTES.length]}${tour_str}`;
     debugInfo.textContent = html;
 
     // cache state for background tasks (like url generation)
@@ -292,9 +308,21 @@ window.updateDebugInfo = function (gpu_mode, julia_mode, base_fractal, max_iters
         
         const setMode = document.getElementById('setFractalModeSelect');
         if (setMode) {
-            if (julia_mode) setMode.value = 'julia';
-            else if (base_fractal) setMode.value = 'ship';
-            else setMode.value = 'mandelbrot';
+            if (julia_mode) {
+                setMode.value = 'julia';
+            } else {
+                let name = 'mandelbrot';
+                if (Module._wasm_get_registered_count) {
+                    const count = Module._wasm_get_registered_count();
+                    for (let i = 0; i < count; i++) {
+                        if (Module._wasm_get_registered_mode(i) === base_fractal) {
+                            name = UTF8ToString(Module._wasm_get_registered_name(i));
+                            break;
+                        }
+                    }
+                }
+                setMode.value = name;
+            }
         }
     }
 };
@@ -473,6 +501,24 @@ var Module = {
     setStatus: (text) => {
         if (!text) {
             addLog("[loader] WebAssembly runtime initialized.");
+            
+            // dynamically populate dropdown from WASM registry
+            if (Module._wasm_get_registered_count) {
+                const count = Module._wasm_get_registered_count();
+                const setMode = document.getElementById('setFractalModeSelect');
+                if (setMode) {
+                    setMode.innerHTML = '';
+                    for (let i = 0; i < count; i++) {
+                        const name = UTF8ToString(Module._wasm_get_registered_name(i));
+                        const displayName = UTF8ToString(Module._wasm_get_registered_display_name(i));
+                        const opt = document.createElement('option');
+                        opt.value = name;
+                        opt.textContent = displayName;
+                        setMode.appendChild(opt);
+                    }
+                }
+            }
+
             loadingScreen.style.opacity = '0';
             setTimeout(() => loadingScreen.style.display = 'none', 600);
         } else {
