@@ -44,9 +44,14 @@ void camera_screen_to_complex(const Camera* cam, int screen_x, int screen_y, pre
 }
 
 void camera_push_history(Camera* cam) {
-    if (cam->history_count < MAX_HISTORY_SIZE) {
-        cam->history[cam->history_count++] = cam->view;
+    if (cam->history_count >= MAX_HISTORY_SIZE) {
+        // shift history left to discard the oldest state if stack is full
+        for (int i = 1; i < MAX_HISTORY_SIZE; i++) {
+            cam->history[i - 1] = cam->history[i];
+        }
+        cam->history_count = MAX_HISTORY_SIZE - 1;
     }
+    cam->history[cam->history_count++] = cam->view;
 }
 
 bool camera_pop_history(Camera* cam) {
