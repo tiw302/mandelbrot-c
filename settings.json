@@ -1,0 +1,9 @@
+{
+  "window_width": 800,
+  "window_height": 600,
+  "default_iterations": 1200,
+  "max_iterations_limit": 100000,
+  "escape_radius": 4.0,
+  "default_thread_count": 0,
+  "default_palette": 0
+}
