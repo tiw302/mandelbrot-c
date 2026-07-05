@@ -134,28 +134,19 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
-// loads and filters bookmarks by fractal type, picking one randomly
+/* loads and filters bookmarks by fractal type, picking one randomly.
+ * reads the file only once by scanning into a temporary array. */
 static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im, double* out_zoom, int* out_idx, int* out_count) {
+    /* allocate a worst-case buffer; we only need one pass through the file.
+     * max bookmarks is bounded by MAX_BOOKMARKS in bookmark.c (1024). */
+    const int max_b = 1024;
     int total = get_bookmark_count();
-    int match_count = 0;
-    
-    for (int i = 0; i < total; i++) {
-        Bookmark b;
-        if (load_bookmark(i, &b)) {
-            if (b.fractal_type == base_fractal) {
-                match_count++;
-            }
-        }
-    }
-    
-    if (match_count == 0) {
-        return 0; // No matching bookmarks
-    }
-    
-    double* candidates_re = malloc(sizeof(double) * match_count);
-    double* candidates_im = malloc(sizeof(double) * match_count);
-    double* candidates_zoom = malloc(sizeof(double) * match_count);
-    int* candidates_orig_idx = malloc(sizeof(int) * match_count);
+    if (total <= 0) return 0;
+
+    double* candidates_re = malloc(sizeof(double) * total);
+    double* candidates_im = malloc(sizeof(double) * total);
+    double* candidates_zoom = malloc(sizeof(double) * total);
+    int* candidates_orig_idx = malloc(sizeof(int) * total);
     if (!candidates_re || !candidates_im || !candidates_zoom || !candidates_orig_idx) {
         free(candidates_re);
         free(candidates_im);
@@ -163,28 +154,38 @@ static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im,
         free(candidates_orig_idx);
         return 0;
     }
-    
-    int idx = 0;
+
+    int match_count = 0;
     for (int i = 0; i < total; i++) {
         Bookmark b;
-        if (load_bookmark(i, &b)) {
-            if (b.fractal_type == base_fractal) {
-                candidates_re[idx] = b.center_re;
-                candidates_im[idx] = b.center_im;
-                candidates_zoom[idx] = b.zoom;
-                candidates_orig_idx[idx] = i;
-                idx++;
+        if (load_bookmark(i, &b) && b.fractal_type == base_fractal) {
+            // exclude default view or too zoomed out bookmarks to ensure interesting tour targets
+            if (b.zoom >= 0.05 || (fabs(b.center_re - -0.5) < 1e-4 && fabs(b.center_im - 0.0) < 1e-4)) {
+                continue;
             }
+            candidates_re[match_count] = b.center_re;
+            candidates_im[match_count] = b.center_im;
+            candidates_zoom[match_count] = b.zoom;
+            candidates_orig_idx[match_count] = i;
+            match_count++;
         }
     }
-    
+
+    if (match_count == 0) {
+        free(candidates_re);
+        free(candidates_im);
+        free(candidates_zoom);
+        free(candidates_orig_idx);
+        return 0;
+    }
+
     int picked = rand() % match_count;
     *out_re = candidates_re[picked];
     *out_im = candidates_im[picked];
     *out_zoom = candidates_zoom[picked];
     *out_idx = candidates_orig_idx[picked];
     *out_count = match_count;
-    
+
     free(candidates_re);
     free(candidates_im);
     free(candidates_zoom);
@@ -417,20 +418,19 @@ const char* get_tour_phase_name(TourPhase phase) {
 
 int get_tour_target_idx(const TourState* state) {
     if (state->is_dynamic) {
+        /* count how many bookmarks of matching fractal type appear before
+         * last_zoom_idx to convert the absolute index to a type-relative index */
         int total = get_bookmark_count();
+        Bookmark target_b;
+        if (!load_bookmark(state->last_zoom_idx, &target_b)) return 0;
         int match_idx = 0;
-        for (int i = 0; i <= state->last_zoom_idx && i < total; i++) {
-            Bookmark target_b;
-            if (load_bookmark(state->last_zoom_idx, &target_b)) {
-                Bookmark b_cur;
-                if (load_bookmark(i, &b_cur)) {
-                    if (b_cur.fractal_type == target_b.fractal_type) {
-                        match_idx++;
-                    }
-                }
+        for (int i = 0; i < state->last_zoom_idx && i < total; i++) {
+            Bookmark b_cur;
+            if (load_bookmark(i, &b_cur) && b_cur.fractal_type == target_b.fractal_type) {
+                match_idx++;
             }
         }
-        return (match_idx > 0) ? (match_idx - 1) : 0;
+        return match_idx;
     }
     return state->last_zoom_idx;
 }
