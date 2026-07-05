@@ -5,6 +5,7 @@
 #include "core_math.h"
 
 typedef struct {
+    char name[64];
     double center_re;
     double center_im;
     double zoom;
@@ -23,7 +24,13 @@ void save_bookmark(const Bookmark* b);
  * returns 1 if successful, 0 if out of bounds or file doesn't exist. */
 int load_bookmark(int index, Bookmark* b);
 
+// deletes a bookmark from the file by index
+void delete_bookmark(int index);
+
 // returns the total number of bookmarks saved
 int get_bookmark_count(void);
+
+// returns a pointer to the internal array of bookmarks
+const Bookmark* get_bookmarks_array(int* out_count);
 
 #endif

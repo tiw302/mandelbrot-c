@@ -10,7 +10,9 @@
 
 #include "config.h"
 
-// single-precision complex number format for gpu texture compatibility
+/* orbit point stored as double — the comment in the header says "single-precision"
+ * but the fields are double. the name ComplexFloat is kept for compatibility;
+ * the gpu shader reads these as floats after the upload step casts them. */
 typedef struct {
     double re;
     double im;

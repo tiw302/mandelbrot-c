@@ -1,6 +1,8 @@
 #ifndef CONFIG_H
 #define CONFIG_H
 
+#include "math_types.h"
+
 // initial window dimensions
 #define WINDOW_WIDTH 1024
 #define WINDOW_HEIGHT 768
@@ -57,20 +59,7 @@
 #define INITIAL_CENTER_IM 0.0
 #define INITIAL_ZOOM 3.0
 
-#ifdef __SIZEOF_FLOAT128__
-typedef __float128 precise_float;
-#else
-typedef long double precise_float;
-#endif
-
 // zoom threshold below which perturbation is used (screen units)
 #define PERTURBATION_ZOOM_THRESHOLD 1e-6
-
-// encapsulates the current camera state in the complex plane
-typedef struct {
-    precise_float center_re;
-    precise_float center_im;
-    precise_float zoom;
-} ViewState;
 
 #endif

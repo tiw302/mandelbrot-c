@@ -8,6 +8,11 @@
 typedef struct {
     RenderMode mode;
     const char* name;
+    const char* display_name;
+    const char* explorer_title;
+    double default_center_re;
+    double default_center_im;
+    double default_zoom;
 
     // standard 64-bit precision kernels
     double (*check_scalar)(complex_t c, complex_t julia_c, int max_iterations);

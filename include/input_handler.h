@@ -39,7 +39,8 @@ typedef enum {
     KEY_T,
     KEY_LEFT_BRACKET,
     KEY_RIGHT_BRACKET,
-    KEY_F5
+    KEY_F5,
+    KEY_TAB
 } InputKey;
 
 typedef struct {

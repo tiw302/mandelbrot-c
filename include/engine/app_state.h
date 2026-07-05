@@ -4,6 +4,7 @@
 #include "camera.h"
 #include "core_math.h"
 #include "tour.h"
+#include "bookmark.h"
 
 // transient state for julia mode transitions
 typedef struct {
@@ -34,6 +35,7 @@ typedef struct {
     int needs_redraw;
     int running;
     int show_help;
+    int show_settings;
     uint32_t render_time_ms;
     int thread_count;
 
@@ -68,8 +70,23 @@ void app_state_cycle_fractal(AppCommonState* state, app_title_callback set_title
 // cycles to next color palette
 void app_state_cycle_palette(AppCommonState* state);
 
-// saves active view as bookmark
+// saves active view as bookmark with a custom name (if name is NULL, uses default)
+void app_state_save_bookmark_with_name(AppCommonState* state, const char* name);
+
+// saves active view as bookmark (legacy)
 void app_state_save_bookmark(AppCommonState* state);
+
+// gets the total number of bookmarks
+int app_state_get_bookmark_count(void);
+
+// returns the array of bookmarks
+const Bookmark* app_state_get_bookmarks_array(int* out_count);
+
+// deletes a specific bookmark by index
+void app_state_delete_bookmark(AppCommonState* state, int index);
+
+// loads a specific bookmark by index
+void app_state_load_bookmark(AppCommonState* state, int index);
 
 // cycles through and loads bookmarks
 void app_state_load_next_bookmark(AppCommonState* state);
