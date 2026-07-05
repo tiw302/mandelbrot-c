@@ -21,7 +21,7 @@
 
 #include "config.h"
 #include "core_math.h"
-#include "ini_config.h"
+#include "config_loader.h"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
@@ -205,14 +205,7 @@ static void process_rows(RendererContext* ctx) {
                             if (idx < 0) idx = 0;
                             if (idx > max_idx) idx = max_idx;
                             uint32_t col = lut[idx];
-#if defined(__EMSCRIPTEN__)
-                            uint32_t r = (col >> 16) & 0xFF;
-                            uint32_t b = col & 0xFF;
-                            pool.pixels[y * (pitch_words) + (x + i)] =
-                                (col & 0xFF00FF00) | (b << 16) | r;
-#else
                             pool.pixels[y * (pitch_words) + (x + i)] = col;
-#endif
                         }
                     }
                 }
@@ -233,13 +226,7 @@ static void process_rows(RendererContext* ctx) {
                         if (idx < 0) idx = 0;
                         if (idx > max_idx) idx = max_idx;
                         uint32_t col = lut[idx];
-#if defined(__EMSCRIPTEN__)
-                        uint32_t r = (col >> 16) & 0xFF;
-                        uint32_t b = col & 0xFF;
-                        pool.pixels[y * (pitch_words) + x] = (col & 0xFF00FF00) | (b << 16) | r;
-#else
-                        pool.pixels[y * (pitch_words) + x] = col;
-#endif
+pool.pixels[y * (pitch_words) + x] = col;
                     }
                 }
             }
@@ -301,26 +288,13 @@ static void process_rows(RendererContext* ctx) {
                         __m256i v_mask = _mm256_cmpgt_epi32(v_max_iters_int, v_iters_int);
                         v_colors = _mm256_and_si256(v_colors, v_mask);
 
-#if defined(__EMSCRIPTEN__)
-                        __m256i r = _mm256_and_si256(_mm256_srli_epi32(v_colors, 16),
-                                                     _mm256_set1_epi32(0xFF));
-                        __m256i b = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF));
-                        __m256i g_alpha = _mm256_and_si256(v_colors, _mm256_set1_epi32(0xFF00FF00));
-                        v_colors =
-                            _mm256_or_si256(_mm256_or_si256(g_alpha, _mm256_slli_epi32(b, 16)), r);
-#endif
                         _mm256_storeu_si256((__m256i*)&pool.pixels[y * pitch_words + x], v_colors);
                     } else {
                         for (int i = 0; i < 8; i++) {
                             uint8_t r, g, b;
                             get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-#if defined(__EMSCRIPTEN__)
-                            pool.pixels[y * pitch_words + (x + i)] =
+pool.pixels[y * pitch_words + (x + i)] =
                                 (0xFF << 24) | (b << 16) | (g << 8) | r;
-#else
-                            pool.pixels[y * pitch_words + (x + i)] =
-                                (0xFF << 24) | (r << 16) | (g << 8) | b;
-#endif
                         }
                     }
                 }
@@ -356,25 +330,13 @@ static void process_rows(RendererContext* ctx) {
                         __m128i v_mask = _mm_cmpgt_epi32(v_max_iters_int, v_iters_int);
                         v_colors = _mm_and_si128(v_colors, v_mask);
 
-#if defined(__EMSCRIPTEN__)
-                        __m128i r =
-                            _mm_and_si128(_mm_srli_epi32(v_colors, 16), _mm_set1_epi32(0xFF));
-                        __m128i b = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF));
-                        __m128i g_alpha = _mm_and_si128(v_colors, _mm_set1_epi32(0xFF00FF00));
-                        v_colors = _mm_or_si128(_mm_or_si128(g_alpha, _mm_slli_epi32(b, 16)), r);
-#endif
                         _mm_storeu_si128((__m128i*)&pool.pixels[y * pitch_words + x], v_colors);
                     } else {
                         for (int i = 0; i < 4; i++) {
                             uint8_t r, g, b;
                             get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-#if defined(__EMSCRIPTEN__)
-                            pool.pixels[y * pitch_words + (x + i)] =
+pool.pixels[y * pitch_words + (x + i)] =
                                 (0xFF << 24) | (b << 16) | (g << 8) | r;
-#else
-                            pool.pixels[y * pitch_words + (x + i)] =
-                                (0xFF << 24) | (r << 16) | (g << 8) | b;
-#endif
                         }
                     }
                 }
@@ -396,13 +358,7 @@ static void process_rows(RendererContext* ctx) {
                         if (idx < 0) idx = 0;
                         if (idx > max_idx) idx = max_idx;
                         uint32_t col = lut[idx];
-#if defined(__EMSCRIPTEN__)
-                        uint32_t r = (col >> 16) & 0xFF;
-                        uint32_t b = col & 0xFF;
-                        pool.pixels[y * pitch_words + (x + i)] = (col & 0xFF00FF00) | (b << 16) | r;
-#else
-                        pool.pixels[y * pitch_words + (x + i)] = col;
-#endif
+pool.pixels[y * pitch_words + (x + i)] = col;
                     }
                 }
             }
@@ -423,13 +379,7 @@ static void process_rows(RendererContext* ctx) {
                         if (idx < 0) idx = 0;
                         if (idx > max_idx) idx = max_idx;
                         uint32_t col = lut[idx];
-#if defined(__EMSCRIPTEN__)
-                        uint32_t r = (col >> 16) & 0xFF;
-                        uint32_t b = col & 0xFF;
-                        pool.pixels[y * pitch_words + (x + i)] = (col & 0xFF00FF00) | (b << 16) | r;
-#else
-                        pool.pixels[y * pitch_words + (x + i)] = col;
-#endif
+pool.pixels[y * pitch_words + (x + i)] = col;
                     }
                 }
             }
@@ -448,13 +398,7 @@ static void process_rows(RendererContext* ctx) {
                     if (idx < 0) idx = 0;
                     if (idx > max_idx) idx = max_idx;
                     uint32_t col = lut[idx];
-#if defined(__EMSCRIPTEN__)
-                    uint32_t r = (col >> 16) & 0xFF;
-                    uint32_t b = col & 0xFF;
-                    pool.pixels[y * pitch_words + x] = (col & 0xFF00FF00) | (b << 16) | r;
-#else
-                    pool.pixels[y * pitch_words + x] = col;
-#endif
+pool.pixels[y * pitch_words + x] = col;
                 }
             }
         }
@@ -537,8 +481,19 @@ RendererContext* init_renderer(int max_iterations, int palette_idx) {
     for (int i = 0; i < pool.thread_count; i++) {
         if (pthread_create(&pool.threads[i], NULL, worker_thread, ctx) != 0) {
             fprintf(stderr, "fatal: failed to spawn worker thread %d\n", i);
+            // shut down and join already-spawned threads safely
+            atomic_store(&pool.shutdown, 1);
+            pthread_mutex_lock(&pool.mutex);
+            pthread_cond_broadcast(&pool.work_ready);
+            pthread_mutex_unlock(&pool.mutex);
+            for (int j = 0; j < i; j++) {
+                pthread_join(pool.threads[j], NULL);
+            }
             pthread_mutex_unlock(&pool.dispatch_mutex);
             pthread_mutex_destroy(&pool.dispatch_mutex);
+            pthread_mutex_destroy(&pool.mutex);
+            pthread_cond_destroy(&pool.work_ready);
+            pthread_cond_destroy(&pool.work_done);
             free(pool.threads);
             free(ctx);
             return NULL;
@@ -623,6 +578,12 @@ int set_renderer_thread_count(RendererContext* ctx, int count) {
     for (int i = 0; i < pool.thread_count; i++) {
         if (pthread_create(&pool.threads[i], NULL, worker_thread, ctx) != 0) {
             fprintf(stderr, "error: failed to spawn worker thread %d during resize\n", i);
+            // kill already-spawned threads before returning to avoid a half-initialized pool
+            atomic_store(&pool.shutdown, 1);
+            pthread_mutex_lock(&pool.mutex);
+            pthread_cond_broadcast(&pool.work_ready);
+            pthread_mutex_unlock(&pool.mutex);
+            for (int j = 0; j < i; j++) pthread_join(pool.threads[j], NULL);
             pthread_mutex_unlock(&pool.dispatch_mutex);
             return 0;
         }
@@ -639,29 +600,26 @@ int set_renderer_thread_count(RendererContext* ctx, int count) {
 }
 
 // dispatch a render job — returns only after all rows are painted
-static void dispatch(RendererContext* ctx, uint32_t* pixels, int pitch, int window_width, int window_height,
-                     precise_float re_min, precise_float re_max, precise_float im_top,
-                     precise_float im_bottom, RenderMode mode, complex_t julia_c,
-                     int max_iterations) {
-    if (!ctx) return;
+void render_fractal_threaded(RendererContext* ctx, const RenderJob* job) {
+    if (!ctx || !job) return;
     #define pool (*ctx)
     pthread_mutex_lock(&pool.dispatch_mutex);
     pthread_mutex_lock(&pool.mutex);
-    pool.pixels = pixels;
-    pool.pitch = pitch;
-    pool.window_width = window_width;
-    pool.window_height = window_height;
-    pool.re_min = re_min;
-    pool.re_max = re_max;
-    pool.im_top = im_top;
-    pool.im_bottom = im_bottom;
-    pool.mode = mode;
-    pool.julia_c = julia_c;
-    pool.max_iterations = max_iterations;
+    pool.pixels = job->pixels;
+    pool.pitch = job->pitch;
+    pool.window_width = job->window_width;
+    pool.window_height = job->window_height;
+    pool.re_min = job->re_min;
+    pool.re_max = job->re_max;
+    pool.im_top = job->im_top;
+    pool.im_bottom = job->im_bottom;
+    pool.mode = job->mode;
+    pool.julia_c = job->julia_c;
+    pool.max_iterations = job->max_iterations;
     pool.use_128bit = pool.requested_128bit;
 
-    int cols_tiles = (window_width + TILE_SIZE - 1) / TILE_SIZE;
-    int rows_tiles = (window_height + TILE_SIZE - 1) / TILE_SIZE;
+    int cols_tiles = (job->window_width + TILE_SIZE - 1) / TILE_SIZE;
+    int rows_tiles = (job->window_height + TILE_SIZE - 1) / TILE_SIZE;
     pool.cols_tiles = cols_tiles;
     pool.total_tiles = cols_tiles * rows_tiles;
     atomic_store(&pool.next_tile, 0);
@@ -687,29 +645,6 @@ static void dispatch(RendererContext* ctx, uint32_t* pixels, int pitch, int wind
 #endif
     pthread_mutex_unlock(&pool.dispatch_mutex);
     #undef pool
-}
-
-void render_mandelbrot_threaded(RendererContext* ctx, uint32_t* pixels, int pitch, int window_width, int window_height,
-                                precise_float re_min, precise_float re_max, precise_float im_top,
-                                precise_float im_bottom, int max_iterations) {
-    complex_t dummy = {0};
-    dispatch(ctx, pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
-             RENDER_MANDELBROT, dummy, max_iterations);
-}
-
-void render_julia_threaded(RendererContext* ctx, uint32_t* pixels, int pitch, int window_width, int window_height,
-                           precise_float re_min, precise_float re_max, precise_float im_top,
-                           precise_float im_bottom, complex_t julia_c, int max_iterations) {
-    dispatch(ctx, pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
-             RENDER_JULIA, julia_c, max_iterations);
-}
-
-void render_burning_ship_threaded(RendererContext* ctx, uint32_t* pixels, int pitch, int window_width, int window_height,
-                                  precise_float re_min, precise_float re_max, precise_float im_top,
-                                  precise_float im_bottom, int max_iterations) {
-    complex_t dummy = {0};
-    dispatch(ctx, pixels, pitch, window_width, window_height, re_min, re_max, im_top, im_bottom,
-             RENDER_BURNING_SHIP, dummy, max_iterations);
 }
 
 // dynamic precision control
