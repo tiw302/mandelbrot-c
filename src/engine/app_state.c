@@ -7,9 +7,10 @@
 #include "app_state.h"
 #include "bookmark.h"
 #include "config.h"
-#include "ini_config.h"
+#include "config_loader.h"
 #include "renderer.h"
 #include "color.h"
+#include "fractal.h"
 
 #include <stdio.h>
 #include <stdlib.h>
@@ -60,11 +61,13 @@ void app_state_toggle_julia(AppCommonState* state, app_title_callback set_title_
                                   &state->julia_c.im);
         state->cam.view = (ViewState){0.0, 0.0, JULIA_ZOOM};
         state->julia_mode = 1;
-        if (set_title_cb) set_title_cb("Julia Explorer");
+        const FractalDefinition* fd = get_fractal_by_mode(RENDER_JULIA);
+        if (set_title_cb && fd) set_title_cb(fd->explorer_title);
     } else {
         if (state->julia_session.active) state->cam.view = state->julia_session.mandelbrot_view;
         state->julia_mode = 0;
-        if (set_title_cb) set_title_cb("Mandelbrot Explorer");
+        const FractalDefinition* fd = get_fractal_by_mode(state->base_fractal);
+        if (set_title_cb && fd) set_title_cb(fd->explorer_title);
     }
     state->cam.history_count = 0;
     state->needs_redraw = 1;
@@ -84,39 +87,14 @@ void app_state_cycle_fractal(AppCommonState* state, app_title_callback set_title
     state->cam.history_count = 0;
 
     // each fractal has its own natural default view
-    if (state->base_fractal == RENDER_BURNING_SHIP) {
-        // burning ship: main body is in the lower half-plane; flip y to see the ship
-        state->cam.view.center_re = -0.4;
-        state->cam.view.center_im = -0.6;
-        state->cam.view.zoom = 3.5;
-    } else if (state->base_fractal == RENDER_TRICORN) {
-        // tricorn (mandelbar): symmetric about the real axis, looks best centered slightly left
-        state->cam.view.center_re = -0.1;
-        state->cam.view.center_im = 0.0;
-        state->cam.view.zoom = 3.5;
-    } else if (state->base_fractal == RENDER_CELTIC) {
-        // celtic: similar to mandelbrot but with abs on real part, interesting near -0.5
-        state->cam.view.center_re = -0.5;
-        state->cam.view.center_im = 0.0;
-        state->cam.view.zoom = 3.5;
-    } else if (state->base_fractal == RENDER_BUFFALO) {
-        // buffalo: combines celtic + burning ship abs operations, center near -0.4
-        state->cam.view.center_re = -0.4;
-        state->cam.view.center_im = 0.0;
-        state->cam.view.zoom = 4.0;
-    } else {
-        // mandelbrot: classic view
-        state->cam.view.center_re = -0.5;
-        state->cam.view.center_im = 0.0;
-        state->cam.view.zoom = 3.0;
-    }
-
-    if (set_title_cb) {
-        if (state->base_fractal == RENDER_BURNING_SHIP) set_title_cb("Burning Ship Explorer");
-        else if (state->base_fractal == RENDER_TRICORN) set_title_cb("Tricorn Explorer");
-        else if (state->base_fractal == RENDER_CELTIC) set_title_cb("Celtic Explorer");
-        else if (state->base_fractal == RENDER_BUFFALO) set_title_cb("Buffalo Explorer");
-        else set_title_cb("Mandelbrot Explorer");
+    const FractalDefinition* fd = get_fractal_by_mode(state->base_fractal);
+    if (fd) {
+        state->cam.view.center_re = fd->default_center_re;
+        state->cam.view.center_im = fd->default_center_im;
+        state->cam.view.zoom = fd->default_zoom;
+        if (set_title_cb) {
+            set_title_cb(fd->explorer_title);
+        }
     }
     state->needs_redraw = 1;
 }
@@ -124,37 +102,77 @@ void app_state_cycle_fractal(AppCommonState* state, app_title_callback set_title
 // cycle through available palettes and re-initialize color registry
 void app_state_cycle_palette(AppCommonState* state) {
     state->palette_idx = (state->palette_idx + 1) % get_palette_count();
-    init_renderer(state->max_iterations, state->palette_idx);
+    // only rebuild the lut — don't re-initialize the full renderer (that would re-spawn threads)
+    init_color_palette(state->max_iterations, state->palette_idx);
     state->needs_redraw = 1;
 }
 
-// pack active view/state parameters and persist to storage
-void app_state_save_bookmark(AppCommonState* state) {
-    Bookmark b = {state->cam.view.center_re,
-                  state->cam.view.center_im,
-                  state->cam.view.zoom,
-                  state->max_iterations,
-                  state->julia_mode ? 1 : (state->base_fractal ? 2 : 0),
-                  state->julia_c};
+void app_state_save_bookmark_with_name(AppCommonState* state, const char* name) {
+    Bookmark b;
+    memset(&b, 0, sizeof(b));
+    if (name) {
+        strncpy(b.name, name, sizeof(b.name) - 1);
+    }
+    b.center_re = state->cam.view.center_re;
+    b.center_im = state->cam.view.center_im;
+    b.zoom = state->cam.view.zoom;
+    b.max_iterations = state->max_iterations;
+
+    /* if in julia mode, we save it as a julia fractal but also save the julia_c constant.
+     * store julia first so julia-mode bookmarks can be distinguished from base fractals. */
+    if (state->julia_mode) {
+        b.fractal_type = RENDER_JULIA;
+        b.julia_c = state->julia_c;
+    } else {
+        b.fractal_type = state->base_fractal;
+    }
     save_bookmark(&b);
+}
+
+void app_state_save_bookmark(AppCommonState* state) {
+    app_state_save_bookmark_with_name(state, NULL);
+}
+
+int app_state_get_bookmark_count(void) {
+    return get_bookmark_count();
+}
+
+const Bookmark* app_state_get_bookmarks_array(int* out_count) {
+    return get_bookmarks_array(out_count);
+}
+
+void app_state_delete_bookmark(AppCommonState* state, int index) {
+    delete_bookmark(index);
+    if (state->current_bookmark_idx == index) {
+        state->current_bookmark_idx = -1;
+    } else if (state->current_bookmark_idx > index) {
+        state->current_bookmark_idx--;
+    }
+}
+
+// push current view to undo stack and load next saved bookmark
+void app_state_load_bookmark(AppCommonState* state, int index) {
+    Bookmark b;
+    if (load_bookmark(index, &b)) {
+        camera_push_history(&state->cam);
+        state->current_bookmark_idx = index;
+        state->cam.view = (ViewState){b.center_re, b.center_im, b.zoom};
+        state->max_iterations = b.max_iterations;
+        state->julia_mode = (b.fractal_type == RENDER_JULIA);
+        // restore the base fractal; if it was julia mode the base doesn't matter
+        state->base_fractal = state->julia_mode ? RENDER_MANDELBROT : b.fractal_type;
+        state->julia_c = b.julia_c;
+        init_color_palette(state->max_iterations, state->palette_idx);
+        state->needs_redraw = 1;
+    }
 }
 
 // push current view to undo stack and load next saved bookmark
 void app_state_load_next_bookmark(AppCommonState* state) {
-    Bookmark b;
     int count = get_bookmark_count();
     if (count > 0) {
-        camera_push_history(&state->cam);
-        state->current_bookmark_idx = (state->current_bookmark_idx + 1) % count;
-        if (load_bookmark(state->current_bookmark_idx, &b)) {
-            state->cam.view = (ViewState){b.center_re, b.center_im, b.zoom};
-            state->max_iterations = b.max_iterations;
-            state->julia_mode = (b.fractal_type == 1);
-            state->base_fractal = (b.fractal_type == 2);
-            state->julia_c = b.julia_c;
-            init_renderer(state->max_iterations, state->palette_idx);
-            state->needs_redraw = 1;
-        }
+        int next_idx = (state->current_bookmark_idx + 1) % count;
+        app_state_load_bookmark(state, next_idx);
     }
 }
 
