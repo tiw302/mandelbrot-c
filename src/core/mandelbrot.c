@@ -386,11 +386,30 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
  */
 void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations,
                              double* results) {
+    // early rejection on high part coordinates using 4-way AVX2 doubles
+    __m256d x = cre.hi;
+    __m256d y = cim.hi;
+    __m256d x_minus_025 = _mm256_sub_pd(x, _mm256_set1_pd(0.25));
+    __m256d y_sq = _mm256_mul_pd(y, y);
+    __m256d q = _mm256_add_pd(_mm256_mul_pd(x_minus_025, x_minus_025), y_sq);
+    
+    // q * (q + x_minus_025) <= 0.25 * y_sq
+    __m256d cardioid_lhs = _mm256_mul_pd(q, _mm256_add_pd(q, x_minus_025));
+    __m256d cardioid_rhs = _mm256_mul_pd(_mm256_set1_pd(0.25), y_sq);
+    __m256d inside_cardioid = _mm256_cmp_pd(cardioid_lhs, cardioid_rhs, _CMP_LE_OQ);
+    
+    // (x + 1.0) * (x + 1.0) + y_sq <= 0.0625
+    __m256d x_plus_1 = _mm256_add_pd(x, _mm256_set1_pd(1.0));
+    __m256d bulb_lhs = _mm256_add_pd(_mm256_mul_pd(x_plus_1, x_plus_1), y_sq);
+    __m256d inside_bulb = _mm256_cmp_pd(bulb_lhs, _mm256_set1_pd(0.0625), _CMP_LE_OQ);
+    
+    __m256d rejected_mask = _mm256_or_pd(inside_cardioid, inside_bulb);
+
     simd_f128x4 zre = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
     simd_f128x4 zim = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
-    __m256d iters = _mm256_setzero_pd();
+    __m256d iters = _mm256_and_pd(rejected_mask, _mm256_set1_pd((double)max_iterations));
     __m256d esc_radius_sq = _mm256_set1_pd(ESCAPE_RADIUS * ESCAPE_RADIUS);
-    __m256d escaped_mask = _mm256_setzero_pd();
+    __m256d escaped_mask = rejected_mask;
     __m256d final_mag_sq = _mm256_setzero_pd();
     __m256d one = _mm256_set1_pd(1.0);
 
