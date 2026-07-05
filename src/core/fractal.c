@@ -12,13 +12,15 @@
 #include <stdio.h>
 #include <string.h>
 
+#include <pthread.h>
+
 // centralized registry for all fractal math kernels
 // ensures pluggable registration of new fractals
 
 #define MAX_REGISTERED_FRACTALS 16
 static FractalDefinition registry[MAX_REGISTERED_FRACTALS];
 static int registry_count = 0;
-static int is_initialized = 0;
+static pthread_once_t registry_once = PTHREAD_ONCE_INIT;
 
 // registers a new fractal structure in the central registry
 void register_fractal(const FractalDefinition* def) {
@@ -31,9 +33,7 @@ void register_fractal(const FractalDefinition* def) {
 
 // retrieves a registered fractal definition by render mode
 const FractalDefinition* get_fractal_by_mode(RenderMode mode) {
-    if (!is_initialized) {
-        init_fractal_registry();
-    }
+    pthread_once(&registry_once, init_fractal_registry);
     for (int i = 0; i < registry_count; i++) {
         if (registry[i].mode == mode) {
             return &registry[i];
@@ -327,12 +327,16 @@ static void buffalo_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128x4 ju
 #endif
 
 void init_fractal_registry(void) {
-    if (is_initialized) return;
 
     // 1. mandelbrot
     FractalDefinition mandelbrot_def = {
         .mode = RENDER_MANDELBROT,
         .name = "mandelbrot",
+        .display_name = "Mandelbrot",
+        .explorer_title = "Mandelbrot Explorer",
+        .default_center_re = -0.5,
+        .default_center_im = 0.0,
+        .default_zoom = 3.0,
         .check_scalar = mandelbrot_scalar_wrap,
 #ifdef __AVX2__
         .check_avx2 = mandelbrot_avx2_wrap,
@@ -359,6 +363,11 @@ void init_fractal_registry(void) {
     FractalDefinition julia_def = {
         .mode = RENDER_JULIA,
         .name = "julia",
+        .display_name = "Julia",
+        .explorer_title = "Julia Explorer",
+        .default_center_re = 0.0,
+        .default_center_im = 0.0,
+        .default_zoom = 3.0,
         .check_scalar = julia_scalar_wrap,
 #ifdef __AVX2__
         .check_avx2 = julia_avx2_wrap,
@@ -385,6 +394,11 @@ void init_fractal_registry(void) {
     FractalDefinition burning_ship_def = {
         .mode = RENDER_BURNING_SHIP,
         .name = "burning_ship",
+        .display_name = "Burning Ship",
+        .explorer_title = "Burning Ship Explorer",
+        .default_center_re = -0.4,
+        .default_center_im = -0.6,
+        .default_zoom = 3.5,
         .check_scalar = burning_ship_scalar_wrap,
 #ifdef __AVX2__
         .check_avx2 = burning_ship_avx2_wrap,
@@ -412,6 +426,11 @@ void init_fractal_registry(void) {
     FractalDefinition tricorn_def = {
         .mode = RENDER_TRICORN,
         .name = "tricorn",
+        .display_name = "Tricorn",
+        .explorer_title = "Tricorn Explorer",
+        .default_center_re = -0.1,
+        .default_center_im = 0.0,
+        .default_zoom = 3.5,
         .check_scalar = tricorn_scalar_wrap,
 #ifdef __AVX2__
         .check_avx2 = tricorn_avx2_wrap,
@@ -438,6 +457,11 @@ void init_fractal_registry(void) {
     FractalDefinition celtic_def = {
         .mode = RENDER_CELTIC,
         .name = "celtic",
+        .display_name = "Celtic",
+        .explorer_title = "Celtic Explorer",
+        .default_center_re = -0.5,
+        .default_center_im = 0.0,
+        .default_zoom = 3.5,
         .check_scalar = celtic_scalar_wrap,
 #ifdef __AVX2__
         .check_avx2 = celtic_avx2_wrap,
@@ -464,6 +488,11 @@ void init_fractal_registry(void) {
     FractalDefinition buffalo_def = {
         .mode = RENDER_BUFFALO,
         .name = "buffalo",
+        .display_name = "Buffalo",
+        .explorer_title = "Buffalo Explorer",
+        .default_center_re = -0.4,
+        .default_center_im = 0.0,
+        .default_zoom = 4.0,
         .check_scalar = buffalo_scalar_wrap,
 #ifdef __AVX2__
         .check_avx2 = buffalo_avx2_wrap,
@@ -486,5 +515,4 @@ void init_fractal_registry(void) {
     };
     register_fractal(&buffalo_def);
 
-    is_initialized = 1;
 }
