@@ -66,8 +66,7 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
     precise_float im_step = (im_max - im_min) / target_height;
     int pitch = target_width * 4;
 
-    // initialize renderer palette just in case
-    init_color_palette(max_iterations, palette_idx);
+    // renderer palette is initialized by the main thread.
 
     printf("saving mega screenshot (%dx%d) to %s...\n", target_width, target_height, filename);
 
@@ -80,16 +79,20 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
         precise_float strip_im_max = im_max - y_start * im_step;
         precise_float strip_im_min = strip_im_max - lines * im_step;
 
-        if (fractal_type == 1) {
-            render_julia_threaded(render_ctx, chunk_pixels, pitch, target_width, lines, re_min, re_max,
-                                  strip_im_max, strip_im_min, julia_c, max_iterations);
-        } else if (fractal_type == 2) {
-            render_burning_ship_threaded(render_ctx, chunk_pixels, pitch, target_width, lines, re_min, re_max,
-                                         strip_im_max, strip_im_min, max_iterations);
-        } else {
-            render_mandelbrot_threaded(render_ctx, chunk_pixels, pitch, target_width, lines, re_min, re_max,
-                                       strip_im_max, strip_im_min, max_iterations);
-        }
+        RenderJob job = {
+            .pixels = chunk_pixels,
+            .pitch = pitch,
+            .window_width = target_width,
+            .window_height = lines,
+            .re_min = re_min,
+            .re_max = re_max,
+            .im_top = strip_im_max,
+            .im_bottom = strip_im_min,
+            .mode = (RenderMode)fractal_type,
+            .julia_c = julia_c,
+            .max_iterations = max_iterations
+        };
+        render_fractal_threaded(render_ctx, &job);
 
         fwrite(chunk_pixels, 4, (size_t)target_width * lines, file);
         int progress = (y_start + lines) * 100 / target_height;
@@ -330,7 +333,7 @@ void append_video_frame(const uint32_t* pixels, int width, int height) {
 }
 
 void stop_video_recording(void) {
-    if (!is_recording || !ffmpeg_pipe) return;
+    if (!ffmpeg_pipe) return;
 
     // mark as not recording immediately to prevent new frames from being appended
     is_recording = 0;
