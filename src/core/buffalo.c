@@ -81,8 +81,7 @@ void buffalo_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* re
         __m256d zre_zim = _mm256_mul_pd(abs_re, abs_im);
         zim = _mm256_add_pd(_mm256_sub_pd(_mm256_setzero_pd(), _mm256_add_pd(zre_zim, zre_zim)), cim);
         __m256d zre2_zim2 = _mm256_sub_pd(zre2, zim2);
-        __m256d abs_mask = _mm256_castsi256_pd(_mm256_set1_epi64x(0x7FFFFFFFFFFFFFFFULL));
-        zre = _mm256_add_pd(_mm256_and_pd(zre2_zim2, abs_mask), cre);
+        zre = _mm256_add_pd(_mm256_and_pd(zre2_zim2, sign_mask), cre);
     }
 
     double res_iters[4], res_mag_sq[4];
