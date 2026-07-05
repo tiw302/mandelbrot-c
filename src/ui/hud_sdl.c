@@ -9,6 +9,7 @@
 #include "config.h"
 #include "renderer.h"
 #include "screenshot.h"
+#include "fractal.h"
 #include <stdio.h>
 
 static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
@@ -74,9 +75,10 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* stat
     SDL_RenderFillRect(renderer, &bg);
 
     const char* engine_type = cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
+    const FractalDefinition* fd = get_fractal_by_mode(state->base_fractal);
     const char* mode_name = state->julia_mode
                                 ? "Julia"
-                                : (state->base_fractal == RENDER_BURNING_SHIP ? "Burning Ship" : (state->base_fractal == RENDER_TRICORN ? "Tricorn" : (state->base_fractal == RENDER_CELTIC ? "Celtic" : (state->base_fractal == RENDER_BUFFALO ? "Buffalo" : "Mandelbrot"))));
+                                : (fd ? fd->display_name : "Unknown");
 
     snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms", engine_type,
              mode_name, state->thread_count, state->render_time_ms);
@@ -103,6 +105,8 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* stat
         if (state->notifications[i].active) {
             uint32_t elapsed = now - state->notifications[i].start_time;
             if (elapsed > 3000) {
+                /* intentional side-effect: expire notification here since there is
+                 * no separate notification-update tick in the render loop. */
                 state->notifications[i].active = 0;
             } else {
                 float tw = 260.0f;
