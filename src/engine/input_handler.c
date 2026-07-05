@@ -44,6 +44,10 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
                 state->show_help = !state->show_help;
                 return ACTION_NONE;
 
+            case KEY_TAB:
+                state->show_settings = !state->show_settings;
+                return ACTION_NONE;
+
             case KEY_Z:
                 if (event->mod_ctrl) {
                     if (camera_pop_history(&state->cam)) {
@@ -98,14 +102,12 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
             case KEY_E:
                 return ACTION_TOGGLE_PRECISION;
 
-            case KEY_G:
-                return ACTION_TOGGLE_GPU;
-
             case KEY_J:
                 app_state_toggle_julia(state, NULL);
                 app_state_push_notification(state, state->julia_mode ? "julia mode: active" : "julia mode: inactive", now);
                 return ACTION_NONE;
 
+            case KEY_B:
             case KEY_F:
                 app_state_cycle_fractal(state, NULL);
                 app_state_push_notification(state, state->base_fractal == RENDER_BURNING_SHIP ? "burning ship mode" : (state->base_fractal == RENDER_TRICORN ? "tricorn mode" : (state->base_fractal == RENDER_CELTIC ? "celtic mode" : (state->base_fractal == RENDER_BUFFALO ? "buffalo mode" : "mandelbrot mode"))), now);
@@ -131,6 +133,7 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
                 app_state_push_notification(state, "bookmark loaded!", now);
                 return ACTION_NONE;
 
+#ifndef BUILD_DEEP_TARGET
             case KEY_T:
                 app_state_toggle_tour(state, now, NULL);
                 if (state->julia_mode) {
@@ -139,6 +142,7 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
                     app_state_push_notification(state, state->m_tour.phase != TOUR_IDLE ? (state->base_fractal == RENDER_BURNING_SHIP ? "burning ship tour started" : (state->base_fractal == RENDER_TRICORN ? "tricorn tour started" : (state->base_fractal == RENDER_CELTIC ? "celtic tour started" : (state->base_fractal == RENDER_BUFFALO ? "buffalo tour started" : "mandelbrot tour started")))) : "tour stopped", now);
                 }
                 return ACTION_NONE;
+#endif
 
             case KEY_LEFT_BRACKET:
                 return ACTION_RESIZE_THREADS_DOWN;
