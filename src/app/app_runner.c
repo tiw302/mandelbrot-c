@@ -358,6 +358,15 @@ static void frame(void) {
 #ifndef BUILD_DEEP_TARGET
     // update tour animation state machines
     app_state_update_tours(&ctx.core, now, set_window_title_cb);
+    
+    // auto-stop video recording if video tour is finished
+    if (ctx.core.video_is_rendering && ctx.core.m_tour.phase == 0) {
+        if (is_video_recording()) {
+            stop_video_recording();
+            app_state_push_notification(&ctx.core, "Video Render Complete!", now);
+        }
+        ctx.core.video_is_rendering = 0;
+    }
 #endif
 
     // check if the user is currently panning or zooming

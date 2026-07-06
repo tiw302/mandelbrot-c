@@ -31,6 +31,17 @@ void app_state_init(AppCommonState* state, int win_w, int win_h) {
     state->show_help = 0;
     state->mega_screenshot_active = 0;
     state->mega_screenshot_progress = 0;
+
+    // init video studio
+    state->video_fps = 60;
+    state->video_duration_sec = 10;
+    state->video_res_w = 1920;
+    state->video_res_h = 1080;
+    state->video_target_re = -0.743643887037158704752191506114774;
+    state->video_target_im = 0.131825904205311970493132056385139;
+    state->video_target_zoom = 1e-12;
+    state->video_is_rendering = 0;
+
     state->thread_count = 0;
     for (int i = 0; i < 5; i++) {
         state->notifications[i].active = 0;

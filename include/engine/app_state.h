@@ -43,6 +43,16 @@ typedef struct {
     volatile int mega_screenshot_active;
     volatile int mega_screenshot_progress;
 
+    // video studio state
+    int video_fps;
+    int video_duration_sec;
+    int video_res_w;
+    int video_res_h;
+    double video_target_re;
+    double video_target_im;
+    double video_target_zoom;
+    int video_is_rendering;
+
     // notification system (max 5 active stacked notifications)
     struct {
         char message[64];
