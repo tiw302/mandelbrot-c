@@ -14,6 +14,10 @@ static void mock_title_callback(const char* title) {
     (void)title;
 }
 
+/* 
+ * [TEST CASE] init
+ * tests the functionality of init.
+ */
 int test_init() {
     AppCommonState state = {0};
     app_state_init(&state, 800, 600);
@@ -33,6 +37,10 @@ int test_init() {
     return 1;
 }
 
+/* 
+ * [TEST CASE] toggle julia
+ * tests the functionality of toggle julia.
+ */
 int test_toggle_julia() {
     AppCommonState state = {0};
     app_state_init(&state, 800, 600);
@@ -55,6 +63,10 @@ int test_toggle_julia() {
     return 1;
 }
 
+/* 
+ * [TEST CASE] cycle palette
+ * tests the functionality of cycle palette.
+ */
 int test_cycle_palette() {
     AppCommonState state = {0};
     app_state_init(&state, 800, 600);
@@ -68,6 +80,10 @@ int test_cycle_palette() {
     return 1;
 }
 
+/* 
+ * [TEST CASE] boundaries
+ * tests the functionality of boundaries.
+ */
 int test_boundaries() {
     AppCommonState state = {0};
     app_state_init(&state, 800, 600);
