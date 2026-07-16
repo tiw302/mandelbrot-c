@@ -81,6 +81,11 @@ function closeAlert() {
     document.getElementById('alert-panel').classList.remove('active');
 }
 
+function toggleInfo() {
+    const panel = document.getElementById('info-panel');
+    panel.classList.toggle('active');
+}
+
 // toggles emulated 64-bit math (gpu) or native double-double (cpu)
 function togglePrecision() {
     if (!_gpuMode && !_highPrecision) {
@@ -343,6 +348,7 @@ function updateURL() {
     }
     params.set('it', s.iters);
     params.set('p', s.palette_idx);
+    params.set('f', s.base_fractal);
 
     const newUrl = window.location.pathname + '?' + params.toString();
     window.history.replaceState(null, '', newUrl);
@@ -356,10 +362,12 @@ function loadFromURL() {
     const j = params.get('j') === '1';
     const jre = parseFloat(params.get('jre')) || 0, jim = parseFloat(params.get('jim')) || 0;
     const it = parseInt(params.get('it')) || 0, p = parseInt(params.get('p')) || 0;
+    const f = parseInt(params.get('f')) || 0;
 
     if (!isNaN(re) && !isNaN(im) && !isNaN(z)) {
         if (Module._wasm_set_view) Module._wasm_set_view(re, im, z);
         if (Module._wasm_set_state) Module._wasm_set_state(j ? 1 : 0, jre, jim, it, p);
+        if (Module._wasm_set_fractal_mode) Module._wasm_set_fractal_mode(f);
     }
 }
 
@@ -444,6 +452,9 @@ var Module = {
             if (key === 'g') toggleGpu();
             if (key === 'e') togglePrecision();
             if (key === 's') downloadScreenshot();
+            if (key === 'f' || key === 'b') {
+                if (Module._wasm_cycle_fractal) Module._wasm_cycle_fractal();
+            }
             if (e.key === 'ArrowUp') Module._wasm_adjust_iterations(10);
             if (e.key === 'ArrowDown') Module._wasm_adjust_iterations(-10);
             if (key === 'z' && (e.ctrlKey || e.metaKey)) {
