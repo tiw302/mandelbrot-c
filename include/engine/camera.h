@@ -49,4 +49,4 @@ bool camera_pop_history(Camera* cam);
 // reset view to initial state
 void camera_reset(Camera* cam);
 
-#endif  // camera.h
+#endif  // camera_h
