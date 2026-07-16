@@ -23,7 +23,10 @@ void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* sta
                                 int max_iterations, int palette_idx, int fractal_type, complex_t julia_c);
 
 // video recording api using ffmpeg via popen.
-int start_video_recording(int width, int height, int fps, int is_bgra_topdown);
+int start_video_recording(int width, int height, int fps, int is_bgra_topdown, int crf, const char* preset, const char* codec, int aa_level, int show_log, const char* log_fontpath, int log_fontsize, const char* custom_filename, int log_position, float log_opacity, const char* log_fontcolor);
+
+// async background video export API
+void start_video_export_async(AppCommonState* state);
 void append_video_frame(const uint32_t* pixels, int width, int height);
 void stop_video_recording(void);
 int is_video_recording(void);
