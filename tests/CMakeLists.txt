@@ -52,3 +52,9 @@ add_executable(test_perturbation test_perturbation.c ../src/engine/perturbation.
 target_compile_options(test_perturbation PRIVATE ${TEST_FLAGS})
 target_link_libraries(test_perturbation PRIVATE mandelbrot_lib m)
 add_test(NAME perturbation_orbit COMMAND test_perturbation)
+
+# 9. test_bignum (arbitrary-precision BigNum engine)
+add_executable(test_bignum test_bignum.c)
+target_compile_options(test_bignum PRIVATE ${TEST_FLAGS})
+target_link_libraries(test_bignum PRIVATE mandelbrot_lib m)
+add_test(NAME bignum_arithmetic COMMAND test_bignum)
