@@ -19,6 +19,10 @@
         exit(1);                                                              \
     }
 
+/* 
+ * [TEST CASE] palette bounds
+ * tests the functionality of palette bounds.
+ */
 void test_palette_bounds(void) {
     TEST_START("color palette bounds checking");
 
@@ -49,6 +53,10 @@ void test_palette_bounds(void) {
     TEST_END();
 }
 
+/* 
+ * [TEST CASE] color smoothness
+ * tests the functionality of color smoothness.
+ */
 void test_color_smoothness(void) {
     TEST_START("color smooth interpolation");
 
