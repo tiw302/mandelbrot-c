@@ -17,6 +17,10 @@
         exit(1);                                                              \
     }
 
+/* 
+ * [TEST CASE] config defaults
+ * tests the functionality of config defaults.
+ */
 void test_config_defaults(void) {
     TEST_START("config defaults & clamping");
 
