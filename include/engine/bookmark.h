@@ -33,4 +33,7 @@ int get_bookmark_count(void);
 // returns a pointer to the internal array of bookmarks
 const Bookmark* get_bookmarks_array(int* out_count);
 
+// frees the dynamically allocated memory used by the bookmark cache
+void bookmark_cache_free(void);
+
 #endif
