@@ -117,9 +117,22 @@ static const struct {
 };
 #define NUM_JULIA_C_TARGETS (int)(sizeof(JULIA_C_TARGETS) / sizeof(JULIA_C_TARGETS[0]))
 
-// standard hermite interpolation for smooth ease-in/out motion
+/* 
+ * [MATH] smoothstep interpolation
+ * standard hermite interpolation curve. it provides zero velocity at t=0 and t=1.
+ * we use this heavily to avoid jarring camera starts and stops between keyframes.
+ */
 static inline double smoothstep(double t) {
     return t * t * (3.0 - 2.0 * t);
+}
+
+/* 
+ * [MATH] quadratic bezier interpolation
+ * creates a smooth curve rather than a straight line between two points.
+ */
+static inline double bezier_q(double p0, double p1, double p2, double t) {
+    double u = 1.0 - t;
+    return u * u * p0 + 2.0 * u * t * p1 + t * t * p2;
 }
 
 // random target selection that guarantees we never pick the same target twice in a row
@@ -134,61 +147,48 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
-/* loads and filters bookmarks by fractal type, picking one randomly.
- * reads the file only once by scanning into a temporary array. */
+/* 
+ * [ARCH] dynamic target selection
+ * instead of hardcoding camera paths, this function reads user-saved keyframes
+ * (bookmarks) directly from the dynamic memory cache and filters them by the
+ * currently active fractal type. it then randomly selects the next keyframe.
+ */
 static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im, double* out_zoom, int* out_idx, int* out_count) {
-    /* allocate a worst-case buffer; we only need one pass through the file.
-     * max bookmarks is bounded by MAX_BOOKMARKS in bookmark.c (1024). */
-    const int max_b = 1024;
-    int total = get_bookmark_count();
-    if (total <= 0) return 0;
+    int total = 0;
+    const Bookmark* bookmarks = get_bookmarks_array(&total);
 
-    double* candidates_re = malloc(sizeof(double) * total);
-    double* candidates_im = malloc(sizeof(double) * total);
-    double* candidates_zoom = malloc(sizeof(double) * total);
+    if (total <= 0 || !bookmarks) return 0;
+
     int* candidates_orig_idx = malloc(sizeof(int) * total);
-    if (!candidates_re || !candidates_im || !candidates_zoom || !candidates_orig_idx) {
-        free(candidates_re);
-        free(candidates_im);
-        free(candidates_zoom);
-        free(candidates_orig_idx);
+    if (!candidates_orig_idx) {
         return 0;
     }
 
     int match_count = 0;
     for (int i = 0; i < total; i++) {
-        Bookmark b;
-        if (load_bookmark(i, &b) && b.fractal_type == base_fractal) {
-            // exclude default view or too zoomed out bookmarks to ensure interesting tour targets
-            if (b.zoom >= 0.05 || (fabs(b.center_re - -0.5) < 1e-4 && fabs(b.center_im - 0.0) < 1e-4)) {
+        // exclude default view or too zoomed out bookmarks to ensure interesting tour targets
+        if (bookmarks[i].fractal_type == base_fractal) {
+            if (bookmarks[i].zoom >= 0.05 || (fabs(bookmarks[i].center_re - -0.5) < 1e-4 && fabs(bookmarks[i].center_im - 0.0) < 1e-4)) {
                 continue;
             }
-            candidates_re[match_count] = b.center_re;
-            candidates_im[match_count] = b.center_im;
-            candidates_zoom[match_count] = b.zoom;
-            candidates_orig_idx[match_count] = i;
-            match_count++;
+            candidates_orig_idx[match_count++] = i;
         }
     }
 
     if (match_count == 0) {
-        free(candidates_re);
-        free(candidates_im);
-        free(candidates_zoom);
         free(candidates_orig_idx);
         return 0;
     }
 
-    int picked = rand() % match_count;
-    *out_re = candidates_re[picked];
-    *out_im = candidates_im[picked];
-    *out_zoom = candidates_zoom[picked];
-    *out_idx = candidates_orig_idx[picked];
+    int r = pick_idx(*out_idx, match_count);
+    int selected_idx = candidates_orig_idx[r];
+    
+    *out_idx = r;
     *out_count = match_count;
+    *out_re = bookmarks[selected_idx].center_re;
+    *out_im = bookmarks[selected_idx].center_im;
+    *out_zoom = bookmarks[selected_idx].zoom;
 
-    free(candidates_re);
-    free(candidates_im);
-    free(candidates_zoom);
     free(candidates_orig_idx);
     return 1;
 }
@@ -208,10 +208,17 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
     double e = smoothstep(raw_t);
 
     switch (state->phase) {
-        case TOUR_PANNING:
-            // linear interpolation for camera position during panning
-            view->center_re = state->home_re + (state->target_re - state->home_re) * e;
-            view->center_im = state->home_im + (state->target_im - state->home_im) * e;
+        case TOUR_PANNING: {
+            // bezier interpolation for cinematic panning (curves outward)
+            double mid_re = (state->home_re + state->target_re) * 0.5;
+            double mid_im = (state->home_im + state->target_im) * 0.5;
+            double dx = state->target_re - state->home_re;
+            double dy = state->target_im - state->home_im;
+            double cp_re = mid_re - dy * 0.3; // perpendicular offset
+            double cp_im = mid_im + dx * 0.3;
+            
+            view->center_re = bezier_q(state->home_re, cp_re, state->target_re, e);
+            view->center_im = bezier_q(state->home_im, cp_im, state->target_im, e);
             view->zoom = state->home_zoom;
             if (raw_t >= 1.0) {
                 view->center_re = state->target_re;
@@ -220,6 +227,7 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
                 state->phase_start = now;
             }
             break;
+        }
         case TOUR_ZOOMING_IN:
             // exponential interpolation for smooth zoom depth perception
             view->center_re = state->target_re;
@@ -232,10 +240,17 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
                 state->phase_start = now;
             }
             break;
-        case TOUR_ZOOMING_OUT:
-            // return to home position while pulling back the camera
-            view->center_re = state->target_re + (state->home_re - state->target_re) * e;
-            view->center_im = state->target_im + (state->home_im - state->target_im) * e;
+        case TOUR_ZOOMING_OUT: {
+            // return to home position with an opposing curve
+            double mid_re = (state->target_re + state->home_re) * 0.5;
+            double mid_im = (state->target_im + state->home_im) * 0.5;
+            double dx = state->home_re - state->target_re;
+            double dy = state->home_im - state->target_im;
+            double cp_re = mid_re - dy * 0.3;
+            double cp_im = mid_im + dx * 0.3;
+            
+            view->center_re = bezier_q(state->target_re, cp_re, state->home_re, e);
+            view->center_im = bezier_q(state->target_im, cp_im, state->home_im, e);
             view->zoom =
                 exp(log(state->deep_zoom) + (log(state->home_zoom) - log(state->deep_zoom)) * e);
             if (raw_t >= 1.0) {
@@ -294,6 +309,7 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
                 state->phase_start = now;
             }
             break;
+        }
         default:
             break;
     }
