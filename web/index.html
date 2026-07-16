@@ -35,6 +35,7 @@
             <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
             <button onclick="copyLink()" id="copyBtn">copy link</button>
             <button onclick="downloadScreenshot()">screenshot</button>
+            <button onclick="toggleInfo()" id="infoBtn">about ℹ</button>
             <button onclick="toggleSettings()" id="settingsBtn">settings ⚙</button>
         </div>
         <div id="debug-info"></div>
@@ -151,6 +152,22 @@
         </div>
         <div style="display: flex; justify-content: center;">
             <button onclick="closeAlert()" class="settings-close">dismiss</button>
+        </div>
+    </div>
+
+    <div id="info-panel">
+        <div class="settings-title">--- about mandelbrot-c ---</div>
+        <div style="font-size: 12px; line-height: 1.4; margin: 10px 0; max-height: 300px; overflow-y: auto; padding-right: 5px; text-transform: lowercase;">
+            <p style="margin-bottom: 8px; color: #fff;">a high-performance fractal explorer written in c99.</p>
+            <p style="margin-bottom: 8px;"><strong>how it works:</strong> the core math is written in c and compiled to webassembly. it uses webgl 2.0 for gpu rendering and emscripten workers for multi-threaded cpu rendering.</p>
+            <p style="margin-bottom: 4px;"><strong>web vs desktop app:</strong></p>
+            <ul style="margin-left: 15px; margin-bottom: 8px; font-size: 11px;">
+                <li style="margin-bottom: 4px;">this web version supports url sharing, screenshots, and 64-bit gpu precision.</li>
+                <li>the desktop app additionally supports: 128-bit deep zoom precision, video recording, 8k mega screenshots, and local bookmarks.</li>
+            </ul>
+        </div>
+        <div style="display: flex; justify-content: center;">
+            <button onclick="toggleInfo()" class="settings-close">close</button>
         </div>
     </div>
 
