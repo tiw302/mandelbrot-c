@@ -10,6 +10,10 @@
 #include <assert.h>
 #include <math.h>
 
+/* 
+ * [TEST CASE] zero orbit
+ * tests the functionality of zero orbit.
+ */
 void test_zero_orbit(void) {
     // center at (0.0, 0.0) should not escape, length should equal max_iter
     int max_iter = 100;
@@ -29,6 +33,10 @@ void test_zero_orbit(void) {
     printf("test_zero_orbit passed!\n");
 }
 
+/* 
+ * [TEST CASE] escape orbit
+ * tests the functionality of escape orbit.
+ */
 void test_escape_orbit(void) {
     // center at (11.0, 0.0) should escape on the second step check (i=2)
     int max_iter = 100;
@@ -42,6 +50,10 @@ void test_escape_orbit(void) {
     printf("test_escape_orbit passed!\n");
 }
 
+/* 
+ * [TEST CASE] manual orbit
+ * tests the functionality of manual orbit.
+ */
 void test_manual_orbit(void) {
     // C = (0.5, 0.5)
     // Z0 = (0, 0)
