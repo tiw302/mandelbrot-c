@@ -22,6 +22,10 @@ static int approx_eq(double a, double b) {
     return fabs(a - b) < 1e-12; // high precision check for bookmarks
 }
 
+/* 
+ * [TEST CASE] bookmark io
+ * tests the functionality of bookmark io.
+ */
 void test_bookmark_io(void) {
     TEST_START("bookmark read/write accuracy");
 
