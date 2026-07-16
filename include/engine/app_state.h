@@ -15,6 +15,36 @@ typedef struct {
 // callback to update window title across different frontend backends
 typedef void (*app_title_callback)(const char* title);
 
+// video studio settings and state
+typedef struct {
+    int fps;
+    int duration_sec;
+    int res_w;
+    int res_h;
+    int preset_idx; // 0=ultrafast to 8=veryslow
+    int crf; // 0=Lossless, 1=High(18), 2=Medium(23), 3=Low(28)
+    int aa_level; // 1, 2, 4
+    int codec_idx; // 0=H.264, 1=H.265
+    int show_log; // 1=show, 0=hide
+    char target_re[64];
+    char target_im[64];
+    char target_zoom[64];
+    int is_rendering;
+    int path_type; // 0=Scenic Tour, 1=Bookmarks Tour, 2=Custom Target
+    int log_fontsize;
+    char log_fontpath[256];
+    int crf_val;               // 0-51
+    int zoom_curve;            // 0=Ease-In-Out, 1=Linear, 2=Ease-In, 3=Ease-Out
+    int log_position;          // 0=Top-Left, 1=Top-Right, 2=Bottom-Left, 3=Bottom-Right
+    float log_opacity;         // 0.0 to 1.0
+    char log_fontcolor[32];    // "white", "yellow", "cyan", "green", etc.
+    char output_filename[256]; // output file path
+    
+    // background video export state
+    volatile float export_progress_percent;
+    volatile int export_cancelled;
+} VideoStudioSettings;
+
 // unified application common state
 typedef struct {
     // navigation state
@@ -44,14 +74,7 @@ typedef struct {
     volatile int mega_screenshot_progress;
 
     // video studio state
-    int video_fps;
-    int video_duration_sec;
-    int video_res_w;
-    int video_res_h;
-    double video_target_re;
-    double video_target_im;
-    double video_target_zoom;
-    int video_is_rendering;
+    VideoStudioSettings video_settings;
 
     // notification system (max 5 active stacked notifications)
     struct {
@@ -114,5 +137,43 @@ void app_state_get_mouse_coord(const AppCommonState* state, int mx, int my, doub
 void app_state_calculate_boundaries(const AppCommonState* state, int width, int height,
                                     precise_float* re_min, precise_float* re_max,
                                     precise_float* im_min, precise_float* im_max);
+
+// video studio controller: sets up the tour and starts the video rendering process
+void app_state_start_video_render(AppCommonState* state, uint32_t now);
+
+// abstraction of the core simulation step (updates tours and boundaries)
+void app_state_step_simulation(AppCommonState* state, uint32_t now);
+
+// resolves a relative asset path (e.g. "assets/fonts/font.ttf") by hunting in common directories
+void app_state_resolve_asset_path(const char* relative_path, char* out_path, size_t max_len);
+
+// parses a string into a precise_float
+precise_float parse_precise_float(const char* str);
+
+// CLI arguments structure
+typedef struct {
+    int parsed;
+    int headless;
+    int width;
+    int height;
+    int fps;
+    int duration;
+    char path[32];
+    char out[256];
+    int crf;
+    char preset[32];
+    char codec[32];
+    int aa;
+    int log;
+    int log_size;
+    char log_font[256];
+    int log_pos;
+    float log_opacity;
+    char log_color[32];
+    int curve;
+    int gpu;
+} CLIArgs;
+
+extern CLIArgs g_cli_args;
 
 #endif  // app_state_h
