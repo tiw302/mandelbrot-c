@@ -1,3 +1,10 @@
+/* app_runner.h
+ *
+ * central orchestrator for the application lifecycle.
+ * configures and provides the sokol_app descriptor for different rendering
+ * backends (cpu, gpu, web, video export) and manages their shared initialization.
+ */
+
 #pragma once
 
 #if defined(__EMSCRIPTEN__)
