@@ -9,6 +9,10 @@
 
 #include "tour.h"
 
+/* 
+ * [TEST CASE] tour transitions
+ * tests the functionality of tour transitions.
+ */
 int test_tour_transitions() {
     TourState state = {0};
     ViewState view = {0.0, 0.0, 0.01};
@@ -19,7 +23,11 @@ int test_tour_transitions() {
         return 0;
     }
 
-    // test update bounded t (now < phase_start shouldn't cause weird behavior)
+    /* 
+     * [TEST CASE] time initialization
+     * first update sets the baseline time (phase_start).
+     * the delta time here should be effectively zeroed out.
+     */
     uint32_t start_time = 1000;
     update_tour(&state, &view, start_time, 0); // initial
     if (state.phase_start != start_time) {
@@ -27,7 +35,12 @@ int test_tour_transitions() {
         return 0;
     }
 
-    // simulate backwards in time (to test raw_t clamping)
+    /* 
+     * [TEST CASE] negative delta / time skew resilience
+     * simulating backward time shifts. this happens if the system clock 
+     * jitters or if the game loop sends a stale timestamp. the state machine
+     * must clamp 'raw_t' to 0 and avoid transitioning states unexpectedly.
+     */
     update_tour(&state, &view, start_time - 500, 0);
     // should still be zooming out safely
     if (state.phase != TOUR_ZOOMING_OUT) {
@@ -52,6 +65,10 @@ int test_tour_transitions() {
     return 1;
 }
 
+/* 
+ * [TEST CASE] julia tour
+ * tests the functionality of julia tour.
+ */
 int test_julia_tour() {
     JuliaTourState state = {0};
     complex_t julia_c = {0.0, 0.0};
