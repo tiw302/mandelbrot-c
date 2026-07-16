@@ -9,6 +9,10 @@
 
 #include "renderer.h"
 
+/* 
+ * [TEST CASE] pool dispatch
+ * tests the functionality of pool dispatch.
+ */
 int test_pool_dispatch() {
     int max_iterations = 100;
     int palette_idx = 0;
