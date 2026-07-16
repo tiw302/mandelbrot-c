@@ -36,6 +36,7 @@
 #include "renderer.h"
 #include "screenshot.h"
 #include "perturbation.h"
+#include "bookmark.h"
 
 // clang-format off
 #include "sokol/sokol_app.h"
@@ -75,11 +76,6 @@ GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned i
 #include <time.h>
 
 // Shaders are automatically embedded from .glsl files at build-time
-
-
-
-
-
 #define JULIA_ZOOM 4.0
 #define MIN_ORBIT_LEN 20
 
@@ -99,7 +95,6 @@ static void slog_func(const char* tag, uint32_t log_level, uint32_t log_item_id,
 // GPU shader uniform block.
 // Mirrors the GLSL layout exactly to ensure correct memory mapping.
 
-
 // application global context
 typedef struct {
     // sokol gfx resources
@@ -107,7 +102,7 @@ typedef struct {
     sg_shader shd_cpu, shd_gpu;
     sg_bindings bind;
     sg_pass_action pass_action;
-    
+
     // CPU rendering mode resources
     sg_image img;
     sg_view img_view;
@@ -128,6 +123,7 @@ typedef struct {
     int gpu_mode, high_precision_mode;
     int cpu_precision_128;
     int screenshot_requested;
+    int quit_pending;
     RendererContext* renderer_ctx;
 
     // debug ui and text rendering
@@ -237,20 +233,25 @@ static void print_controls(void) {
     puts("mandelbrot explorer");
     puts("  left drag   : zoom selection   | right drag  : pan");
     puts("  scroll      : zoom at cursor   | ctrl+z      : undo");
-    puts("  up/down     : iterations       | shift+up/dn : x100");
-    puts("  p           : cycle palette    | r           : reset");
-    puts("  e           : toggle precision (64/128-bit)");
+    puts("  up/down     : iterations       | shift+up/dn : x10");
+    puts("  p / 0-9     : cycle/set palette| r           : reset");
+    puts("  e           : toggle precision | tab         : toggle settings");
+#ifndef BUILD_DEEP_TARGET
     puts("  j           : julia mode       | t           : tour");
-    puts("  f           : cycle fractals   | s           : screenshot");
+#else
+    puts("  j           : julia mode       |");
+#endif
+    puts("  f / b       : cycle fractals   | s           : screenshot");
     puts("  m           : save bookmark    | l           : load bookmark");
     puts("  x           : mega screenshot  | v           : record video");
     puts("  [ / ]       : scale threads    | h           : toggle help menu");
-    puts("  q / esc     : quit");
+    puts("  f5          : reload shaders   | q / esc     : quit");
     fflush(stdout);
 }
 
-static void init(void) {
-    print_controls();
+static void init(void) {    if (ctx.render_mode != APP_BACKEND_VIDEO) {
+        print_controls();
+    }
     sg_setup(&(sg_desc){.environment = sglue_environment(), .logger.func = slog_func});
     sgl_setup(&(sgl_desc_t){0});
     stm_setup();
@@ -352,21 +353,18 @@ static void init(void) {
 }
 
 static void frame(void) {
-    uint32_t now = (uint32_t)sapp_frame_duration() * 1000;
-    now = (uint32_t)stm_ms(stm_now());
-    
+    uint32_t real_now = (uint32_t)stm_ms(stm_now());
+    uint32_t now = real_now;
+
+    if (ctx.quit_pending && !ctx.core.video_settings.is_rendering) {
+        sapp_request_quit();
+    }
+
+    // Legacy video rendering simulated time logic removed (now handled in background thread)
+
 #ifndef BUILD_DEEP_TARGET
     // update tour animation state machines
     app_state_update_tours(&ctx.core, now, set_window_title_cb);
-    
-    // auto-stop video recording if video tour is finished
-    if (ctx.core.video_is_rendering && ctx.core.m_tour.phase == 0) {
-        if (is_video_recording()) {
-            stop_video_recording();
-            app_state_push_notification(&ctx.core, "Video Render Complete!", now);
-        }
-        ctx.core.video_is_rendering = 0;
-    }
 #endif
 
     // check if the user is currently panning or zooming
@@ -376,9 +374,9 @@ static void frame(void) {
         ctx.was_interacting = is_interacting;
     }
 
-    if (ctx.gpu_mode == 0) {
+    if (ctx.gpu_mode == 0 && ctx.render_mode != APP_BACKEND_VIDEO) {
         // CPU rendering path (runs the thread pool and updates staging texture)
-        if (ctx.core.needs_redraw) {
+        if (ctx.core.needs_redraw && ctx.render_mode != APP_BACKEND_VIDEO) {
             precise_float rmin, rmax, imin, imax;
             app_state_calculate_boundaries(&ctx.core, ctx.win_w, ctx.win_h, &rmin, &rmax, &imin, &imax);
             int pitch = ctx.win_w * 4;
@@ -406,7 +404,7 @@ static void frame(void) {
 
         if (!can_use_perturbation) {
             ctx.active_perturbation_last = 0;
-        } else if (ctx.core.needs_redraw) {
+        } else if (ctx.core.needs_redraw && ctx.render_mode != APP_BACKEND_VIDEO) {
             precise_float aspect = (precise_float)ctx.win_w / ctx.win_h;
             precise_float zoom = ctx.core.cam.view.zoom;
             precise_float center_re = ctx.core.cam.view.center_re;
@@ -415,7 +413,7 @@ static void frame(void) {
             if (max_iters > MAX_ITERATIONS_LIMIT) max_iters = MAX_ITERATIONS_LIMIT;
 
             int grid_size = 11;
-            
+
             if (ctx.core.cam.is_panning || ctx.core.cam.is_zooming) {
                 if (max_iters > 500) max_iters = 500;
                 grid_size = 5;
@@ -575,8 +573,6 @@ static void frame(void) {
         sg_apply_pipeline(ctx.pip_cpu);
         sg_apply_bindings(&bind_cpu);
     }
-    sg_draw(0, 6, 1);
-
     // render interactive components using sokol_gl (e.g. selection rectangle)
     if (ctx.core.cam.is_zooming) {
         sgl_load_pipeline(ctx.pip_blend);
@@ -594,27 +590,33 @@ static void frame(void) {
         sgl_end();
     }
 
-    // render HUD (telemetry overlay)
-    hud_render_sokol_gpu(ctx.custom_font, &ctx.core, ctx.win_w, ctx.win_h, ctx.gpu_mode,
-                         &ctx.high_precision_mode, ctx.cpu_precision_128,
-                         ctx.active_perturbation_last, &ctx.use_perturbation,
-                         now);
+    if (ctx.render_mode != APP_BACKEND_VIDEO) {
+        sg_draw(0, 6, 1);
+        sgl_draw();
+    }
 
-    sgl_draw();
+    if (ctx.render_mode == APP_BACKEND_VIDEO) {
+        int old_prec = ctx.cpu_precision_128;
+        hud_render_video_studio(ctx.custom_font, &ctx.core, ctx.win_w, ctx.win_h, &ctx.cpu_precision_128, now);
+        if (old_prec != ctx.cpu_precision_128) {
+            set_cpu_precision(ctx.renderer_ctx, ctx.cpu_precision_128);
+        }
+    } else {
+        hud_render_sokol_gpu(ctx.custom_font, &ctx.core, ctx.win_w, ctx.win_h, ctx.gpu_mode,
+                             &ctx.high_precision_mode, ctx.cpu_precision_128,
+                             ctx.active_perturbation_last, &ctx.use_perturbation,
+                             now);
+    }
+
     simgui_render();
 
     // capture video frame or screenshot if requested
     if (is_video_recording() || ctx.screenshot_requested) {
-        if (ensure_capture_buffers()) {
-            glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ctx.capture_buf);
-            if (is_video_recording()) {
-                append_video_frame(ctx.capture_buf, ctx.win_w, ctx.win_h);
-            }
-            if (ctx.screenshot_requested) {
+        if (ctx.screenshot_requested) {
+            if (ensure_capture_buffers()) {
+                glReadPixels(0, 0, ctx.win_w, ctx.win_h, GL_RGBA, GL_UNSIGNED_BYTE, ctx.capture_buf);
                 save_screenshot(&ctx.core, ctx.capture_buf, ctx.win_w, ctx.win_h, now, 0, 1);
-                ctx.screenshot_requested = 0;
             }
-        } else {
             ctx.screenshot_requested = 0;
         }
     }
@@ -676,6 +678,15 @@ static void event(const sapp_event* ev) {
     int handled = 0;
 
     switch (ev->type) {
+        case SAPP_EVENTTYPE_QUIT_REQUESTED:
+            if (ctx.core.video_settings.is_rendering || is_video_recording()) {
+                sapp_cancel_quit();
+                ctx.core.video_settings.export_cancelled = 1;
+                app_state_push_notification(&ctx.core, "Safely shutting down video export...", now);
+            }
+            handled = 1;
+            break;
+
         case SAPP_EVENTTYPE_RESIZED:
             if (ev->window_width > 0 && ev->window_height > 0) {
                 ctx.win_w = ev->framebuffer_width;
@@ -765,7 +776,7 @@ static void event(const sapp_event* ev) {
                 }
                 ctx.core.needs_redraw = 1;
                 break;
-            
+
             case ACTION_MEGA_SCREENSHOT:
                 if (!ctx.gpu_mode && ctx.core.mega_screenshot_active == 0) {
                     precise_float rmin, rmax, imin, imax;
@@ -776,15 +787,12 @@ static void event(const sapp_event* ev) {
                 }
                 break;
             case ACTION_TOGGLE_VIDEO:
-                if (is_video_recording()) {
-                    stop_video_recording();
-                    app_state_push_notification(&ctx.core, "Video Recording Saved!", now);
+                if (ctx.core.video_settings.is_rendering) {
+                    ctx.core.video_settings.export_cancelled = 1;
+                    app_state_push_notification(&ctx.core, "cancelling video export...", now);
                 } else {
-                    if (start_video_recording(ctx.win_w, ctx.win_h, 60, 0)) {
-                        app_state_push_notification(&ctx.core, "Video Recording Started", now);
-                    } else {
-                        app_state_push_notification(&ctx.core, "Error: ffmpeg not found!", now);
-                    }
+                    start_video_export_async(&ctx.core);
+                    app_state_push_notification(&ctx.core, "video export started", now);
                 }
                 break;
             case ACTION_RESIZE_THREADS_UP:
@@ -814,6 +822,7 @@ static void event(const sapp_event* ev) {
 }
 
 static void cleanup(void) {
+    bookmark_cache_free();
     free(ctx.pixels);
     free(ctx.capture_buf);
     free(ctx.flipped_buf);
@@ -840,9 +849,9 @@ sapp_desc app_runner_get_desc(AppBackend mode) {
         .frame_cb = frame,
         .cleanup_cb = cleanup,
         .event_cb = event,
-        .width = 1280,
-        .height = 720,
-        .window_title = "Mandelbrot Explorer",
+        .width = mode == APP_BACKEND_VIDEO ? 1600 : 1280,
+        .height = mode == APP_BACKEND_VIDEO ? 900 : 720,
+        .window_title = mode == APP_BACKEND_VIDEO ? "Mandelbrot Video Studio" : "Mandelbrot Explorer",
         .logger.func = slog_func,
         .icon.sokol_default = true
     };
