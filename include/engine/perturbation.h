@@ -18,9 +18,17 @@ typedef struct {
     double im;
 } ComplexFloat;
 
+// series approximation coefficients for skipping iterations
+typedef struct {
+    double A_re, A_im;
+    double B_re, B_im;
+    double C_re, C_im;
+} SACoeff;
+
 // represents the stored reference orbit path for the center coordinate
 typedef struct {
     ComplexFloat* zn; // array of orbit points z_0, z_1, ..., z_n
+    SACoeff* sa;      // taylor series approximation coefficients
     int len;          // length of the orbit path before escaping
 } RefOrbit;
 
@@ -32,4 +40,4 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
 // safely frees the reference orbit array and container
 void perturbation_free(RefOrbit* orbit);
 
-#endif // perturbation.h
+#endif // perturbation_h
