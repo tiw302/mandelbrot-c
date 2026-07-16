@@ -8,7 +8,7 @@
 #include "tricorn.h"
 #include "celtic.h"
 #include "buffalo.h"
-
+#include <stdlib.h>
 #include <stdio.h>
 #include <string.h>
 
@@ -199,7 +199,6 @@ static void burning_ship_f128x4_wrap(simd_f128x4 cre, simd_f128x4 cim, simd_f128
 #endif
 
 // registers the standard default fractals into the registry
-
 // tricorn wrappers
 static double tricorn_scalar_wrap(complex_t c, complex_t julia_c, int max_iterations) {
     (void)julia_c;
