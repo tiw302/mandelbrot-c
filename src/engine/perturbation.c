@@ -30,7 +30,10 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
     if (!orbit) return NULL;
 
     orbit->zn = malloc(sizeof(ComplexFloat) * max_iter);
-    if (!orbit->zn) {
+    orbit->sa = malloc(sizeof(SACoeff) * max_iter);
+    if (!orbit->zn || !orbit->sa) {
+        if (orbit->zn) free(orbit->zn);
+        if (orbit->sa) free(orbit->sa);
         free(orbit);
         return NULL;
     }
@@ -41,6 +44,14 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
     // initial orbit element z0 = 0.0 + 0.0i
     orbit->zn[0].re = (double)z_re;
     orbit->zn[0].im = (double)z_im;
+
+    // initial sa coefficients A=1, B=0, C=0
+    double A_re = 1.0, A_im = 0.0;
+    double B_re = 0.0, B_im = 0.0;
+    double C_re = 0.0, C_im = 0.0;
+    orbit->sa[0].A_re = A_re; orbit->sa[0].A_im = A_im;
+    orbit->sa[0].B_re = B_re; orbit->sa[0].B_im = B_im;
+    orbit->sa[0].C_re = C_re; orbit->sa[0].C_im = C_im;
 
     int len = 1;
     const precise_float escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
@@ -57,6 +68,31 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
         if (z_re2 + z_im2 > escape_radius_sq) {
             break;
         }
+
+        // compute SA coefficients before updating z_n
+        // A_{n+1} = 2 z_n A_n + 1
+        double next_A_re = 2.0 * ((double)z_re * A_re - (double)z_im * A_im) + 1.0;
+        double next_A_im = 2.0 * ((double)z_re * A_im + (double)z_im * A_re);
+        
+        // B_{n+1} = 2 z_n B_n + A_n^2
+        double A2_re = A_re * A_re - A_im * A_im;
+        double A2_im = 2.0 * A_re * A_im;
+        double next_B_re = 2.0 * ((double)z_re * B_re - (double)z_im * B_im) + A2_re;
+        double next_B_im = 2.0 * ((double)z_re * B_im + (double)z_im * B_re) + A2_im;
+        
+        // C_{n+1} = 2 z_n C_n + 2 A_n B_n
+        double AB_re = A_re * B_re - A_im * B_im;
+        double AB_im = A_re * B_im + A_im * B_re;
+        double next_C_re = 2.0 * ((double)z_re * C_re - (double)z_im * C_im) + 2.0 * AB_re;
+        double next_C_im = 2.0 * ((double)z_re * C_im + (double)z_im * C_re) + 2.0 * AB_im;
+        
+        A_re = next_A_re; A_im = next_A_im;
+        B_re = next_B_re; B_im = next_B_im;
+        C_re = next_C_re; C_im = next_C_im;
+        
+        orbit->sa[i].A_re = A_re; orbit->sa[i].A_im = A_im;
+        orbit->sa[i].B_re = B_re; orbit->sa[i].B_im = B_im;
+        orbit->sa[i].C_re = C_re; orbit->sa[i].C_im = C_im;
 
         // complex formula: z_next = z^2 + c
         z_im = 2.0 * z_re * z_im + center_im;
@@ -77,6 +113,9 @@ void perturbation_free(RefOrbit* orbit) {
     if (orbit) {
         if (orbit->zn) {
             free(orbit->zn);
+        }
+        if (orbit->sa) {
+            free(orbit->sa);
         }
         free(orbit);
     }
