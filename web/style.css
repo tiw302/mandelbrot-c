@@ -1,4 +1,3 @@
-/* minimalist css reset */
 * {
     margin: 0;
     padding: 0;
@@ -216,6 +215,7 @@ canvas {
 }
 
 #settings-panel,
+#info-panel,
 #alert-panel {
     position: fixed;
     top: 50%;
@@ -239,6 +239,7 @@ canvas {
 }
 
 #settings-panel.active,
+#info-panel.active,
 #alert-panel.active {
     opacity: 1;
     pointer-events: auto;
@@ -264,6 +265,7 @@ canvas {
 #settings-panel button,
 #settings-panel select,
 #settings-panel input,
+#info-panel button,
 #alert-panel button {
     background: rgba(45, 45, 45, 0.8);
     color: #eee;
@@ -277,6 +279,7 @@ canvas {
 
 #settings-panel button,
 #settings-panel select,
+#info-panel button,
 #alert-panel button {
     cursor: pointer;
     transition: background-color 0.15s ease, transform 0.1s ease;
@@ -284,11 +287,13 @@ canvas {
 
 #settings-panel button:hover,
 #settings-panel select:hover,
+#info-panel button:hover,
 #alert-panel button:hover {
     background: rgba(68, 68, 68, 0.9);
 }
 
 #settings-panel button:active,
+#info-panel button:active,
 #alert-panel button:active {
     background: rgba(85, 85, 85, 0.9);
     transform: scale(0.95);
