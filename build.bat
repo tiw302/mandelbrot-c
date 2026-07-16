@@ -12,11 +12,12 @@ if not "%~1"=="" (
     if /i "%~1"=="gpu" goto build_gpu
     if /i "%~1"=="web" goto build_web
     if /i "%~1"=="deep" goto build_deep
+    if /i "%~1"=="video" goto build_video
     if /i "%~1"=="test" goto run_tests
     if /i "%~1"=="bench" goto run_benchmarks
     if /i "%~1"=="all" goto build_all
     if /i "%~1"=="clean" goto clean
-    echo error: unknown option '%~1'. usage: %0 {cpu^|gpu^|web^|deep^|test^|bench^|all^|clean}
+    echo error: unknown option '%~1'. usage: %0 {cpu^|gpu^|web^|deep^|video^|test^|bench^|all^|clean}
     exit /b 1
 )
 
@@ -28,10 +29,11 @@ echo   1^) cpu (combined 64/128-bit)
 echo   2^) gpu (combined 32/64-bit)
 echo   3^) web
 echo   4^) deep zoom (gpu + perturbation)
-echo   5^) run tests
-echo   6^) run benchmarks
-echo   7^) build all
-echo   8^) clean
+echo   5^) video renderer (headless)
+echo   6^) run tests
+echo   7^) run benchmarks
+echo   8^) build all
+echo   9^) clean
 echo   q^) quit
 echo ====================================================================================
 echo.
@@ -41,13 +43,14 @@ if /i "%choice%"=="1" goto build_cpu
 if /i "%choice%"=="2" goto build_gpu
 if /i "%choice%"=="3" goto build_web
 if /i "%choice%"=="4" goto build_deep
-if /i "%choice%"=="5" goto run_tests
-if /i "%choice%"=="6" goto run_benchmarks
-if /i "%choice%"=="7" goto build_all
-if /i "%choice%"=="8" goto clean
+if /i "%choice%"=="5" goto build_video
+if /i "%choice%"=="6" goto run_tests
+if /i "%choice%"=="7" goto run_benchmarks
+if /i "%choice%"=="8" goto build_all
+if /i "%choice%"=="9" goto clean
 if /i "%choice%"=="q" exit /b 0
 
-echo error: invalid choice '%choice%'. please enter a number between 1-8, or 'q' to quit.
+echo error: invalid choice '%choice%'. please enter a number between 1-9, or 'q' to quit.
 echo.
 goto menu
 
@@ -134,6 +137,22 @@ echo ===========================================================================
 echo.
 goto end
 
+:build_video
+echo.
+echo Configuring Video Renderer build...
+cmake -S . -B build_video -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo Building Video Renderer...
+cmake --build build_video --target mandelbrot_video --parallel --config Release
+if %errorlevel% neq 0 exit /b %errorlevel%
+echo.
+echo ====================================================================================
+echo  build complete! to run video renderer engine:
+echo   * .\build_video\Release\mandelbrot_video.exe
+echo ====================================================================================
+echo.
+goto end
+
 :run_tests
 echo.
 echo Configuring tests...
@@ -186,6 +205,7 @@ call :build_cpu
 call :build_gpu
 call :build_web
 call :build_deep
+call :build_video
 goto end
 
 :clean
@@ -195,6 +215,7 @@ if exist build_cpu rmdir /s /q build_cpu
 if exist build_gpu rmdir /s /q build_gpu
 if exist build_web rmdir /s /q build_web
 if exist build_deep rmdir /s /q build_deep
+if exist build_video rmdir /s /q build_video
 if exist build_test rmdir /s /q build_test
 if exist build_bench rmdir /s /q build_bench
 if exist build rmdir /s /q build
