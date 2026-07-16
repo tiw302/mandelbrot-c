@@ -5,6 +5,15 @@
 
 #include "renderer.h"
 
+// Tour default durations
+#define TOUR_ZOOM_DEPTH 6000.0
+#define TOUR_PAN_MS 1800.0
+#define TOUR_ZOOM_IN_MS 4000.0
+#define TOUR_ZOOM_OUT_MS 3200.0
+
+#define JULIA_TOUR_MOVE_MS 3000.0
+#define JULIA_TOUR_DWELL_MS 1200.0
+
 // tour phase enumeration for the mandelbrot/burning ship tour
 typedef enum {
     TOUR_IDLE = 0,
@@ -28,6 +37,10 @@ typedef struct {
     uint32_t phase_start;                    // timestamp of current phase beginning
     int last_zoom_idx;                       // index of the target in the target array
     int is_dynamic;                          // 1 if using bookmarks, 0 if using presets
+    double pan_ms;                           // duration of the initial pan movement
+    double zoom_in_ms;                       // duration of the deep zoom phase
+    double zoom_out_ms;                      // duration of the pull-back phase
+    int zoom_curve;                          // 0=Ease-In-Out, 1=Linear, 2=Ease-In, 3=Ease-Out
 } TourState;
 
 // state tracking for the julia parameter tour
@@ -37,6 +50,8 @@ typedef struct {
     double to_re, to_im;      // target c-parameter
     uint32_t phase_start;     // timestamp of current phase beginning
     int last_julia_idx;       // index of current keyframe
+    double move_ms;           // duration of parameter interpolation
+    double dwell_ms;          // duration of pause at keyframes
 } JuliaTourState;
 
 // core update logic — called once per frame to advance animations
