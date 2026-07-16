@@ -19,7 +19,6 @@ double celtic_check(complex_t c, int max_iterations) {
     /* early rejection for the main cardioid and period-2 bulb.
      * points in these regions are guaranteed to be in the set (infinite iterations).
      * skipping them saves massive amounts of cpu cycles in the dark center. */
-    
 
     complex_t z = {0, 0};
     int iterations = 0;
@@ -267,7 +266,7 @@ void celtic_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, dou
         // vbslq_f64(mask, true_val, false_val) -> bitwise select
         final_mag_sq = vbslq_f64(just_escaped, mag_sq, final_mag_sq);
         escaped_mask = vorrq_u64(escaped_mask, mask);
-        
+
         // iters += (1.0 where not escaped)
         float64x2_t iters_inc = vbslq_f64(escaped_mask, vdupq_n_f64(0.0), one);
         iters = vaddq_f64(iters, iters_inc);
@@ -303,7 +302,7 @@ double celtic_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     simd_f128_extract(cre, &cre_hi, &cre_lo);
     simd_f128_extract(cim, &cim_hi, &cim_lo);
 
-    
+
 
     simd_f128 zre = simd_f128_from_double(0.0);
     simd_f128 zim = simd_f128_from_double(0.0);
