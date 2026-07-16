@@ -92,15 +92,15 @@ vec2 ds_sqr(vec2 dsa) {
 // fi is the fractional iteration count. interpolates between discrete
 // color steps to ensure smooth gradients.
 vec3 lut_color(float fi, int pal) {
-  float i = fi; vec3 a,b;
+  float i = floor(fi); vec3 a,b;
   if (pal==0) { // sine wave
     a=vec3(sin(0.1*i+4.0)*127.+128., sin(0.1*i+2.0)*127.+128., sin(0.1*i+0.0)*127.+128.)/255.;
     b=vec3(sin(0.1*(i+1.0)+4.0)*127.+128., sin(0.1*(i+1.0)+2.0)*127.+128., sin(0.1*(i+1.0)+0.0)*127.+128.)/255.;
     return mix(a, b, fract(fi));
   } else if (pal==1) { // volumetric magma
-    float t1 = mod(i / 128.0, 1.0); float t2 = mod((i+1.0) / 128.0, 1.0);
-    a = vec3(1.0 - exp(-4.0 * t1), pow(max(t1, 1e-5), 2.2), pow(max(t1, 1e-5), 7.0));
-    b = vec3(1.0 - exp(-4.0 * t2), pow(max(t2, 1e-5), 2.2), pow(max(t2, 1e-5), 7.0));
+    float t1 = fract(i / 128.0); float t2 = fract((i+1.0) / 128.0);
+    a = vec3(1.0 - exp(-4.0 * t1), pow(max(t1, 0.00001), 2.2), pow(max(t1, 0.00001), 7.0));
+    b = vec3(1.0 - exp(-4.0 * t2), pow(max(t2, 0.00001), 2.2), pow(max(t2, 0.00001), 7.0));
     return mix(a, b, fract(fi));
   } else if (pal==3) { // grayscale
     a=vec3(mod(i, 256.0)/255.0);
