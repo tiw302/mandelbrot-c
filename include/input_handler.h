@@ -69,4 +69,4 @@ typedef enum {
 // handles the common event, modifies AppCommonState, and returns any specific action the backend needs to perform
 InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, uint32_t now);
 
-#endif // INPUT_HANDLER_H
+#endif // input_handler_h
