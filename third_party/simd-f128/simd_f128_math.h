@@ -95,7 +95,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_exp(simd_f128 x) {
     simd_f128_extract(x, &hi, &lo);
 
     // check for nan input
-    if (isnan(hi)) return simd_f128_from_double(NAN);
+    if (_simd_f128_isnan_double(hi)) return simd_f128_from_double(NAN);
 
     // catch overflow/underflow early to prevent invalid math steps
     if (hi > 709.78271289338399) return simd_f128_from_double(INFINITY);
@@ -103,8 +103,8 @@ SIMD_F128_INLINE simd_f128 simd_f128_exp(simd_f128 x) {
 
     // range reduction to quadrant or sub-interval with n = 16:
     // x = (k / 16) * ln(2) + r, where r is in [-ln(2)/32, ln(2)/32]
-    // 23.083120654223414 is the pre-calculated constant 16 / ln(2)
-    double k_double = round(hi * 23.083120654223414);
+    // SIMD_F128_16_OVER_LN2 is the pre-calculated constant 16 / ln(2)
+    double k_double = round(hi * SIMD_F128_16_OVER_LN2);
     long long k = (long long)k_double;
 
     simd_f128 k_f128 = simd_f128_from_double(k_double);
@@ -146,10 +146,10 @@ SIMD_F128_INLINE simd_f128 simd_f128_log(simd_f128 x) {
     simd_f128_extract(x, &hi, &lo);
 
     // check for nan, negative, and zero inputs
-    if (isnan(hi)) return simd_f128_from_double(NAN);
+    if (_simd_f128_isnan_double(hi)) return simd_f128_from_double(NAN);
     if (hi == 0.0 && lo == 0.0) return simd_f128_from_double(-INFINITY);
     if (hi < 0.0 || (hi == 0.0 && lo < 0.0)) return simd_f128_from_double(NAN);
-    if (isinf(hi)) return simd_f128_from_double(INFINITY);
+    if (_simd_f128_isinf_double(hi)) return simd_f128_from_double(INFINITY);
 
     // solve ln(x) - y = 0 using halley's method (third-order convergence)
     // we use standard double log(hi) as the initial guess
@@ -158,24 +158,24 @@ SIMD_F128_INLINE simd_f128 simd_f128_log(simd_f128 x) {
     // one halley iteration is sufficient for 106-bit precision in normal cases.
     // however, for subnormal inputs, the initial log(hi) guess might be extremely poor.
     // we do a second iteration if the first correction is too large.
-    {
-        simd_f128 ey = simd_f128_exp(y);
-        simd_f128 num = simd_f128_sub(x, ey);
-        simd_f128 den = simd_f128_add(x, ey);
-        // delta = 2 * (x - e^y) / (x + e^y)
-        simd_f128 delta = simd_f128_mul(simd_f128_from_double(2.0), simd_f128_div(num, den));
-        y = simd_f128_add(y, delta);
+    simd_f128 ey = simd_f128_exp(y);
+    simd_f128 num = simd_f128_sub(x, ey);
+    simd_f128 den = simd_f128_add(x, ey);
+    
+    // delta = 2 * (x - e^y) / (x + e^y)
+    simd_f128 delta = simd_f128_mul(simd_f128_from_double(2.0), simd_f128_div(num, den));
+    y = simd_f128_add(y, delta);
 
-        double dhi, dlo;
-        simd_f128_extract(delta, &dhi, &dlo);
-        if (fabs(dhi) > 1e-3) {
-            ey = simd_f128_exp(y);
-            num = simd_f128_sub(x, ey);
-            den = simd_f128_add(x, ey);
-            delta = simd_f128_mul(simd_f128_from_double(2.0), simd_f128_div(num, den));
-            y = simd_f128_add(y, delta);
-        }
+    double dhi, dlo;
+    simd_f128_extract(delta, &dhi, &dlo);
+    if (fabs(dhi) > 1e-3) {
+        ey = simd_f128_exp(y);
+        num = simd_f128_sub(x, ey);
+        den = simd_f128_add(x, ey);
+        delta = simd_f128_mul(simd_f128_from_double(2.0), simd_f128_div(num, den));
+        y = simd_f128_add(y, delta);
     }
+    
     return y;
 }
 
@@ -188,6 +188,10 @@ SIMD_F128_INLINE simd_f128 simd_f128_pow(simd_f128 base, simd_f128 exp) {
     if (ehi == 0.0 && elo == 0.0) {
         return simd_f128_from_double(1.0);
     }
+    // 1^exp is always 1
+    if (bhi == 1.0 && blo == 0.0) {
+        return simd_f128_from_double(1.0);
+    }
     // 0^exp depends on the sign of the exponent and base
     if (bhi == 0.0 && blo == 0.0) {
         double rounded_e = round(ehi);
@@ -195,7 +199,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_pow(simd_f128 base, simd_f128 exp) {
         if (ehi == rounded_e && elo == 0.0 && fabs(rounded_e) <= 9.0e18) {
             is_odd = ((long long)rounded_e) % 2 != 0;
         }
-        int is_neg_base = signbit(bhi);
+        int is_neg_base = _simd_f128_signbit_double(bhi);
         if (ehi < 0.0) {
             if (is_neg_base && is_odd) {
                 return simd_f128_from_double(-INFINITY);
@@ -210,6 +214,21 @@ SIMD_F128_INLINE simd_f128 simd_f128_pow(simd_f128 base, simd_f128 exp) {
     }
     // handle negative base cases with integer exponents
     if (bhi < 0.0 || (bhi == 0.0 && blo < 0.0)) {
+        // handle negative base with infinite exponent
+        if (_simd_f128_isinf_double(ehi)) {
+            simd_f128 abs_base = simd_f128_abs(base);
+            double abshi, abslo;
+            simd_f128_extract(abs_base, &abshi, &abslo);
+            if (abshi == 1.0 && abslo == 0.0) {
+                return simd_f128_from_double(1.0);
+            }
+            int is_gt_one = (abshi > 1.0) || (abshi == 1.0 && abslo > 0.0);
+            if (ehi > 0.0) {
+                return simd_f128_from_double(is_gt_one ? INFINITY : 0.0);
+            } else {
+                return simd_f128_from_double(is_gt_one ? 0.0 : INFINITY);
+            }
+        }
         double rounded_e = round(ehi);
         if (ehi == rounded_e && elo == 0.0 && fabs(rounded_e) <= 9.0e18) {
             long long e_int = (long long)rounded_e;
@@ -233,7 +252,7 @@ SIMD_F128_INLINE void simd_f128_sincos(simd_f128 x, simd_f128* s, simd_f128* c) 
     simd_f128_extract(x, &hi, &lo);
 
     // check for nan and inf inputs
-    if (isnan(hi) || isinf(hi)) {
+    if (_simd_f128_isnan_double(hi) || _simd_f128_isinf_double(hi)) {
         *s = simd_f128_from_double(NAN);
         *c = simd_f128_from_double(NAN);
         return;
@@ -258,7 +277,7 @@ SIMD_F128_INLINE void simd_f128_sincos(simd_f128 x, simd_f128* s, simd_f128* c) 
     long long k = (long long)k_double;
 
     simd_f128 r = simd_f128_sub(x, simd_f128_mul(simd_f128_from_double(k_double), SIMD_F128_PI_OVER_2));
-    simd_f128 rsq = simd_f128_sqr(r);
+    simd_f128 rsq = simd_f128_mul(r, r);
 
     // evaluate chebyshev minimax polynomial approximations for sin(r) and cos(r)
     // sin(r) ~ r * (1 + rsq * s_sin)
@@ -329,8 +348,8 @@ SIMD_F128_INLINE simd_f128 simd_f128_atan(simd_f128 x) {
     simd_f128_extract(x, &hi, &lo);
 
     // check for nan and inf boundary cases
-    if (isnan(hi)) return simd_f128_from_double(NAN);
-    if (isinf(hi)) return (hi > 0.0) ? SIMD_F128_PI_OVER_2 : simd_f128_neg(SIMD_F128_PI_OVER_2);
+    if (_simd_f128_isnan_double(hi)) return simd_f128_from_double(NAN);
+    if (_simd_f128_isinf_double(hi)) return (hi > 0.0) ? SIMD_F128_PI_OVER_2 : simd_f128_neg(SIMD_F128_PI_OVER_2);
 
     // if |x| > 1, use identity: atan(x) = sign(x) * (pi/2 - atan(1/|x|))
     // this avoids instability in newton-raphson on flat asymptotes
@@ -351,28 +370,29 @@ SIMD_F128_INLINE simd_f128 simd_f128_atan2(simd_f128 y, simd_f128 x) {
     simd_f128_extract(y, &yhi, &ylo);
     simd_f128_extract(x, &xhi, &xlo);
 
-    if (isnan(xhi) || isnan(yhi)) return simd_f128_from_double(NAN);
+    if (_simd_f128_isnan_double(xhi) || _simd_f128_isnan_double(yhi)) return simd_f128_from_double(NAN);
 
     // handle origin case to correctly assign correct quadrant sign bit
     if (xhi == 0.0 && xlo == 0.0 && yhi == 0.0 && ylo == 0.0) {
-        if (signbit(xhi)) {
-            if (signbit(yhi)) return simd_f128_neg(SIMD_F128_PI);
+        if (_simd_f128_signbit_double(xhi)) {
+            if (_simd_f128_signbit_double(yhi)) return simd_f128_neg(SIMD_F128_PI);
             return SIMD_F128_PI;
         } else {
-            if (signbit(yhi)) return simd_f128_from_double(-0.0);
+            if (_simd_f128_signbit_double(yhi)) return simd_f128_from_double(-0.0);
             return simd_f128_from_double(0.0);
         }
     }
 
     // determine angle based on the sign of the x coordinate
-    if (xhi > 0.0) {
+    if (xhi > 0.0 || (xhi == 0.0 && xlo > 0.0)) {
         return simd_f128_atan(simd_f128_div(y, x));
-    } else if (xhi < 0.0) {
+    } else if (xhi < 0.0 || (xhi == 0.0 && xlo < 0.0)) {
         if (yhi >= 0.0) return simd_f128_add(simd_f128_atan(simd_f128_div(y, x)), SIMD_F128_PI);
         else return simd_f128_sub(simd_f128_atan(simd_f128_div(y, x)), SIMD_F128_PI);
     } else {
-        if (yhi > 0.0) return simd_f128_mul(SIMD_F128_PI, simd_f128_from_double(0.5));
-        else return simd_f128_mul(SIMD_F128_PI, simd_f128_from_double(-0.5));
+        /* x is exactly zero: return ±pi/2 based on sign of y */
+        if (yhi > 0.0) return SIMD_F128_PI_OVER_2;
+        else return simd_f128_neg(SIMD_F128_PI_OVER_2);
     }
 }
 
@@ -381,7 +401,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_asin(simd_f128 x) {
     simd_f128_extract(x, &hi, &lo);
     
     // check boundaries for domain of arcsin [-1, 1]
-    if (isnan(hi) || isinf(hi) || hi > 1.0 || hi < -1.0 || (hi == 1.0 && lo > 0.0) || (hi == -1.0 && lo < 0.0)) {
+    if (_simd_f128_isnan_double(hi) || _simd_f128_isinf_double(hi) || hi > 1.0 || hi < -1.0 || (hi == 1.0 && lo > 0.0) || (hi == -1.0 && lo < 0.0)) {
         return simd_f128_from_double(NAN);
     }
     if (hi == 1.0 && lo == 0.0) return simd_f128_mul(SIMD_F128_PI, simd_f128_from_double(0.5));
@@ -390,7 +410,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_asin(simd_f128 x) {
     // compute asin using stable identity: asin(x) = atan(x / sqrt(1 - x^2))
     // this avoids cancellation issues in newton-raphson near boundaries
     simd_f128 one = simd_f128_from_double(1.0);
-    simd_f128 denom = simd_f128_sqrt(simd_f128_sub(one, simd_f128_sqr(x)));
+    simd_f128 denom = simd_f128_sqrt(simd_f128_sub(one, simd_f128_mul(x, x)));
     return simd_f128_atan(simd_f128_div(x, denom));
 }
 
@@ -399,7 +419,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_acos(simd_f128 x) {
     simd_f128_extract(x, &hi, &lo);
     
     // check boundaries for domain of arccos [-1, 1]
-    if (isnan(hi) || isinf(hi) || hi > 1.0 || hi < -1.0 || (hi == 1.0 && lo > 0.0) || (hi == -1.0 && lo < 0.0)) {
+    if (_simd_f128_isnan_double(hi) || _simd_f128_isinf_double(hi) || hi > 1.0 || hi < -1.0 || (hi == 1.0 && lo > 0.0) || (hi == -1.0 && lo < 0.0)) {
         return simd_f128_from_double(NAN);
     }
     if (hi == 1.0 && lo == 0.0) return simd_f128_from_double(0.0);
@@ -411,7 +431,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_acos(simd_f128 x) {
     // acos(x) = pi - acos(-x) for x < 0
     // this avoids cancellation issues near endpoints
     simd_f128 one = simd_f128_from_double(1.0);
-    simd_f128 num = simd_f128_sqrt(simd_f128_sub(one, simd_f128_sqr(x)));
+    simd_f128 num = simd_f128_sqrt(simd_f128_sub(one, simd_f128_mul(x, x)));
     
     if (hi > 0.0 || (hi == 0.0 && lo > 0.0)) {
         return simd_f128_atan(simd_f128_div(num, x));
@@ -496,13 +516,13 @@ SIMD_F128_INLINE simd_f128 simd_f128_sinh(simd_f128 x) {
     // hyperbolic sine calculation using exp(x) and exp(-x)
     double hi, lo;
     simd_f128_extract(x, &hi, &lo);
-    if (isnan(hi)) return x;
-    if (isinf(hi)) return x; // sinh(±inf) = ±inf
+    if (_simd_f128_isnan_double(hi)) return x;
+    if (_simd_f128_isinf_double(hi)) return x; // sinh(±inf) = ±inf
 
     // taylor series fallback for small x to avoid catastrophic cancellation
     // sinh(x) ~ x + x^3/6 + x^5/120
     if (fabs(hi) < 1e-4) {
-        simd_f128 x2 = simd_f128_sqr(x);
+        simd_f128 x2 = simd_f128_mul(x, x);
         simd_f128 x3 = simd_f128_mul(x2, x);
         simd_f128 x5 = simd_f128_mul(x3, x2);
         simd_f128 term2 = simd_f128_div(x3, simd_f128_from_double(6.0));
@@ -511,7 +531,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_sinh(simd_f128 x) {
     }
 
     simd_f128 ex = simd_f128_exp(x);
-    simd_f128 emx = simd_f128_div(simd_f128_from_double(1.0), ex);
+    simd_f128 emx = simd_f128_exp(simd_f128_neg(x)); // more accurate than 1/exp(x)
     return simd_f128_mul(simd_f128_sub(ex, emx), simd_f128_from_double(0.5));
 }
 
@@ -519,10 +539,10 @@ SIMD_F128_INLINE simd_f128 simd_f128_cosh(simd_f128 x) {
     // hyperbolic cosine calculation using exp(x) and exp(-x)
     double hi, lo;
     simd_f128_extract(x, &hi, &lo);
-    if (isnan(hi)) return x;
-    if (isinf(hi)) return simd_f128_from_double(INFINITY); // cosh(±inf) = +inf
+    if (_simd_f128_isnan_double(hi)) return x;
+    if (_simd_f128_isinf_double(hi)) return simd_f128_from_double(INFINITY); // cosh(±inf) = +inf
     simd_f128 ex = simd_f128_exp(x);
-    simd_f128 emx = simd_f128_div(simd_f128_from_double(1.0), ex);
+    simd_f128 emx = simd_f128_exp(simd_f128_neg(x)); // more accurate than 1/exp(x)
     return simd_f128_mul(simd_f128_add(ex, emx), simd_f128_from_double(0.5));
 }
 
@@ -530,22 +550,24 @@ SIMD_F128_INLINE simd_f128 simd_f128_tanh(simd_f128 x) {
     // hyperbolic tangent calculation using exp(x) and exp(-x)
     double hi, lo;
     simd_f128_extract(x, &hi, &lo);
-    if (isnan(hi)) return x;
-    if (isinf(hi)) return simd_f128_from_double(hi > 0.0 ? 1.0 : -1.0); // tanh(±inf) = ±1.0
+    if (_simd_f128_isnan_double(hi)) return x;
+    if (_simd_f128_isinf_double(hi)) return simd_f128_from_double(hi > 0.0 ? 1.0 : -1.0); // tanh(±inf) = ±1.0
 
     // taylor series fallback for small x to avoid catastrophic cancellation
-    // tanh(x) ~ x - x^3/3 + 2x^5/15
+    // tanh(x) ~ x - x^3/3 + 2x^5/15 - 17x^7/315
     if (fabs(hi) < 1e-4) {
-        simd_f128 x2 = simd_f128_sqr(x);
+        simd_f128 x2 = simd_f128_mul(x, x);
         simd_f128 x3 = simd_f128_mul(x2, x);
         simd_f128 x5 = simd_f128_mul(x3, x2);
+        simd_f128 x7 = simd_f128_mul(x5, x2);
         simd_f128 term2 = simd_f128_div(x3, simd_f128_from_double(-3.0));
         simd_f128 term3 = simd_f128_mul(x5, simd_f128_from_double(2.0 / 15.0));
-        return simd_f128_add(simd_f128_add(x, term2), term3);
+        simd_f128 term4 = simd_f128_mul(x7, simd_f128_from_double(-17.0 / 315.0));
+        return simd_f128_add(simd_f128_add(simd_f128_add(x, term2), term3), term4);
     }
 
     simd_f128 ex = simd_f128_exp(x);
-    simd_f128 emx = simd_f128_div(simd_f128_from_double(1.0), ex);
+    simd_f128 emx = simd_f128_exp(simd_f128_neg(x)); // more accurate than 1/exp(x)
     return simd_f128_div(simd_f128_sub(ex, emx), simd_f128_add(ex, emx));
 }
 
