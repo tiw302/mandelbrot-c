@@ -1,3 +1,7 @@
+/* mandelbrot.glsl.h
+ *
+ * compiled glsl shaders for gpu rendering.
+ */
 #pragma once
 /*
     #version:1# (machine generated, don't edit!)
