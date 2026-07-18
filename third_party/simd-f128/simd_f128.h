@@ -78,8 +78,10 @@
 #endif
 
 // msvc doesn't support gcc builtins like __builtin_expect, so we define a fallback macro
-#if defined(_MSC_VER) && !defined(__clang__) && !defined(__builtin_expect)
-#define __builtin_expect(x, y) (x)
+#if defined(_MSC_VER) && !defined(__clang__)
+    #ifndef __builtin_expect
+    #define __builtin_expect(x, y) (x)
+    #endif
 #endif
 
 
@@ -105,10 +107,19 @@
 #elif defined(SIMD_F128_USE_NEON)
     typedef float64x2_t simd_f128;
 #else
-    typedef struct {
+    // align to 16 bytes to ensure cross-language abi compatibility (e.g. rust ffi)
+    // even when compiling for pure scalar architectures.
+#if defined(_MSC_VER)
+    typedef __declspec(align(16)) struct {
         double hi;
         double lo;
     } simd_f128;
+#else
+    typedef struct {
+        double hi;
+        double lo;
+    } __attribute__((aligned(16))) simd_f128;
+#endif
 #endif
 
 //  █████  ██████  ██
@@ -143,6 +154,29 @@ extern "C" {
     #define SIMD_F128_INLINE SIMD_F128_DEVICE static inline __attribute__((always_inline))
 #endif
 
+// custom fast-math safe implementations of _simd_f128_isnan_double/_simd_f128_isinf_double/_simd_f128_signbit_double using bit-masks
+// to prevent compilers with -ffast-math from stripping validation guards
+SIMD_F128_INLINE int _simd_f128_isnan_double(double d) {
+    union { double d; uint64_t u; } val;
+    val.d = d;
+    return ((val.u & 0x7FF0000000000000ULL) == 0x7FF0000000000000ULL) && 
+           ((val.u & 0x000FFFFFFFFFFFFFULL) != 0ULL);
+}
+
+SIMD_F128_INLINE int _simd_f128_isinf_double(double d) {
+    union { double d; uint64_t u; } val;
+    val.d = d;
+    return ((val.u & 0x7FF0000000000000ULL) == 0x7FF0000000000000ULL) && 
+           ((val.u & 0x000FFFFFFFFFFFFFULL) == 0ULL);
+}
+
+SIMD_F128_INLINE int _simd_f128_signbit_double(double d) {
+    union { double d; uint64_t u; } val;
+    val.d = d;
+    return (val.u >> 63) != 0;
+}
+
+
 /* initialization routines:
  * from_double creates a 128-bit number from a standard 64-bit double by
  * placing it in the high component and zeroing the low component.
@@ -160,17 +194,13 @@ SIMD_F128_INLINE simd_f128 simd_f128_neg(simd_f128 x);
 SIMD_F128_INLINE simd_f128 simd_f128_add(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_sub(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_mul(simd_f128 a, simd_f128 b);
-SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a);
 SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b);
 SIMD_F128_INLINE simd_f128 simd_f128_sqrt(simd_f128 x);
 SIMD_F128_INLINE simd_f128 simd_f128_rsqrt(simd_f128 x);
 
-#ifdef __cplusplus
-}
-#endif
-
-// extraction
-// moved here to avoid odr issues in the c++ api section
+/* simd_f128_extract -- unpack a double-double into its hi and lo components.
+ * placed inside extern "C" so it gets proper c linkage when included from c++.
+ * always_inline keeps this zero-overhead even without lto. */
 SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 #if defined(SIMD_F128_USE_AVX2) || defined(SIMD_F128_USE_SSE2)
     *hi = _mm_cvtsd_f64(x);
@@ -186,6 +216,10 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
     *lo = x.lo;
 #endif
 }
+
+#ifdef __cplusplus
+}
+#endif
 
 
 // ██ ███    ███ ██████  ██
@@ -209,7 +243,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
     // dekker's split method to estimate the roundoff error of a double product.
     // used as a fallback when hardware fma instruction (fp_fast_fma) is not present.
     SIMD_F128_INLINE double simd_f128_exact_mul_err(double a, double b, double p) {
-#ifdef FP_FAST_FMA
+#if defined(FP_FAST_FMA) || defined(__FMA__) || defined(__ARM_FEATURE_FMA) || defined(__AVX2__)
         // use hardware fma if compiler flags detect fast hardware capability
         return fma(a, b, -p);
 #else
@@ -238,19 +272,6 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 #endif
     }
 
-    // dekker's split method to estimate the roundoff error of a double squaring.
-    // used as a fallback when hardware fma instruction is not present.
-    SIMD_F128_INLINE double simd_f128_exact_sqr_err(double a, double p) {
-#ifdef FP_FAST_FMA
-        return fma(a, a, -p);
-#else
-        double c = 134217729.0 * a;
-        double ahi = c - (c - a);
-        double alo = a - ahi;
-        return ((ahi * ahi - p) + 2.0 * ahi * alo) + alo * alo;
-#endif
-    }
-
 #if defined(SIMD_F128_USE_AVX2)
 
     SIMD_F128_INLINE simd_f128 simd_f128_from_double(double d) {
@@ -271,21 +292,19 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
     SIMD_F128_INLINE simd_f128 simd_f128_add(simd_f128 a, simd_f128 b) {
         // knuth's two-sum in full intrinsic form — stays in simd registers.
         // hi is in the low lane of each __m128d; lo is in the high lane.
-        __m128d ahi = _mm_unpacklo_pd(a, a);  // broadcast hi of a
-        __m128d bhi = _mm_unpacklo_pd(b, b);  // broadcast hi of b
-        __m128d s   = _mm_add_sd(ahi, bhi);
+        __m128d s   = _mm_add_sd(a, b);
 
         // _mm_cvtsd_f64: register-to-register move, zero latency, safe under -ffast-math.
-        // isinf guard prevents nan from (inf-inf) in the error term below.
-        if (__builtin_expect(isinf(_mm_cvtsd_f64(s)), 0))
+        // _simd_f128_isinf_double guard prevents nan from (inf-inf) in the error term below.
+        if (__builtin_expect(_simd_f128_isinf_double(_mm_cvtsd_f64(s)), 0))
             return _mm_unpacklo_pd(s, _mm_setzero_pd());
 
-        __m128d v   = _mm_sub_sd(s, ahi);
+        __m128d v   = _mm_sub_sd(s, a);
         __m128d e   = _mm_add_sd(
-                          _mm_sub_sd(ahi, _mm_sub_sd(s, v)),
-                          _mm_sub_sd(bhi, v));
-        __m128d alo = _mm_unpackhi_pd(a, a);  // broadcast lo of a
-        __m128d blo = _mm_unpackhi_pd(b, b);  // broadcast lo of b
+                          _mm_sub_sd(a, _mm_sub_sd(s, v)),
+                          _mm_sub_sd(b, v));
+        __m128d alo = _mm_unpackhi_pd(a, a);  // get lo of a
+        __m128d blo = _mm_unpackhi_pd(b, b);  // get lo of b
         __m128d t   = _mm_add_sd(_mm_add_sd(alo, blo), e);
         __m128d fh  = _mm_add_sd(s, t);
         __m128d fl  = _mm_sub_sd(t, _mm_sub_sd(fh, s));
@@ -294,18 +313,16 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
     SIMD_F128_INLINE simd_f128 simd_f128_sub(simd_f128 a, simd_f128 b) {
         // two-diff: direct subtraction analog of knuth's two-sum.
-        // avoids the neg + add chain and the extra isinf check on negation.
-        __m128d ahi = _mm_unpacklo_pd(a, a);
-        __m128d bhi = _mm_unpacklo_pd(b, b);
-        __m128d s   = _mm_sub_sd(ahi, bhi);
+        // avoids the neg + add chain and the extra _simd_f128_isinf_double check on negation.
+        __m128d s   = _mm_sub_sd(a, b);
 
-        if (__builtin_expect(isinf(_mm_cvtsd_f64(s)), 0))
+        if (__builtin_expect(_simd_f128_isinf_double(_mm_cvtsd_f64(s)), 0))
             return _mm_unpacklo_pd(s, _mm_setzero_pd());
 
-        __m128d v   = _mm_sub_sd(s, ahi);
+        __m128d v   = _mm_sub_sd(s, a);
         __m128d e   = _mm_sub_sd(
-                          _mm_sub_sd(ahi, _mm_sub_sd(s, v)),
-                          _mm_add_sd(bhi, v));
+                          _mm_sub_sd(a, _mm_sub_sd(s, v)),
+                          _mm_add_sd(b, v));
         __m128d alo = _mm_unpackhi_pd(a, a);
         __m128d blo = _mm_unpackhi_pd(b, b);
         __m128d t   = _mm_add_sd(_mm_sub_sd(alo, blo), e);
@@ -318,47 +335,20 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         // multiplication using hardware fused multiply-accumulate (fma):
         // fma computes (a * b) + c with only a single rounding step.
         // therefore, fma(a, b, - (a * b)) computes the exact roundoff error.
-        __m128d ahi = _mm_unpacklo_pd(a, a);
-        __m128d bhi = _mm_unpacklo_pd(b, b);
-        __m128d p = _mm_mul_sd(ahi, bhi);
+        __m128d p = _mm_mul_sd(a, b);
 
         // overflow guard: return early on infinite product to avoid nan propagation
-        if (__builtin_expect(isinf(_mm_cvtsd_f64(p)), 0))
+        if (__builtin_expect(_simd_f128_isinf_double(_mm_cvtsd_f64(p)), 0))
             return _mm_unpacklo_pd(p, _mm_setzero_pd());
 
-        __m128d e = _mm_fmsub_sd(ahi, bhi, p);
+        __m128d e = _mm_fmsub_sd(a, b, p);
 
         // integrate the cross-terms from the low parts
         __m128d alo = _mm_unpackhi_pd(a, a);
         __m128d blo = _mm_unpackhi_pd(b, b);
-        __m128d c1 = _mm_mul_sd(ahi, blo);
-        __m128d c2 = _mm_mul_sd(alo, bhi);
+        __m128d c1 = _mm_mul_sd(a, blo);
+        __m128d c2 = _mm_mul_sd(alo, b);
         e = _mm_add_sd(e, _mm_add_sd(c1, c2));
-
-        // normalize the final hi and lo parts
-        __m128d final_hi = _mm_add_sd(p, e);
-        __m128d final_lo = _mm_sub_sd(e, _mm_sub_sd(final_hi, p));
-
-        return _mm_unpacklo_pd(final_hi, final_lo);
-    }
-
-    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
-        // squaring using hardware fused multiply-accumulate (fma):
-        // fma computes (a * a) + c with only a single rounding step.
-        // therefore, fma(a, a, - (a * a)) computes the exact roundoff error.
-        __m128d ahi = _mm_unpacklo_pd(a, a);
-        __m128d p = _mm_mul_sd(ahi, ahi);
-
-        // overflow guard: return early on infinite product to avoid nan propagation
-        if (__builtin_expect(isinf(_mm_cvtsd_f64(p)), 0))
-            return _mm_unpacklo_pd(p, _mm_setzero_pd());
-
-        __m128d e = _mm_fmsub_sd(ahi, ahi, p);
-
-        // integrate the cross-terms from the low part
-        __m128d alo = _mm_unpackhi_pd(a, a);
-        __m128d c = _mm_mul_sd(ahi, alo);
-        e = _mm_add_sd(e, _mm_add_sd(c, c));
 
         // normalize the final hi and lo parts
         __m128d final_hi = _mm_add_sd(p, e);
@@ -381,11 +371,11 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         }
 
         // check division by infinity
-        if (__builtin_expect(isinf(bhi), 0)) {
-            if (isinf(ahi) || isnan(ahi) || isnan(bhi)) {
+        if (__builtin_expect(_simd_f128_isinf_double(bhi), 0)) {
+            if (_simd_f128_isinf_double(ahi) || _simd_f128_isnan_double(ahi) || _simd_f128_isnan_double(bhi)) {
                 return _mm_set_pd(0.0, NAN);
             }
-            double sign = (signbit(ahi) ^ signbit(bhi)) ? -0.0 : 0.0;
+            double sign = (_simd_f128_signbit_double(ahi) ^ _simd_f128_signbit_double(bhi)) ? -0.0 : 0.0;
             return _mm_set_pd(0.0, sign);
         }
 
@@ -420,7 +410,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         if (xhi < 0.0 || (xhi == 0.0 && xlo < 0.0)) {
             return _mm_set_pd(0.0, NAN);
         }
-        if (xhi == 0.0) return x;
+        if (xhi == 0.0 || _simd_f128_isinf_double(xhi)) return x;
 
         // initial hardware guess for 1/sqrt(xhi) is already correct to 1 ulp
         double y = 1.0 / sqrt(xhi);
@@ -473,7 +463,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double s = ahi + bhi;
 
         // overflow guard: check for infinite sum to avoid generating nan
-        if (isinf(s)) return _mm_set_pd(0.0, s);
+        if (_simd_f128_isinf_double(s)) return _mm_set_pd(0.0, s);
 
         // knuth's two-sum algorithm to compute roundoff error e
         double v = s - ahi;
@@ -493,7 +483,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         simd_f128_extract(b, &bhi, &blo);
 
         double s = ahi - bhi;
-        if (isinf(s)) return _mm_set_pd(0.0, s);
+        if (_simd_f128_isinf_double(s)) return _mm_set_pd(0.0, s);
 
         double v = s - ahi;
         double e = (ahi - (s - v)) - (bhi + v);
@@ -512,31 +502,11 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         // compute primary product and get exact error using dekker's fallback
         double p = ahi * bhi;
 
-        if (__builtin_expect(isinf(p), 0))
+        if (__builtin_expect(_simd_f128_isinf_double(p), 0))
             return _mm_set_pd(0.0, p);
 
         double e = simd_f128_exact_mul_err(ahi, bhi, p);
         e += (ahi * blo + alo * bhi);
-
-        // normalize the final hi/lo parts
-        double final_hi = p + e;
-        double final_lo = e - (final_hi - p);
-
-        return _mm_set_pd(final_lo, final_hi);
-    }
-
-    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
-        double ahi, alo;
-        simd_f128_extract(a, &ahi, &alo);
-
-        // compute primary product and get exact error using split fallback
-        double p = ahi * ahi;
-
-        if (__builtin_expect(isinf(p), 0))
-            return _mm_set_pd(0.0, p);
-
-        double e = simd_f128_exact_sqr_err(ahi, p);
-        e += 2.0 * ahi * alo;
 
         // normalize the final hi/lo parts
         double final_hi = p + e;
@@ -559,11 +529,11 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         }
 
         // check division by infinity
-        if (__builtin_expect(isinf(bhi), 0)) {
-            if (isinf(ahi) || isnan(ahi) || isnan(bhi)) {
+        if (__builtin_expect(_simd_f128_isinf_double(bhi), 0)) {
+            if (_simd_f128_isinf_double(ahi) || _simd_f128_isnan_double(ahi) || _simd_f128_isnan_double(bhi)) {
                 return _mm_set_pd(0.0, NAN);
             }
-            double sign = (signbit(ahi) ^ signbit(bhi)) ? -0.0 : 0.0;
+            double sign = (_simd_f128_signbit_double(ahi) ^ _simd_f128_signbit_double(bhi)) ? -0.0 : 0.0;
             return _mm_set_pd(0.0, sign);
         }
 
@@ -595,7 +565,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         if (xhi < 0.0 || (xhi == 0.0 && xlo < 0.0)) {
             return _mm_set_pd(0.0, NAN);
         }
-        if (xhi == 0.0) return x;
+        if (xhi == 0.0 || _simd_f128_isinf_double(xhi)) return x;
 
         // initial guess for 1/sqrt(x) is already correct to 1 ulp
         double y = 1.0 / sqrt(xhi);
@@ -639,7 +609,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double s = ahi + bhi;
 
         // check for overflow before calculating error
-        if (isinf(s)) return wasm_f64x2_make(s, 0.0);
+        if (_simd_f128_isinf_double(s)) return wasm_f64x2_make(s, 0.0);
 
         // knuth's two-sum algorithm
         double v = s - ahi;
@@ -658,7 +628,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         simd_f128_extract(b, &bhi, &blo);
 
         double s = ahi - bhi;
-        if (isinf(s)) return wasm_f64x2_make(s, 0.0);
+        if (_simd_f128_isinf_double(s)) return wasm_f64x2_make(s, 0.0);
 
         double v = s - ahi;
         double e = (ahi - (s - v)) - (bhi + v);
@@ -676,28 +646,11 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
         // double multiplication with error correction
         double p = ahi * bhi;
-        if (__builtin_expect(isinf(p), 0))
+        if (__builtin_expect(_simd_f128_isinf_double(p), 0))
             return wasm_f64x2_make(p, 0.0);
 
         double e = simd_f128_exact_mul_err(ahi, bhi, p);
         e += (ahi * blo + alo * bhi);
-
-        double final_hi = p + e;
-        double final_lo = e - (final_hi - p);
-
-        return wasm_f64x2_make(final_hi, final_lo);
-    }
-
-    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
-        double ahi, alo;
-        simd_f128_extract(a, &ahi, &alo);
-
-        double p = ahi * ahi;
-        if (__builtin_expect(isinf(p), 0))
-            return wasm_f64x2_make(p, 0.0);
-
-        double e = simd_f128_exact_sqr_err(ahi, p);
-        e += 2.0 * ahi * alo;
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);
@@ -719,11 +672,11 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         }
 
         // check division by infinity
-        if (__builtin_expect(isinf(bhi), 0)) {
-            if (isinf(ahi) || isnan(ahi) || isnan(bhi)) {
+        if (__builtin_expect(_simd_f128_isinf_double(bhi), 0)) {
+            if (_simd_f128_isinf_double(ahi) || _simd_f128_isnan_double(ahi) || _simd_f128_isnan_double(bhi)) {
                 return wasm_f64x2_make(NAN, 0.0);
             }
-            double sign = (signbit(ahi) ^ signbit(bhi)) ? -0.0 : 0.0;
+            double sign = (_simd_f128_signbit_double(ahi) ^ _simd_f128_signbit_double(bhi)) ? -0.0 : 0.0;
             return wasm_f64x2_make(sign, 0.0);
         }
 
@@ -755,7 +708,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         if (xhi < 0.0 || (xhi == 0.0 && xlo < 0.0)) {
             return wasm_f64x2_make(NAN, 0.0);
         }
-        if (xhi == 0.0) return x;
+        if (xhi == 0.0 || _simd_f128_isinf_double(xhi)) return x;
 
         // initial guess for 1/sqrt(x) is already correct to 1 ulp
         double y = 1.0 / sqrt(xhi);
@@ -802,7 +755,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double s = ahi + bhi;
 
         // check for overflow to skip error tracking
-        if (isinf(s)) {
+        if (_simd_f128_isinf_double(s)) {
             float64x2_t r = vdupq_n_f64(0.0);
             return vsetq_lane_f64(s, r, 0);
         }
@@ -826,7 +779,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double blo = vgetq_lane_f64(b, 1);
 
         double s = ahi - bhi;
-        if (isinf(s)) {
+        if (_simd_f128_isinf_double(s)) {
             float64x2_t r = vdupq_n_f64(0.0);
             return vsetq_lane_f64(s, r, 0);
         }
@@ -848,7 +801,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double ylo = vgetq_lane_f64(b, 1);
 
         double z = xhi * yhi;
-        if (__builtin_expect(isinf(z), 0)) {
+        if (__builtin_expect(_simd_f128_isinf_double(z), 0)) {
             float64x2_t r_res = vdupq_n_f64(0.0);
             return vsetq_lane_f64(z, r_res, 0);
         }
@@ -861,26 +814,6 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
         float64x2_t r = vdupq_n_f64(final_lo);
         return vsetq_lane_f64(final_hi, r, 0);
-    }
-
-    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
-        double xhi = vgetq_lane_f64(a, 0);
-        double xlo = vgetq_lane_f64(a, 1);
-
-        double z = xhi * xhi;
-        if (__builtin_expect(isinf(z), 0)) {
-            float64x2_t r_res = vdupq_n_f64(0.0);
-            return vsetq_lane_f64(z, r_res, 0);
-        }
-
-        double e = simd_f128_exact_sqr_err(xhi, z);
-        e += 2.0 * xhi * xlo;
-
-        double final_hi = z + e;
-        double final_lo = e - (final_hi - z);
-
-        float64x2_t r_final = vdupq_n_f64(final_lo);
-        return vsetq_lane_f64(final_hi, r_final, 0);
     }
 
     SIMD_F128_INLINE simd_f128 simd_f128_div(simd_f128 a, simd_f128 b) {
@@ -899,12 +832,12 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         }
 
         // check division by infinity
-        if (__builtin_expect(isinf(bhi), 0)) {
+        if (__builtin_expect(_simd_f128_isinf_double(bhi), 0)) {
             float64x2_t r_res = vdupq_n_f64(0.0);
-            if (isinf(ahi) || isnan(ahi) || isnan(bhi)) {
+            if (_simd_f128_isinf_double(ahi) || _simd_f128_isnan_double(ahi) || _simd_f128_isnan_double(bhi)) {
                 return vsetq_lane_f64(NAN, r_res, 0);
             }
-            double sign = (signbit(ahi) ^ signbit(bhi)) ? -0.0 : 0.0;
+            double sign = (_simd_f128_signbit_double(ahi) ^ _simd_f128_signbit_double(bhi)) ? -0.0 : 0.0;
             return vsetq_lane_f64(sign, r_res, 0);
         }
 
@@ -938,7 +871,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
             float64x2_t r_res = vdupq_n_f64(0.0);
             return vsetq_lane_f64(NAN, r_res, 0);
         }
-        if (xhi == 0.0) return x;
+        if (xhi == 0.0 || _simd_f128_isinf_double(xhi)) return x;
 
         // initial guess for 1/sqrt(x) is already correct to 1 ulp
         double y = 1.0 / sqrt(xhi);
@@ -980,7 +913,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         double s = a.hi + b.hi;
 
         // overflow guard: return early on infinite sum to avoid nan propagation
-        if (isinf(s)) {
+        if (_simd_f128_isinf_double(s)) {
             simd_f128 res = {s, 0.0};
             return res;
         }
@@ -1000,7 +933,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
 
     SIMD_F128_INLINE simd_f128 simd_f128_sub(simd_f128 a, simd_f128 b) {
         double s = a.hi - b.hi;
-        if (isinf(s)) {
+        if (_simd_f128_isinf_double(s)) {
             simd_f128 res = {s, 0.0};
             return res;
         }
@@ -1017,32 +950,13 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         // scalar double-double multiplication:
         // compute base product, estimate its exact error, add cross-terms, and normalize
         double p = a.hi * b.hi;
-        if (__builtin_expect(isinf(p), 0)) {
+        if (__builtin_expect(_simd_f128_isinf_double(p), 0)) {
             simd_f128 res = {p, 0.0};
             return res;
         }
 
         double e = simd_f128_exact_mul_err(a.hi, b.hi, p);
         e += (a.hi * b.lo + a.lo * b.hi);
-
-        double final_hi = p + e;
-        double final_lo = e - (final_hi - p);
-
-        simd_f128 res = {final_hi, final_lo};
-        return res;
-    }
-
-    SIMD_F128_INLINE simd_f128 simd_f128_sqr(simd_f128 a) {
-        // scalar double-double squaring:
-        // compute base product, estimate its exact error, add cross-term, and normalize
-        double p = a.hi * a.hi;
-        if (__builtin_expect(isinf(p), 0)) {
-            simd_f128 res = {p, 0.0};
-            return res;
-        }
-
-        double e = simd_f128_exact_sqr_err(a.hi, p);
-        e += 2.0 * a.hi * a.lo;
 
         double final_hi = p + e;
         double final_lo = e - (final_hi - p);
@@ -1062,12 +976,12 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
         }
 
         // check division by infinity
-        if (__builtin_expect(isinf(b.hi), 0)) {
-            if (isinf(a.hi) || isnan(a.hi) || isnan(b.hi)) {
+        if (__builtin_expect(_simd_f128_isinf_double(b.hi), 0)) {
+            if (_simd_f128_isinf_double(a.hi) || _simd_f128_isnan_double(a.hi) || _simd_f128_isnan_double(b.hi)) {
                 simd_f128 res = {NAN, 0.0};
                 return res;
             }
-            double sign = (signbit(a.hi) ^ signbit(b.hi)) ? -0.0 : 0.0;
+            double sign = (_simd_f128_signbit_double(a.hi) ^ _simd_f128_signbit_double(b.hi)) ? -0.0 : 0.0;
             simd_f128 res = {sign, 0.0};
             return res;
         }
@@ -1099,7 +1013,7 @@ SIMD_F128_INLINE void simd_f128_extract(simd_f128 x, double* hi, double* lo) {
             simd_f128 res = {NAN, 0.0};
             return res;
         }
-        if (x.hi == 0.0) return x;
+        if (x.hi == 0.0 || _simd_f128_isinf_double(x.hi)) return x;
 
         // initial guess is already correct to 1 ulp
         double y = 1.0 / sqrt(x.hi);
