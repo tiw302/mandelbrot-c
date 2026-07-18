@@ -43,7 +43,7 @@
 #define BN_BASE_MASK 0xFFFFFFFFULL
 
 typedef struct {
-    uint32_t limbs[BN_LIMBS]; // little-endian limb array (limbs[0] = least significant)
+    uint32_t limbs[BN_LIMBS];  // little-endian limb array (limbs[0] = least significant)
     int sign;                  // +1 or -1 (zero is represented as sign=1, all limbs zero)
 } BigNum;
 
@@ -83,8 +83,8 @@ int bn_cmp_mag(const BigNum* a, const BigNum* b);
  * helpers for the mandelbrot iteration loop
  * ---------------------------------------------------------------------- */
 
-// computes the squared magnitude |z|^2 = z_re^2 + z_im^2 and returns as double
-// used for escape radius check (full bignum comparison not needed here)
+/* computes the squared magnitude |z|^2 = z_re^2 + z_im^2 and returns as double * used for escape
+ * radius check (full bignum comparison not needed here) */
 double bn_mag_sq_to_double(const BigNum* z_re, const BigNum* z_im);
 
-#endif // bignum_h
+#endif  // bignum_h
