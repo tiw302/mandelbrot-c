@@ -5,12 +5,14 @@
  */
 
 #include "hud_sdl.h"
+
+#include <stdio.h>
+
 #include "color.h"
 #include "config.h"
+#include "fractal.h"
 #include "renderer.h"
 #include "screenshot.h"
-#include "fractal.h"
-#include <stdio.h>
 
 static void render_text(SDL_Renderer* renderer, TTF_Font* font, const char* text, int x, int y,
                         SDL_Color color) {
@@ -54,17 +56,29 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* stat
         render_text(renderer, font, "[ Keyboard Controls Guide ]", tx, ty, title_color);
         ty += line_h * 2;
 
-        render_text(renderer, font, "H / F1       : Toggle this Help Menu", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "ESC / Q      : Quit Application", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "Ctrl + Z     : Undo Camera Zoom/Pan", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "R            : Reset View", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "P / 0-9      : Cycle / Select Color Palette", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "UP / DOWN    : Adjust Iterations (Shift x10)", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "[ / ]        : Decrease / Increase CPU Threads", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "E            : Toggle 128-bit CPU Precision", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "J            : Toggle Julia Explorer Mode", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "B            : Toggle Burning Ship Mode", tx, ty, white); ty += line_h;
-        render_text(renderer, font, "S            : Capture Screenshot", tx, ty, white); ty += line_h;
+        render_text(renderer, font, "H / F1       : Toggle this Help Menu", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "ESC / Q      : Quit Application", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "Ctrl + Z     : Undo Camera Zoom/Pan", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "R            : Reset View", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "P / 0-9      : Cycle / Select Color Palette", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "UP / DOWN    : Adjust Iterations (Shift x10)", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "[ / ]        : Decrease / Increase CPU Threads", tx, ty,
+                    white);
+        ty += line_h;
+        render_text(renderer, font, "E            : Toggle 128-bit CPU Precision", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "J            : Toggle Julia Explorer Mode", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "B            : Toggle Burning Ship Mode", tx, ty, white);
+        ty += line_h;
+        render_text(renderer, font, "S            : Capture Screenshot", tx, ty, white);
+        ty += line_h;
         render_text(renderer, font, "V            : Start / Stop Video Recording", tx, ty, white);
         return;
     }
@@ -76,9 +90,7 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* stat
 
     const char* engine_type = cpu_precision_128 ? "CPU (128-bit)" : "CPU (64-bit)";
     const FractalDefinition* fd = get_fractal_by_mode(state->base_fractal);
-    const char* mode_name = state->julia_mode
-                                ? "Julia"
-                                : (fd ? fd->display_name : "Unknown");
+    const char* mode_name = state->julia_mode ? "Julia" : (fd ? fd->display_name : "Unknown");
 
     snprintf(buf, sizeof(buf), "[ENGINE] %s | Mode: %s | Threads: %d | Render: %u ms", engine_type,
              mode_name, state->thread_count, state->render_time_ms);
@@ -152,7 +164,8 @@ void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* stat
         SDL_RenderFillRect(renderer, &t_pb);
 
         char progress_msg[64];
-        snprintf(progress_msg, sizeof(progress_msg), "Generating 8K: %d%%", state->mega_screenshot_progress);
+        snprintf(progress_msg, sizeof(progress_msg), "Generating 8K: %d%%",
+                 state->mega_screenshot_progress);
         int tx = (int)trx + 20;
         int ty = (int)try + 10;
         render_text(renderer, font, progress_msg, tx, ty, white);
