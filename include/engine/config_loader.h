@@ -1,3 +1,8 @@
+/* config_loader.h
+ *
+ * json configuration file parser and loader.
+ */
+
 #ifndef CONFIG_LOADER_H
 #define CONFIG_LOADER_H
 
