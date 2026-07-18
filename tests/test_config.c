@@ -3,6 +3,7 @@
  * unit tests for ini configuration parser.
  * validates loading, key-value parsing, and range clamping limits.
  */
+
 #include <stdio.h>
 #include <stdlib.h>
 
@@ -17,7 +18,7 @@
         exit(1);                                                              \
     }
 
-/* 
+/*
  * [TEST CASE] config defaults
  * tests the functionality of config defaults.
  */
@@ -26,7 +27,6 @@ void test_config_defaults(void) {
 
     // we will just read whatever is in settings.json (or recreate it if missing)
     load_config_from_file("settings.json");
-
 
     // check bounds enforcement
     int threads = get_config_default_thread_count();
