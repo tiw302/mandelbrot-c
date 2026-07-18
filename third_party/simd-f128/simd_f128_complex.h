@@ -63,13 +63,19 @@ SIMD_F128_INLINE simd_f128_complex simd_f128_complex_div(simd_f128_complex a, si
     if (simd_f128_gt(simd_f128_abs(b.real), simd_f128_abs(b.imag))) {
         simd_f128 r = simd_f128_div(b.imag, b.real);
         simd_f128 den = simd_f128_add(b.real, simd_f128_mul(r, b.imag));
-        res.real = simd_f128_div(simd_f128_add(a.real, simd_f128_mul(a.imag, r)), den);
-        res.imag = simd_f128_div(simd_f128_sub(a.imag, simd_f128_mul(a.real, r)), den);
+        
+        // calc 1/den once to avoid 2 expensive double-double divisions
+        simd_f128 inv_den = simd_f128_div(simd_f128_from_double(1.0), den);
+        res.real = simd_f128_mul(simd_f128_add(a.real, simd_f128_mul(a.imag, r)), inv_den);
+        res.imag = simd_f128_mul(simd_f128_sub(a.imag, simd_f128_mul(a.real, r)), inv_den);
     } else {
         simd_f128 r = simd_f128_div(b.real, b.imag);
         simd_f128 den = simd_f128_add(b.imag, simd_f128_mul(r, b.real));
-        res.real = simd_f128_div(simd_f128_add(simd_f128_mul(a.real, r), a.imag), den);
-        res.imag = simd_f128_div(simd_f128_sub(simd_f128_mul(a.imag, r), a.real), den);
+        
+        // calc 1/den once to avoid 2 expensive double-double divisions
+        simd_f128 inv_den = simd_f128_div(simd_f128_from_double(1.0), den);
+        res.real = simd_f128_mul(simd_f128_add(simd_f128_mul(a.real, r), a.imag), inv_den);
+        res.imag = simd_f128_mul(simd_f128_sub(simd_f128_mul(a.imag, r), a.real), inv_den);
     }
     return res;
 }
@@ -77,7 +83,7 @@ SIMD_F128_INLINE simd_f128_complex simd_f128_complex_div(simd_f128_complex a, si
 // calculate absolute square magnitude: |z|^2 = real^2 + imag^2
 // optimized for fractal rendering escape time checks (saves a square root)
 SIMD_F128_INLINE simd_f128 simd_f128_complex_abs_sqr(simd_f128_complex a) {
-    return simd_f128_add(simd_f128_sqr(a.real), simd_f128_sqr(a.imag));
+    return simd_f128_add(simd_f128_mul(a.real, a.real), simd_f128_mul(a.imag, a.imag));
 }
 
 // calculate the magnitude (absolute value) of a complex number
