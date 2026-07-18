@@ -22,8 +22,7 @@ double mandelbrot_check_bignum(const BigNum* c_re, const BigNum* c_im, int max_i
  *
  * returns the orbit length (may be less than max_iterations if the reference escapes early).
  * the orbit values are stored as double for gpu texture upload. */
-int mandelbrot_bignum_orbit(const BigNum* c_re, const BigNum* c_im,
-                            int max_iterations,
+int mandelbrot_bignum_orbit(const BigNum* c_re, const BigNum* c_im, int max_iterations,
                             double* orbit_re_out, double* orbit_im_out);
 
-#endif // mandelbrot_bignum_h
+#endif  // mandelbrot_bignum_h
