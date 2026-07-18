@@ -20,20 +20,9 @@
 #include <stdio.h>
 #include <stdlib.h>
 
-#include "desktop_gpu_vs.h"
-#include "desktop_gpu_fs_gpu.h"
+#include "shaders.h"
 
 #define BENCHMARK_FRAMES 200
-
-// mirrors the glsl layout exactly to ensure correct memory mapping.
-typedef struct {
-    float center_hi[2];
-    float center_lo[2];
-    float julia_c_hi[2];
-    float julia_c_lo[2];
-    float zoom, iters, aspect;
-    float fractal_type, palette, high_precision;
-} params_t;
 
 static struct {
     sg_pipeline pip_gpu;
@@ -59,24 +48,7 @@ static void init(void) {
         .usage = {.index_buffer = true, .immutable = true}, .data = SG_RANGE(idx)});
 
     // build gpu compute pipeline
-    sg_shader shd_gpu = sg_make_shader(&(sg_shader_desc){
-        .attrs[0].glsl_name = "pos",
-        .attrs[1].glsl_name = "uv_in",
-        .vertex_func.source = dg_vs,
-        .fragment_func.source = dg_fs_gpu,
-        .uniform_blocks[0] = {
-            .stage = SG_SHADERSTAGE_FRAGMENT,
-            .size = sizeof(params_t),
-            .glsl_uniforms = {{.glsl_name = "u_center_hi", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_center_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c_hi", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_julia_c_lo", .type = SG_UNIFORMTYPE_FLOAT2},
-                              {.glsl_name = "u_zoom", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_iters", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_aspect", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_fractal_type", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_palette", .type = SG_UNIFORMTYPE_FLOAT},
-                              {.glsl_name = "u_high_precision", .type = SG_UNIFORMTYPE_FLOAT}}}});
+    sg_shader shd_gpu = sg_make_shader(desktop_gpu_shader_desc(sg_query_backend()));
     state.pip_gpu =
         sg_make_pipeline(&(sg_pipeline_desc){.shader = shd_gpu,
                                              .layout.attrs[0].format = SG_VERTEXFORMAT_FLOAT2,
@@ -118,19 +90,19 @@ static void frame(void) {
     sg_apply_pipeline(state.pip_gpu);
     sg_apply_bindings(&state.bind);
 
-    params_t p = {
-        .center_hi = {-0.5f, 0.0f},
-        .center_lo = {0.0f, 0.0f},
-        .julia_c_hi = {0.0f, 0.0f},
-        .julia_c_lo = {0.0f, 0.0f},
-        .zoom = 2.0f,
-        .iters = 1000.0f,
-        .aspect = (float)state.win_w / state.win_h,
-        .fractal_type = 0.0f,  // mandelbrot
-        .palette = 0.0f,
-        .high_precision = 0.0f  // 32-bit test for now
+    params_t_t p = {
+        .u_center_hi = {-0.5f, 0.0f},
+        .u_center_lo = {0.0f, 0.0f},
+        .u_julia_c_hi = {0.0f, 0.0f},
+        .u_julia_c_lo = {0.0f, 0.0f},
+        .u_zoom = 2.0f,
+        .u_iters = 1000.0f,
+        .u_aspect = (float)state.win_w / state.win_h,
+        .u_fractal_type = 0.0f,  // mandelbrot
+        .u_palette = 0.0f,
+        .u_high_precision = 0.0f  // 32-bit test for now
     };
-    sg_apply_uniforms(0, &SG_RANGE(p));
+    sg_apply_uniforms(UB_params_t, &SG_RANGE(p));
     sg_draw(0, 6, 1);
     sg_end_pass();
     sg_commit();
