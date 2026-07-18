@@ -1,3 +1,7 @@
+/* tour.h
+ *
+ * cinematic camera tour interpolation system.
+ */
 #ifndef TOUR_H
 #define TOUR_H
 
@@ -5,7 +9,7 @@
 
 #include "renderer.h"
 
-// Tour default durations
+// tour default durations
 #define TOUR_ZOOM_DEPTH 6000.0
 #define TOUR_PAN_MS 1800.0
 #define TOUR_ZOOM_IN_MS 4000.0
@@ -55,8 +59,8 @@ typedef struct {
 } JuliaTourState;
 
 // core update logic — called once per frame to advance animations
-void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fractal);
-void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now);
+void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fractal, double speed);
+void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now, double speed);
 
 // lifecycle management for mandelbrot tours
 void start_tour(TourState* state, ViewState* view, int base_fractal);
@@ -73,5 +77,6 @@ int get_num_tour_targets(int base_fractal);
 double get_tour_target_re(const TourState* state, int base_fractal);
 double get_tour_target_im(const TourState* state, int base_fractal);
 int get_julia_tour_target_idx(const JuliaTourState* state);
+int get_num_julia_tour_targets(void);
 
 #endif
