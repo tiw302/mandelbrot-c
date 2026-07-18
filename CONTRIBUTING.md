@@ -98,6 +98,7 @@ ctest --test-dir build_cpu_test --output-on-failure
 | `test_config` | `settings.txt` parsing and default fallback values |
 | `test_app_state` | App state serialization and restoration |
 | `test_perturbation` | Perturbation theory math consistency |
+| `test_bignum` | Arbitrary-precision BigNum math |
 
 > **AVX2 note:** SIMD consistency tests are automatically skipped on machines without AVX2 support.
 
@@ -123,9 +124,23 @@ The CI `Formatting` workflow will fail if any file is not properly formatted.
 
 - **C99 only** — no C11/C23 features, no C++
 - **No external runtime dependencies** in `src/core/` — pure C math only
-- Match the existing comment style (`/* block comments */` for file headers, `//` for inline)
 - Keep functions focused and small — prefer extracting helpers over long functions
-- AVX2 intrinsic code must always have a scalar fallback path
+- AVX2/AVX512 intrinsic code must always have a scalar fallback path
+
+### Commenting Style
+This codebase enforces a specific, terse comment style:
+- **Block vs Inline**: Use `/* ... */` for explanations that are long, multi-line, or describe *why* something is done. Use `//` for short, single-line notes.
+- **ASCII & Decorations**: Exception: never touch `//` used for ascii art, file headers, section banners/dividers, or decorative separators — leave those exactly as-is even if long.
+- **File Headers**: Every `.c` and `.h` file must start with a block comment indicating its filename, followed by a short description.
+- **No Redundancy**: Do not add comments to lines that are self-explanatory from naming alone. Do not state the obvious.
+- **No "AI-Sounding" Tone**: Keep comments short and to the point. Avoid overly formal phrasing like "this function is responsible for...". Flag and rewrite any comment that sounds machine-generated.
+- **Tone Matching**: When unsure whether a comment is "ai-sounding", compare it against other genuinely human comments already in the same file/module and match that tone and length.
+
+### AI Workflow Guidelines
+For AI assistants (like Cursor, Gemini, Copilot) working on this repository:
+- **Read These Rules First**: Always adhere to the architectural constraints and the strict commenting style above.
+- **Iterative Changes**: Work file-by-file when making sweeping changes, showing a short diff-style summary before moving to the next file.
+- **Minimalism**: Keep changes minimalistic and focused on the user's requirements. Do not over-engineer.
 
 ---
 
