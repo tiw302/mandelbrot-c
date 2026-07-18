@@ -1,13 +1,18 @@
+/* color.h
+ *
+ * color palette definitions and blending functions.
+ */
+
 #ifndef CORE_COLOR_H
 #define CORE_COLOR_H
 
 #include <stdint.h>
 
-// initializes the color palette lookup table from palettes.json.
-// returns 1 on success, 0 on failure.
+/* initializes the color palette lookup table for the given palette index. * returns 1 on success, 0
+ * on failure. */
 int init_color_palette(int max_iterations, int palette_idx);
 
-// gets the number of available palettes loaded from json
+// gets the number of available built-in palettes
 int get_palette_count(void);
 
 // gets the name of the given palette index
