@@ -23,9 +23,11 @@
  */
 
 #include "mandelbrot_bignum.h"
-#include "bignum.h"
+
 #include <stdlib.h>
 #include <string.h>
+
+#include "bignum.h"
 
 /* computes the mandelbrot escape iteration count for a single coordinate (c_re, c_im)
  * using arbitrary-precision BigNum arithmetic.
@@ -42,7 +44,7 @@ double mandelbrot_check_bignum(const BigNum* c_re, const BigNum* c_im, int max_i
 
     // temps for intermediate calculations to avoid aliasing issues
     BigNum z_re2, z_im2, z_re_zim, z_re_next, z_im_next, z_re_zim2;
-    const double escape_radius_sq = 10.0 * 10.0; // matches ESCAPE_RADIUS in config.h
+    const double escape_radius_sq = 10.0 * 10.0;  // matches ESCAPE_RADIUS in config.h
 
     int iterations = 0;
 
@@ -90,8 +92,7 @@ double mandelbrot_check_bignum(const BigNum* c_re, const BigNum* c_im, int max_i
  *
  * note: the orbit is stored as double for gpu texture upload, same as perturbation_compute().
  * the bignum precision is only used during the iteration itself. */
-int mandelbrot_bignum_orbit(const BigNum* c_re, const BigNum* c_im,
-                            int max_iterations,
+int mandelbrot_bignum_orbit(const BigNum* c_re, const BigNum* c_im, int max_iterations,
                             double* orbit_re_out, double* orbit_im_out) {
     BigNum z_re, z_im;
     bn_zero(&z_re);
