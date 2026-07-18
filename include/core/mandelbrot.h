@@ -2,7 +2,8 @@
  *
  * provides scalar, simd-vectorized, and high-precision 128-bit variants
  * of the mandelbrot escape-time algorithm. all functions return a smooth
- * (fractional) iteration count for continuous coloring. */
+ * (fractional) iteration count for continuous coloring.
+ */
 
 #ifndef MANDELBROT_H
 #define MANDELBROT_H
@@ -38,8 +39,8 @@ void mandelbrot_check_avx512(__m512d cre, __m512d cim, int max_iterations, doubl
 void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, double* results);
 #endif
 
-// 128-bit double-double path — single pixel, extreme precision.
-// simd_f128 type is provided by core_math.h when USE_SIMD_F128 is defined.
+/* 128-bit double-double path — single pixel, extreme precision. * simd_f128 type is provided by
+ * core_math.h when USE_SIMD_F128 is defined. */
 #ifdef USE_SIMD_F128
 double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations);
 #ifdef __AVX2__
