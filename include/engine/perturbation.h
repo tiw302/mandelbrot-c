@@ -27,9 +27,9 @@ typedef struct {
 
 // represents the stored reference orbit path for the center coordinate
 typedef struct {
-    ComplexFloat* zn; // array of orbit points z_0, z_1, ..., z_n
-    SACoeff* sa;      // taylor series approximation coefficients
-    int len;          // length of the orbit path before escaping
+    ComplexFloat* zn;  // array of orbit points z_0, z_1, ..., z_n
+    SACoeff* sa;       // taylor series approximation coefficients
+    int len;           // length of the orbit path before escaping
 } RefOrbit;
 
 /* computes the reference orbit starting at z0 = 0.0 for the given center coordinates.
@@ -40,4 +40,26 @@ RefOrbit* perturbation_compute(precise_float center_re, precise_float center_im,
 // safely frees the reference orbit array and container
 void perturbation_free(RefOrbit* orbit);
 
-#endif // perturbation_h
+/* same as perturbation_compute() but uses BigNum arithmetic for the reference orbit.
+ * for use when zoom < BIGNUM_ZOOM_THRESHOLD, where double precision has lost all bits.
+ * the output RefOrbit is identical — orbit values are downcast to double for gpu upload. */
+RefOrbit* perturbation_compute_bignum(double center_re, double center_im, int max_iter);
+
+/* result from find_best_ref_point() */
+typedef struct {
+    precise_float ref_re;
+    precise_float ref_im;
+    float offset_x;  // normalized screen offset of chosen point [-0.5, 0.5]
+    float offset_y;
+} RefPoint;
+
+/*
+ * scans a grid of candidate points within the current view and picks the one
+ * with the highest escape iteration count. favoring deep points avoids placing
+ * the reference orbit on a pixel that escapes early, which would produce
+ * blocky artifacts across the whole frame.
+ */
+RefPoint find_best_ref_point(precise_float center_re, precise_float center_im, precise_float zoom,
+                             precise_float aspect, int max_iters, int grid_size);
+
+#endif  // perturbation_h
