@@ -12,7 +12,6 @@
 #include "renderer.h"
 
 #include <math.h>
-#include <pthread.h>
 #include <stdatomic.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -20,19 +19,66 @@
 #include <string.h>
 
 #include "config.h"
-#include "core_math.h"
 #include "config_loader.h"
+#include "core_math.h"
+#include "fractal.h"
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
 #include <emscripten/threading.h>
 #endif
 
+
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
-#elif defined(__APPLE__) || defined(__MACH__) || defined(__linux__) || defined(__FreeBSD__)
+typedef HANDLE sys_thread_t;
+typedef CRITICAL_SECTION sys_mutex_t;
+typedef CONDITION_VARIABLE sys_cond_t;
+#define SYS_THREAD_FUNC DWORD WINAPI
+#define SYS_THREAD_RETURN(val) return (DWORD)(uintptr_t)(val)
+static inline int sys_mutex_init(sys_mutex_t* m) { InitializeCriticalSection(m); return 0; }
+static inline void sys_mutex_lock(sys_mutex_t* m) { EnterCriticalSection(m); }
+static inline void sys_mutex_unlock(sys_mutex_t* m) { LeaveCriticalSection(m); }
+static inline void sys_mutex_destroy(sys_mutex_t* m) { DeleteCriticalSection(m); }
+static inline int sys_cond_init(sys_cond_t* c) { InitializeConditionVariable(c); return 0; }
+static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) { SleepConditionVariableCS(c, m, INFINITE); }
+static inline void sys_cond_broadcast(sys_cond_t* c) { WakeAllConditionVariable(c); }
+static inline void sys_cond_signal(sys_cond_t* c) { WakeConditionVariable(c); }
+static inline void sys_cond_destroy(sys_cond_t* c) { (void)c; }
+static inline int sys_thread_create(sys_thread_t* t, SYS_THREAD_FUNC (*func)(void*), void* arg) {
+    *t = CreateThread(NULL, 0, func, arg, 0, NULL);
+    return *t ? 0 : 1;
+}
+static inline int sys_thread_join(sys_thread_t t) {
+    WaitForSingleObject(t, INFINITE);
+    CloseHandle(t);
+    return 0;
+}
+#else
+#include <pthread.h>
 #include <unistd.h>
+typedef pthread_t sys_thread_t;
+typedef pthread_mutex_t sys_mutex_t;
+typedef pthread_cond_t sys_cond_t;
+#define SYS_THREAD_FUNC void*
+#define SYS_THREAD_RETURN(val) return (val)
+static inline int sys_mutex_init(sys_mutex_t* m) { return pthread_mutex_init(m, NULL); }
+static inline void sys_mutex_lock(sys_mutex_t* m) { pthread_mutex_lock(m); }
+static inline void sys_mutex_unlock(sys_mutex_t* m) { pthread_mutex_unlock(m); }
+static inline void sys_mutex_destroy(sys_mutex_t* m) { pthread_mutex_destroy(m); }
+static inline int sys_cond_init(sys_cond_t* c) { return pthread_cond_init(c, NULL); }
+static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) { pthread_cond_wait(c, m); }
+static inline void sys_cond_broadcast(sys_cond_t* c) { pthread_cond_broadcast(c); }
+static inline void sys_cond_signal(sys_cond_t* c) { pthread_cond_signal(c); }
+static inline void sys_cond_destroy(sys_cond_t* c) { pthread_cond_destroy(c); }
+static inline int sys_thread_create(sys_thread_t* t, SYS_THREAD_FUNC (*func)(void*), void* arg) {
+    return pthread_create(t, NULL, func, arg);
+}
+static inline int sys_thread_join(sys_thread_t t) {
+    return pthread_join(t, NULL);
+}
 #endif
+
 
 /* persistent thread pool
  *
@@ -75,15 +121,15 @@ struct RendererContext {
     int requested_128bit;
 
     // synchronization
-    pthread_mutex_t mutex;
-    pthread_mutex_t dispatch_mutex;
-    pthread_cond_t work_ready;  // main -> workers: new frame posted
-    pthread_cond_t work_done;   // workers -> main: all rows consumed
+    sys_mutex_t mutex;
+    sys_mutex_t dispatch_mutex;
+    sys_cond_t work_ready;  // main -> workers: new frame posted
+    sys_cond_t work_done;   // workers -> main: all rows consumed
     int frame_id;               // monotonically increasing, workers compare against last seen
     int threads_idle;           // workers that finished current frame
 
     // threads list
-    pthread_t* threads;
+    sys_thread_t* threads;
     int actual_thread_count;
     int preset_thread_count;
 };
@@ -91,7 +137,11 @@ struct RendererContext {
 // cpu core detection
 static int get_cpu_cores(void) {
 #if defined(__EMSCRIPTEN__)
+#ifdef __EMSCRIPTEN_PTHREADS__
+    return emscripten_num_logical_cores();
+#else
     return 1;
+#endif
 #elif defined(_WIN32) || defined(_WIN64)
     SYSTEM_INFO sysinfo;
     GetSystemInfo(&sysinfo);
@@ -122,7 +172,7 @@ int get_actual_thread_count(const RendererContext* ctx) {
 
 // row processing — called from worker threads (and directly on wasm)
 static void process_rows(RendererContext* ctx) {
-    #define pool (*ctx)
+#define pool (*ctx)
     const FractalDefinition* fd = get_fractal_by_mode(pool.mode);
     if (!fd) return;
 
@@ -226,7 +276,7 @@ static void process_rows(RendererContext* ctx) {
                         if (idx < 0) idx = 0;
                         if (idx > max_idx) idx = max_idx;
                         uint32_t col = lut[idx];
-pool.pixels[y * (pitch_words) + x] = col;
+                        pool.pixels[y * (pitch_words) + x] = col;
                     }
                 }
             }
@@ -293,7 +343,7 @@ pool.pixels[y * (pitch_words) + x] = col;
                         for (int i = 0; i < 8; i++) {
                             uint8_t r, g, b;
                             get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-pool.pixels[y * pitch_words + (x + i)] =
+                            pool.pixels[y * pitch_words + (x + i)] =
                                 (0xFF << 24) | (b << 16) | (g << 8) | r;
                         }
                     }
@@ -335,7 +385,7 @@ pool.pixels[y * pitch_words + (x + i)] =
                         for (int i = 0; i < 4; i++) {
                             uint8_t r, g, b;
                             get_color(iterations[i], pool.max_iterations, &r, &g, &b);
-pool.pixels[y * pitch_words + (x + i)] =
+                            pool.pixels[y * pitch_words + (x + i)] =
                                 (0xFF << 24) | (b << 16) | (g << 8) | r;
                         }
                     }
@@ -358,14 +408,15 @@ pool.pixels[y * pitch_words + (x + i)] =
                         if (idx < 0) idx = 0;
                         if (idx > max_idx) idx = max_idx;
                         uint32_t col = lut[idx];
-pool.pixels[y * pitch_words + (x + i)] = col;
+                        pool.pixels[y * pitch_words + (x + i)] = col;
                     }
                 }
             }
 #elif defined(__ARM_NEON)
             for (; x <= x_end - 2; x += 2) {
                 double iterations[2];
-                double x_arr[2] = { (double)pool.re_min + (double)x * re_factor, (double)pool.re_min + (double)(x + 1) * re_factor };
+                double x_arr[2] = {(double)pool.re_min + (double)x * re_factor,
+                                   (double)pool.re_min + (double)(x + 1) * re_factor};
                 float64x2_t v_re = vld1q_f64(x_arr);
                 float64x2_t v_im = vdupq_n_f64((double)pool.im_top + (double)y * im_factor);
 
@@ -379,7 +430,7 @@ pool.pixels[y * pitch_words + (x + i)] = col;
                         if (idx < 0) idx = 0;
                         if (idx > max_idx) idx = max_idx;
                         uint32_t col = lut[idx];
-pool.pixels[y * pitch_words + (x + i)] = col;
+                        pool.pixels[y * pitch_words + (x + i)] = col;
                     }
                 }
             }
@@ -398,12 +449,12 @@ pool.pixels[y * pitch_words + (x + i)] = col;
                     if (idx < 0) idx = 0;
                     if (idx > max_idx) idx = max_idx;
                     uint32_t col = lut[idx];
-pool.pixels[y * pitch_words + x] = col;
+                    pool.pixels[y * pitch_words + x] = col;
                 }
             }
         }
     }
-    #undef pool
+#undef pool
 }
 
 #if !defined(__EMSCRIPTEN__)
@@ -413,49 +464,49 @@ pool.pixels[y * pitch_words + x] = col;
  * they park on a condition variable when idle, and wake up simultaneously via broadcast
  * when a new frame is dispatched.
  */
-static void* worker_thread(void* arg) {
+static SYS_THREAD_FUNC worker_thread(void* arg) {
     RendererContext* ctx = (RendererContext*)arg;
-    #define pool (*ctx)
+#define pool (*ctx)
     int last_frame = 0;
 
-    pthread_mutex_lock(&pool.mutex);
+    sys_mutex_lock(&pool.mutex);
     while (1) {
         /* wait until a new frame is requested or shutdown is initiated.
          * using frame_id comparison protects against spurious wakeups. */
         while (!atomic_load(&pool.shutdown) && pool.frame_id == last_frame)
-            pthread_cond_wait(&pool.work_ready, &pool.mutex);
+            sys_cond_wait(&pool.work_ready, &pool.mutex);
 
         if (atomic_load(&pool.shutdown)) {
-            pthread_mutex_unlock(&pool.mutex);
-            return NULL;
+            sys_mutex_unlock(&pool.mutex);
+            SYS_THREAD_RETURN(0);
         }
 
         last_frame = pool.frame_id;
-        pthread_mutex_unlock(&pool.mutex);
+        sys_mutex_unlock(&pool.mutex);
 
         /* dynamic workload loop (process_rows):
          * workers pull row indices atomically, ensuring automatic load balancing.
          * no mutex is held here to prevent contention on the thread-pool lock. */
         process_rows(ctx);
 
-        pthread_mutex_lock(&pool.mutex);
+        sys_mutex_lock(&pool.mutex);
         /* increment the idle counter. if this was the last thread to finish,
          * signal the main thread that the entire frame is fully rendered. */
-        if (++pool.threads_idle == pool.thread_count) pthread_cond_signal(&pool.work_done);
+        if (++pool.threads_idle == pool.thread_count) sys_cond_signal(&pool.work_done);
     }
-    #undef pool
+#undef pool
 }
 #endif
 
 RendererContext* init_renderer(int max_iterations, int palette_idx) {
     RendererContext* ctx = malloc(sizeof(RendererContext));
-    if (!ctx) return NULL;
+    if (!ctx) SYS_THREAD_RETURN(0);
     memset(ctx, 0, sizeof(RendererContext));
 
-    #define pool (*ctx)
-    pthread_mutex_init(&pool.dispatch_mutex, NULL);
+#define pool (*ctx)
+    sys_mutex_init(&pool.dispatch_mutex);
 
-    pthread_mutex_lock(&pool.dispatch_mutex);
+    sys_mutex_lock(&pool.dispatch_mutex);
     pool.actual_thread_count = detect_thread_count(ctx);
     pool.thread_count = (pool.actual_thread_count > 1) ? pool.actual_thread_count - 1 : 0;
     atomic_store(&pool.shutdown, 0);
@@ -464,71 +515,77 @@ RendererContext* init_renderer(int max_iterations, int palette_idx) {
     atomic_store(&pool.next_row, 0);
     atomic_store(&pool.next_tile, 0);
 
-    pthread_mutex_init(&pool.mutex, NULL);
-    pthread_cond_init(&pool.work_ready, NULL);
-    pthread_cond_init(&pool.work_done, NULL);
+    sys_mutex_init(&pool.mutex);
+    sys_cond_init(&pool.work_ready);
+    sys_cond_init(&pool.work_done);
 
-    pool.threads = malloc(sizeof(pthread_t) * pool.actual_thread_count);
+    pool.threads = malloc(sizeof(sys_thread_t) * pool.actual_thread_count);
     if (!pool.threads) {
         fprintf(stderr, "fatal: failed to allocate thread pool\n");
-        pthread_mutex_unlock(&pool.dispatch_mutex);
-        pthread_mutex_destroy(&pool.dispatch_mutex);
+        sys_mutex_unlock(&pool.dispatch_mutex);
+        sys_mutex_destroy(&pool.dispatch_mutex);
         free(ctx);
-        return NULL;
+        SYS_THREAD_RETURN(0);
     }
 
 #if !defined(__EMSCRIPTEN__)
     for (int i = 0; i < pool.thread_count; i++) {
-        if (pthread_create(&pool.threads[i], NULL, worker_thread, ctx) != 0) {
+        if (sys_thread_create(&pool.threads[i], worker_thread, ctx) != 0) {
             fprintf(stderr, "fatal: failed to spawn worker thread %d\n", i);
             // shut down and join already-spawned threads safely
             atomic_store(&pool.shutdown, 1);
-            pthread_mutex_lock(&pool.mutex);
-            pthread_cond_broadcast(&pool.work_ready);
-            pthread_mutex_unlock(&pool.mutex);
+            sys_mutex_lock(&pool.mutex);
+            sys_cond_broadcast(&pool.work_ready);
+            sys_mutex_unlock(&pool.mutex);
             for (int j = 0; j < i; j++) {
-                pthread_join(pool.threads[j], NULL);
+                if (sys_thread_join(pool.threads[j]) != 0) {
+                    fprintf(stderr, "error: failed to join thread %d\n", j);
+                }
             }
-            pthread_mutex_unlock(&pool.dispatch_mutex);
-            pthread_mutex_destroy(&pool.dispatch_mutex);
-            pthread_mutex_destroy(&pool.mutex);
-            pthread_cond_destroy(&pool.work_ready);
-            pthread_cond_destroy(&pool.work_done);
+            sys_mutex_unlock(&pool.dispatch_mutex);
+            sys_mutex_destroy(&pool.dispatch_mutex);
+            sys_mutex_destroy(&pool.mutex);
+            sys_cond_destroy(&pool.work_ready);
+            sys_cond_destroy(&pool.work_done);
             free(pool.threads);
             free(ctx);
-            return NULL;
+            SYS_THREAD_RETURN(0);
         }
     }
 #endif
     init_color_palette(max_iterations, palette_idx);
-    pthread_mutex_unlock(&pool.dispatch_mutex);
+    sys_mutex_unlock(&pool.dispatch_mutex);
 
-    #undef pool
+#undef pool
     return ctx;
 }
 
 void cleanup_renderer(RendererContext* ctx) {
     if (!ctx) return;
-    #define pool (*ctx)
-    pthread_mutex_lock(&pool.dispatch_mutex);
+#define pool (*ctx)
+    sys_mutex_lock(&pool.dispatch_mutex);
 #if !defined(__EMSCRIPTEN__)
     if (pool.actual_thread_count > 0) {
-        pthread_mutex_lock(&pool.mutex);
+        sys_mutex_lock(&pool.mutex);
         atomic_store(&pool.shutdown, 1);
-        pthread_cond_broadcast(&pool.work_ready);
-        pthread_mutex_unlock(&pool.mutex);
+        sys_cond_broadcast(&pool.work_ready);
+        sys_mutex_unlock(&pool.mutex);
 
-        for (int i = 0; i < pool.thread_count; i++) pthread_join(pool.threads[i], NULL);
+        for (int i = 0; i < pool.thread_count; i++) {
+            if (sys_thread_join(pool.threads[i]) != 0) {
+                fprintf(stderr, "error: failed to join thread %d\n", i);
+            }
+        }
 
-        pthread_mutex_destroy(&pool.mutex);
-        pthread_cond_destroy(&pool.work_ready);
-        pthread_cond_destroy(&pool.work_done);
+        sys_mutex_destroy(&pool.mutex);
+        sys_cond_destroy(&pool.work_ready);
+        sys_cond_destroy(&pool.work_done);
     }
 #endif
     free(pool.threads);
-    pthread_mutex_unlock(&pool.dispatch_mutex);
-    pthread_mutex_destroy(&pool.dispatch_mutex);
-    #undef pool
+    sys_mutex_unlock(&pool.dispatch_mutex);
+    sys_mutex_destroy(&pool.dispatch_mutex);
+#undef pool
     free(ctx);
 }
 
@@ -538,26 +595,28 @@ int set_renderer_thread_count(RendererContext* ctx, int count) {
     if (count < 1) count = 1;
     if (count > 64) count = 64;
 
-    #define pool (*ctx)
-    pthread_mutex_lock(&pool.dispatch_mutex);
+#define pool (*ctx)
+    sys_mutex_lock(&pool.dispatch_mutex);
     pool.preset_thread_count = count;
     if (pool.actual_thread_count == 0) {
-        pthread_mutex_unlock(&pool.dispatch_mutex);
+        sys_mutex_unlock(&pool.dispatch_mutex);
         return 0;
     }
     if (pool.actual_thread_count == count) {
-        pthread_mutex_unlock(&pool.dispatch_mutex);
+        sys_mutex_unlock(&pool.dispatch_mutex);
         return 1;
     }
 
     // stop existing worker threads safely
-    pthread_mutex_lock(&pool.mutex);
+    sys_mutex_lock(&pool.mutex);
     atomic_store(&pool.shutdown, 1);
-    pthread_cond_broadcast(&pool.work_ready);
-    pthread_mutex_unlock(&pool.mutex);
+    sys_cond_broadcast(&pool.work_ready);
+    sys_mutex_unlock(&pool.mutex);
 
     for (int i = 0; i < pool.thread_count; i++) {
-        pthread_join(pool.threads[i], NULL);
+        if (sys_thread_join(pool.threads[i]) != 0) {
+            fprintf(stderr, "error: failed to join thread %d\n", i);
+        }
     }
     free(pool.threads);
     pool.threads = NULL;
@@ -569,28 +628,32 @@ int set_renderer_thread_count(RendererContext* ctx, int count) {
     atomic_store(&pool.next_row, 0);
     atomic_store(&pool.next_tile, 0);
 
-    pool.threads = malloc(sizeof(pthread_t) * pool.actual_thread_count);
+    pool.threads = malloc(sizeof(sys_thread_t) * pool.actual_thread_count);
     if (!pool.threads) {
         fprintf(stderr, "error: failed to allocate thread pool during resize\n");
-        pthread_mutex_unlock(&pool.dispatch_mutex);
+        sys_mutex_unlock(&pool.dispatch_mutex);
         return 0;
     }
     for (int i = 0; i < pool.thread_count; i++) {
-        if (pthread_create(&pool.threads[i], NULL, worker_thread, ctx) != 0) {
+        if (sys_thread_create(&pool.threads[i], worker_thread, ctx) != 0) {
             fprintf(stderr, "error: failed to spawn worker thread %d during resize\n", i);
             // kill already-spawned threads before returning to avoid a half-initialized pool
             atomic_store(&pool.shutdown, 1);
-            pthread_mutex_lock(&pool.mutex);
-            pthread_cond_broadcast(&pool.work_ready);
-            pthread_mutex_unlock(&pool.mutex);
-            for (int j = 0; j < i; j++) pthread_join(pool.threads[j], NULL);
-            pthread_mutex_unlock(&pool.dispatch_mutex);
+            sys_mutex_lock(&pool.mutex);
+            sys_cond_broadcast(&pool.work_ready);
+            sys_mutex_unlock(&pool.mutex);
+            for (int j = 0; j < i; j++) {
+                if (sys_thread_join(pool.threads[j]) != 0) {
+                    fprintf(stderr, "error: failed to join thread %d\n", j);
+                }
+            }
+            sys_mutex_unlock(&pool.dispatch_mutex);
             return 0;
         }
     }
     printf("thread pool dynamically resized to %d threads.\n", pool.actual_thread_count);
-    pthread_mutex_unlock(&pool.dispatch_mutex);
-    #undef pool
+    sys_mutex_unlock(&pool.dispatch_mutex);
+#undef pool
     return 1;
 #else
     (void)ctx;
@@ -602,9 +665,9 @@ int set_renderer_thread_count(RendererContext* ctx, int count) {
 // dispatch a render job — returns only after all rows are painted
 void render_fractal_threaded(RendererContext* ctx, const RenderJob* job) {
     if (!ctx || !job) return;
-    #define pool (*ctx)
-    pthread_mutex_lock(&pool.dispatch_mutex);
-    pthread_mutex_lock(&pool.mutex);
+#define pool (*ctx)
+    sys_mutex_lock(&pool.dispatch_mutex);
+    sys_mutex_lock(&pool.mutex);
     pool.pixels = job->pixels;
     pool.pitch = job->pitch;
     pool.window_width = job->window_width;
@@ -626,25 +689,25 @@ void render_fractal_threaded(RendererContext* ctx, const RenderJob* job) {
     atomic_store(&pool.next_row, 0);
 
 #if defined(__EMSCRIPTEN__)
-    pthread_mutex_unlock(&pool.mutex);
+    sys_mutex_unlock(&pool.mutex);
     process_rows(ctx);
 #else
     pool.threads_idle = 0;
     pool.frame_id++;
-    pthread_cond_broadcast(&pool.work_ready);
-    pthread_mutex_unlock(&pool.mutex);  // release lock to let workers start
+    sys_cond_broadcast(&pool.work_ready);
+    sys_mutex_unlock(&pool.mutex);  // release lock to let workers start
 
     /* let main thread participate in rendering instead of just idling.
      * note: main thread doesn't increment pool.threads_idle, so thread_count
      * is exactly the number of workers we need to wait for. */
     process_rows(ctx);
 
-    pthread_mutex_lock(&pool.mutex);
-    while (pool.threads_idle < pool.thread_count) pthread_cond_wait(&pool.work_done, &pool.mutex);
-    pthread_mutex_unlock(&pool.mutex);
+    sys_mutex_lock(&pool.mutex);
+    while (pool.threads_idle < pool.thread_count) sys_cond_wait(&pool.work_done, &pool.mutex);
+    sys_mutex_unlock(&pool.mutex);
 #endif
-    pthread_mutex_unlock(&pool.dispatch_mutex);
-    #undef pool
+    sys_mutex_unlock(&pool.dispatch_mutex);
+#undef pool
 }
 
 // dynamic precision control
