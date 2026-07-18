@@ -1,3 +1,8 @@
+/* celtic.h
+ *
+ * celtic fractal mathematical definitions.
+ */
+
 #ifndef CELTIC_H
 #define CELTIC_H
 
