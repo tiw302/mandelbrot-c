@@ -3,6 +3,7 @@
  * unit tests for color palette initialization and interpolation.
  * validates color bounds, mapping, and smooth color transitions.
  */
+
 #include <math.h>
 #include <stdint.h>
 #include <stdio.h>
@@ -19,7 +20,7 @@
         exit(1);                                                              \
     }
 
-/* 
+/*
  * [TEST CASE] palette bounds
  * tests the functionality of palette bounds.
  */
@@ -32,19 +33,19 @@ void test_palette_bounds(void) {
     // initialize standard palettes
     init_color_palette(max_iters, 0);
 
-    // test across all available palettes to ensure no index out-of-bounds
-    // and that rgb values are always clamped between 0 and 255.
+    /* test across all available palettes to ensure no index out-of-bounds
+     * and that rgb values are always clamped between 0 and 255. */
     for (int p = 0; p < get_palette_count(); p++) {
         init_color_palette(max_iters, p);
 
-        // test various iteration values: 0, max, and fractional
+        /* test various iteration values: 0, max, and fractional */
         double test_iters[] = {0.0, 50.5, 999.9, 1000.0, 1005.0, -1.0};
 
         for (int i = 0; i < 6; i++) {
             get_color(test_iters[i], max_iters, &r, &g, &b);
-            // we can't strictly check max value since uint8_t caps at 255 anyway,
-            // but we can check if it crashes or produces wildly unexpected behavior.
-            // if it escaped max_iters it should be black.
+            /* we can't strictly check max value since uint8_t caps at 255 anyway,
+             * but we can check if it crashes or produces wildly unexpected behavior.
+             * if it escaped max_iters it should be black. */
             if (test_iters[i] >= max_iters) {
                 EXPECT(r == 0 && g == 0 && b == 0);
             }
@@ -53,7 +54,7 @@ void test_palette_bounds(void) {
     TEST_END();
 }
 
-/* 
+/*
  * [TEST CASE] color smoothness
  * tests the functionality of color smoothness.
  */
@@ -65,7 +66,7 @@ void test_color_smoothness(void) {
     uint8_t r_mid, g_mid, b_mid;
     int max_iters = 100;
 
-    init_color_palette(max_iters, 1); // use grayscale for predictable linearity
+    init_color_palette(max_iters, 1);  // use grayscale for predictable linearity
 
     get_color(10.0, max_iters, &r1, &g1, &b1);
     get_color(11.0, max_iters, &r2, &g2, &b2);
