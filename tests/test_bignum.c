@@ -5,13 +5,15 @@
  * and mandelbrot iteration consistency against the standard double path.
  */
 
-#include "bignum.h"
-#include "mandelbrot_bignum.h"
-#include "mandelbrot.h"
-#include <stdio.h>
-#include <stdlib.h>
 #include <assert.h>
 #include <math.h>
+#include <stdio.h>
+#include <stdlib.h>
+
+#include "bignum.h"
+#include "mandelbrot.h"
+#include "mandelbrot_bignum.h"
+#include "perturbation.h"
 
 // tolerance for comparing bignum results to double-precision reference
 #define BN_DOUBLE_TOLERANCE 1e-8
@@ -21,7 +23,7 @@
  * verifies that converting to BigNum and back preserves value within double precision.
  */
 void test_round_trip(void) {
-    double test_vals[] = { 0.0, 1.0, -1.0, 0.5, -0.5, 1.23456789, -2.71828182, 2.99999 };
+    double test_vals[] = {0.0, 1.0, -1.0, 0.5, -0.5, 1.23456789, -2.71828182, 2.99999};
     int count = (int)(sizeof(test_vals) / sizeof(test_vals[0]));
 
     for (int i = 0; i < count; i++) {
@@ -147,12 +149,16 @@ void test_mul2(void) {
  */
 void test_mandelbrot_consistency(void) {
     // list of test coordinates and expected interior/exterior behavior
-    struct { double re; double im; int expect_inside; } cases[] = {
-        { 0.0,   0.0,   1 },  // origin — inside (period-1 fixed point in main cardioid)
-        { 0.5,   0.5,   0 },  // clearly outside
-        { -0.4,  0.6,   0 },  // outside
-        { -1.5,  0.0,   1 },  // inside (period-3 bulb on the negative real axis)
-        { 2.0,   0.0,   0 },  // outside (far right, escapes on first iteration)
+    struct {
+        double re;
+        double im;
+        int expect_inside;
+    } cases[] = {
+        {0.0, 0.0, 1},   // origin — inside (period-1 fixed point in main cardioid)
+        {0.5, 0.5, 0},   // clearly outside
+        {-0.4, 0.6, 0},  // outside
+        {-1.5, 0.0, 1},  // inside (period-3 bulb on the negative real axis)
+        {2.0, 0.0, 0},   // outside (far right, escapes on first iteration)
     };
     int count = (int)(sizeof(cases) / sizeof(cases[0]));
 
@@ -162,7 +168,7 @@ void test_mandelbrot_consistency(void) {
         bn_from_double(&c_im, cases[i].im);
 
         double bn_result = mandelbrot_check_bignum(&c_re, &c_im, 1000);
-        double std_result = mandelbrot_check((complex_t){ cases[i].re, cases[i].im }, 1000);
+        double std_result = mandelbrot_check((complex_t){cases[i].re, cases[i].im}, 1000);
 
         int bn_inside = (bn_result >= 999.0);
         int std_inside = (std_result >= 999.0);
@@ -212,6 +218,45 @@ void test_reference_orbit(void) {
     printf("test_reference_orbit passed!\n");
 }
 
+/*
+ * [TEST CASE] perturbation_compute_bignum orbit consistency
+ * verifies that the bignum orbit path produces values consistent with
+ * perturbation_compute() (double path) for standard-precision coordinates.
+ * at normal zoom depths both should agree within double rounding error.
+ */
+void test_bignum_orbit_vs_double(void) {
+    // c = (-0.5, 0.0) — inside the main cardioid, long orbit
+    const double c_re = -0.5;
+    const double c_im = 0.0;
+    const int max_iter = 200;
+    const double tol = 1e-10;
+
+    RefOrbit* bn_orb = perturbation_compute_bignum(c_re, c_im, max_iter);
+    assert(bn_orb && bn_orb->len > 5);
+
+    /* compute reference orbit the standard double way for comparison.
+     * we replicate the iteration inline here rather than pulling in the full
+     * perturbation_compute() to avoid pthreads / sokol linkage in the test. */
+    double z_re = 0.0, z_im = 0.0;
+    for (int i = 1; i < bn_orb->len; i++) {
+        double z_re2 = z_re * z_re;
+        double z_im2 = z_im * z_im;
+        if (z_re2 + z_im2 > 100.0) break;
+        z_im = 2.0 * z_re * z_im + c_im;
+        z_re = z_re2 - z_im2 + c_re;
+
+        assert(fabs(bn_orb->zn[i].re - z_re) < tol);
+        assert(fabs(bn_orb->zn[i].im - z_im) < tol);
+    }
+
+    // SA coefficient A at step 1 should be (2*z_0*A_0 + 1) = (0 + 1) = 1.0 + 0i
+    assert(fabs(bn_orb->sa[1].A_re - 1.0) < tol);
+    assert(fabs(bn_orb->sa[1].A_im) < tol);
+
+    perturbation_free(bn_orb);
+    printf("test_bignum_orbit_vs_double passed!\n");
+}
+
 int main(void) {
     printf("running bignum tests...\n");
     test_round_trip();
@@ -221,6 +266,7 @@ int main(void) {
     test_mul2();
     test_mandelbrot_consistency();
     test_reference_orbit();
+    test_bignum_orbit_vs_double();
     printf("all bignum tests passed successfully!\n");
     return 0;
 }
