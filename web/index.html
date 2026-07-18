@@ -9,6 +9,16 @@
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <meta name="theme-color" content="#000000">
     <title>Mandelbrot Explorer</title>
+    <style>
+        .btn-icon {
+            width: 10px;
+            height: 10px;
+            vertical-align: middle;
+            margin-right: 4px;
+            margin-top: -2px;
+            pointer-events: none;
+        }
+    </style>
     <link rel="stylesheet" href="style.css">
 </head>
 
@@ -23,20 +33,21 @@
 
     <div id="ui-overlay">
         <div id="toolbar">
-            <button onclick="Module._wasm_reset_view()">reset</button>
-            <button onclick="Module._wasm_undo_zoom()">undo</button>
-            <button onclick="toggleTour()" id="tourBtn">tour</button>
-            <button onclick="Module._wasm_next_palette()" id="paletteBtn">palette</button>
-            <button onclick="toggleGpu()" id="gpuBtn">gpu ✓</button>
-            <button onclick="togglePrecision()" id="precisionBtn">32-bit</button>
-            <button onclick="Module._wasm_toggle_julia()" id="juliaBtn">julia</button>
-            <button onclick="Module._wasm_cycle_fractal()" id="fractalBtn">fractal</button>
-            <button onclick="Module._wasm_adjust_iterations(100)">iter+</button>
-            <button onclick="Module._wasm_adjust_iterations(-100)">iter-</button>
-            <button onclick="copyLink()" id="copyBtn">copy link</button>
-            <button onclick="downloadScreenshot()">screenshot</button>
-            <button onclick="toggleInfo()" id="infoBtn">about ℹ</button>
-            <button onclick="toggleSettings()" id="settingsBtn">settings ⚙</button>
+            <button onclick="Module._wasm_reset_view()" title="Reset View (R)"><img src="assets/icons/reset.svg" class="btn-icon">reset (R)</button>
+            <button onclick="Module._wasm_undo_zoom()" title="Undo Zoom (Ctrl+Z)"><img src="assets/icons/undo.svg" class="btn-icon">undo (Ctrl+Z)</button>
+            <button onclick="toggleTour()" id="tourBtn" title="Toggle Tour (T)"><img src="assets/icons/tour.svg" class="btn-icon">tour (T)</button>
+            <button onclick="Module._wasm_next_palette()" id="paletteBtn" title="Next Palette (P)"><img src="assets/icons/palette.svg" class="btn-icon">palette (P)</button>
+            <button onclick="toggleGpu()" id="gpuBtn" title="Toggle GPU/CPU (G)"><img src="assets/icons/gpu.svg" class="btn-icon">gpu ✓ (G)</button>
+            <button onclick="togglePrecision()" id="precisionBtn" title="Toggle Precision (E)"><img src="assets/icons/precision.svg" class="btn-icon">32-bit (E)</button>
+            <button onclick="Module._wasm_toggle_julia()" id="juliaBtn" title="Toggle Julia Mode (J)"><img src="assets/icons/julia.svg" class="btn-icon">julia (J)</button>
+            <button onclick="toggleJuliaLock()" id="juliaLockToolbarBtn" style="display: none;" title="Toggle Julia Lock (L)"><img src="assets/icons/unlock.svg" class="btn-icon" id="toolbarLockIcon">unlocked (L)</button>
+            <button onclick="Module._wasm_cycle_fractal()" id="fractalBtn" title="Cycle Fractal Mode (F)"><img src="assets/icons/fractal.svg" class="btn-icon">fractal (F)</button>
+            <button onclick="Module._wasm_adjust_iterations(100)" title="Increase Iterations (ArrowUp)"><img src="assets/icons/plus.svg" class="btn-icon">iter+ (↑)</button>
+            <button onclick="Module._wasm_adjust_iterations(-100)" title="Decrease Iterations (ArrowDown)"><img src="assets/icons/minus.svg" class="btn-icon">iter- (↓)</button>
+            <button onclick="copyLink()" id="copyBtn" title="Copy Link (C)"><img src="assets/icons/copy.svg" class="btn-icon">copy link (C)</button>
+            <button onclick="downloadScreenshot()" title="Save Screenshot (S)"><img src="assets/icons/screenshot.svg" class="btn-icon">screenshot (S)</button>
+            <button onclick="toggleInfo()" id="infoBtn" title="About / Info (I)"><img src="assets/icons/about.svg" class="btn-icon">about (I)</button>
+            <button onclick="toggleSettings()" id="settingsBtn" title="Settings / Options (O)"><img src="assets/icons/settings.svg" class="btn-icon">settings (O)</button>
         </div>
         <div id="debug-info"></div>
     </div>
@@ -60,28 +71,7 @@
         <div class="settings-row">
             <span>palette:</span>
             <select onchange="changePalette(this.value)" id="setPaletteSelect">
-                <option value="0">sine wave</option>
-                <option value="1">volumetric magma</option>
-                <option value="2">viridis</option>
-                <option value="3">grayscale</option>
-                <option value="4">electric</option>
-                <option value="5">ocean</option>
-                <option value="6">inferno</option>
-                <option value="7">retro binary</option>
-                <option value="8">orbit mesh (gpu)</option>
-                <option value="9">biomorph trap (gpu)</option>
-                <option value="10">conformal ripples (gpu)</option>
-                <option value="11">curvature marble (gpu)</option>
-                <option value="12">conformal grid (gpu)</option>
-                <option value="13">cyber grid (gpu)</option>
-                <option value="14">bubble pearl (gpu)</option>
-                <option value="15">liquid chrome (gpu)</option>
-                <option value="16">refractive 3d glass (gpu)</option>
-                <option value="17">ultra fractal classic (gpu)</option>
-                <option value="18">pure binary bw</option>
-                <option value="19">classic royal blue (gpu)</option>
-                <option value="20">classic fire red (gpu)</option>
-                <option value="21">silver crimson (gpu)</option>
+                <option value="loading">loading...</option>
             </select>
         </div>
         <div class="settings-row">
@@ -105,6 +95,11 @@
         <div class="settings-row">
             <span>zoom:</span>
             <input type="text" id="setZoom" style="width: 140px;" onchange="updateCoordinatesFromSettings()">
+        </div>
+
+        <div class="settings-row">
+            <span>julia mode:</span>
+            <button onclick="Module._wasm_toggle_julia()" id="setJuliaBtn">OFF</button>
         </div>
 
         <div id="setJuliaCoordsRow" style="display: none; flex-direction: column; gap: 8px;">
@@ -132,12 +127,21 @@
         </div>
 
         <div class="settings-title" style="margin-top: 6px;">--- actions ---</div>
+        <div class="settings-row" style="margin-bottom: 8px;">
+            <span>tour speed:</span>
+            <div style="display: flex; gap: 6px; align-items: center; flex: 1; margin-left: 10px;">
+                <input type="range" id="setTourSpeed" min="0.1" max="5.0" step="0.1" value="1.0" style="flex: 1;" onchange="updateTourSpeed(this.value)" oninput="document.getElementById('tourSpeedVal').innerText = parseFloat(this.value).toFixed(1) + 'x'">
+                <span id="tourSpeedVal" style="width: 25px; text-align: right;">1.0x</span>
+            </div>
+        </div>
         <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-            <button onclick="Module._wasm_reset_view()">reset view</button>
-            <button onclick="Module._wasm_undo_zoom()">undo zoom</button>
-            <button onclick="toggleTour()" id="setTourBtn">start tour</button>
-            <button onclick="downloadScreenshot()">screenshot</button>
-            <button onclick="copyLink()" id="setCopyBtn" style="grid-column: span 2;">copy shareable link</button>
+            <button onclick="Module._wasm_reset_view()"><img src="assets/icons/reset.svg" class="btn-icon">reset view (R)</button>
+            <button onclick="Module._wasm_undo_zoom()"><img src="assets/icons/undo.svg" class="btn-icon">undo zoom (Ctrl+Z)</button>
+            <button onclick="toggleTour()" id="setTourBtn"><img src="assets/icons/tour.svg" class="btn-icon">start tour (T)</button>
+            <button onclick="downloadScreenshot()"><img src="assets/icons/screenshot.svg" class="btn-icon">screenshot (S)</button>
+            <button onclick="copyLink()" id="setCopyBtn"><img src="assets/icons/copy.svg" class="btn-icon">copy link (C)</button>
+            <button onclick="showSystemLogs()"><img src="assets/icons/terminal.svg" class="btn-icon">view system logs</button>
+            <button onclick="window.open('https://github.com/tiw302/mandelbrot-c', '_blank')" style="grid-column: span 2;"><img src="assets/icons/github.svg" class="btn-icon">view source (github)</button>
         </div>
 
         <button onclick="toggleSettings()" class="settings-close">close</button>
@@ -155,16 +159,33 @@
         </div>
     </div>
 
+    <div id="error-overlay" style="display: none; position: fixed; top: 0; left: 0; width: 100vw; height: 100vh; background: rgba(0,0,0,0.85); z-index: 10000; flex-direction: column; justify-content: center; align-items: center; text-align: center; color: #ff5555; padding: 20px; box-sizing: border-box;">
+        <h2 style="margin: 0 0 15px 0;">Fatal Error</h2>
+        <div id="error-message" style="font-size: 14px; max-width: 600px; word-wrap: break-word; font-family: monospace; line-height: 1.5;"></div>
+        <button onclick="location.reload()" style="margin-top: 25px; padding: 10px 20px; background: #ff5555; color: #000; border: none; font-weight: bold; cursor: pointer;">Reload Application</button>
+    </div>
+
+
     <div id="info-panel">
         <div class="settings-title">--- about mandelbrot-c ---</div>
         <div style="font-size: 12px; line-height: 1.4; margin: 10px 0; max-height: 300px; overflow-y: auto; padding-right: 5px; text-transform: lowercase;">
             <p style="margin-bottom: 8px; color: #fff;">a high-performance fractal explorer written in c99.</p>
-            <p style="margin-bottom: 8px;"><strong>how it works:</strong> the core math is written in c and compiled to webassembly. it uses webgl 2.0 for gpu rendering and emscripten workers for multi-threaded cpu rendering.</p>
+
+            <p style="margin-bottom: 4px;"><strong>features:</strong></p>
+            <ul style="margin-left: 15px; margin-bottom: 8px; font-size: 11px;">
+                <li style="margin-bottom: 4px;">explore mandelbrot, burning ship, tricorn, celtic, and buffalo.</li>
+                <li style="margin-bottom: 4px;">interactive julia mode with coordinate tracking (press J).</li>
+                <li style="margin-bottom: 4px;">automated tour mode for cinematic exploration (press T).</li>
+                <li>multi-threaded cpu & webgl 2.0 gpu rendering.</li>
+            </ul>
+
             <p style="margin-bottom: 4px;"><strong>web vs desktop app:</strong></p>
             <ul style="margin-left: 15px; margin-bottom: 8px; font-size: 11px;">
-                <li style="margin-bottom: 4px;">this web version supports url sharing, screenshots, and 64-bit gpu precision.</li>
-                <li>the desktop app additionally supports: 128-bit deep zoom precision, video recording, 8k mega screenshots, and local bookmarks.</li>
+                <li style="margin-bottom: 4px;">web: supports url sharing, screenshots, and 64-bit gpu precision.</li>
+                <li>desktop: adds 128-bit deep zoom precision, video recording, 8k mega screenshots, and local bookmarks.</li>
             </ul>
+
+            <p style="margin-bottom: 4px; font-size: 11px; color: #aaa;"><strong>tech stack:</strong> c99, webgl 2.0, sokol_gfx, emscripten (wasm)</p>
         </div>
         <div style="display: flex; justify-content: center;">
             <button onclick="toggleInfo()" class="settings-close">close</button>
@@ -174,9 +195,9 @@
     <div id="zoom-box"></div>
 
     <div id="info">
-        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | F=Fractal | T=Tour | G=GPU | <span
-                id="help-e-hint">E=Prec | </span>S=Shot | Ctrl+Z=Undo | Arrows=Iter</span>
-        <a href="https://github.com/tiw302/mandelbrot-c" target="_blank">github.com/tiw302/mandelbrot-c</a>
+        <span>Scroll=Zoom | L-Drag=Select | R-Drag=Pan | R=Reset | P=Pal | J=Julia | L=Lock | F=Fractal | T=Tour | G=GPU | <span
+                id="help-e-hint">E=Prec | </span>S=Shot | C=Copy | I=Info | O=Opt | Ctrl+Z=Undo | Arrows=Iter</span>
+        <a href="https://github.com/tiw302/mandelbrot-c" target="_blank"><img src="assets/icons/github.svg" class="btn-icon">github.com/tiw302/mandelbrot-c</a>
     </div>
 
     <script src="coi-serviceworker.js"></script>
