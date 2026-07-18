@@ -1,10 +1,17 @@
+/* app_state.h
+ *
+ * central application state structures and api.
+ */
+
 #ifndef APP_STATE_H
 #define APP_STATE_H
 
+#include <pthread.h>
+
+#include "bookmark.h"
 #include "camera.h"
 #include "core_math.h"
 #include "tour.h"
-#include "bookmark.h"
 
 // transient state for julia mode transitions
 typedef struct {
@@ -21,25 +28,25 @@ typedef struct {
     int duration_sec;
     int res_w;
     int res_h;
-    int preset_idx; // 0=ultrafast to 8=veryslow
-    int crf; // 0=Lossless, 1=High(18), 2=Medium(23), 3=Low(28)
-    int aa_level; // 1, 2, 4
-    int codec_idx; // 0=H.264, 1=H.265
-    int show_log; // 1=show, 0=hide
+    int preset_idx;  // 0=ultrafast to 8=veryslow
+    int crf;         // 0=Lossless, 1=High(18), 2=Medium(23), 3=Low(28)
+    int aa_level;    // 1, 2, 4
+    int codec_idx;   // 0=H.264, 1=H.265
+    int show_log;    // 1=show, 0=hide
     char target_re[64];
     char target_im[64];
     char target_zoom[64];
     int is_rendering;
-    int path_type; // 0=Scenic Tour, 1=Bookmarks Tour, 2=Custom Target
+    int path_type;  // 0=Scenic Tour, 1=Bookmarks Tour, 2=Custom Target
     int log_fontsize;
     char log_fontpath[256];
-    int crf_val;               // 0-51
-    int zoom_curve;            // 0=Ease-In-Out, 1=Linear, 2=Ease-In, 3=Ease-Out
-    int log_position;          // 0=Top-Left, 1=Top-Right, 2=Bottom-Left, 3=Bottom-Right
-    float log_opacity;         // 0.0 to 1.0
-    char log_fontcolor[32];    // "white", "yellow", "cyan", "green", etc.
-    char output_filename[256]; // output file path
-    
+    int crf_val;                // 0-51
+    int zoom_curve;             // 0=Ease-In-Out, 1=Linear, 2=Ease-In, 3=Ease-Out
+    int log_position;           // 0=Top-Left, 1=Top-Right, 2=Bottom-Left, 3=Bottom-Right
+    float log_opacity;          // 0.0 to 1.0
+    char log_fontcolor[32];     // "white", "yellow", "cyan", "green", etc.
+    char output_filename[256];  // output file path
+
     // background video export state
     volatile float export_progress_percent;
     volatile int export_cancelled;
@@ -54,6 +61,7 @@ typedef struct {
     TourState m_tour;
     JuliaTourState j_tour;
     int julia_mode;
+    int julia_locked;
     int base_fractal;
     complex_t julia_c;
     JuliaSession julia_session;
@@ -68,10 +76,14 @@ typedef struct {
     int show_settings;
     uint32_t render_time_ms;
     int thread_count;
+    pthread_mutex_t state_mutex;
+    double tour_speed_multiplier;
+    double zoom_sensitivity;
 
     // screenshot state
     volatile int mega_screenshot_active;
     volatile int mega_screenshot_progress;
+    char mega_screenshot_filename[256];
 
     // video studio state
     VideoStudioSettings video_settings;
@@ -85,10 +97,7 @@ typedef struct {
 } AppCommonState;
 
 void app_state_push_notification(AppCommonState* state, const char* msg, uint32_t now);
-void app_state_update_or_push_notification(AppCommonState* state, const char* search_msg, const char* new_msg, uint32_t now);
-int app_state_has_active_notifications(const AppCommonState* state);
 
-// initializes state
 void app_state_init(AppCommonState* state, int win_w, int win_h);
 
 // resets view and iterations to default
@@ -97,7 +106,7 @@ void app_state_reset(AppCommonState* state, app_title_callback set_title_cb);
 // toggles julia explorer mode
 void app_state_toggle_julia(AppCommonState* state, app_title_callback set_title_cb);
 
-// toggles burning ship fractal mode
+// cycles through available fractal types
 void app_state_cycle_fractal(AppCommonState* state, app_title_callback set_title_cb);
 
 // cycles to next color palette
@@ -128,7 +137,7 @@ void app_state_load_next_bookmark(AppCommonState* state);
 void app_state_toggle_tour(AppCommonState* state, uint32_t now, app_title_callback set_title_cb);
 
 // updates active tours (auto-zoom or auto-c shift)
-void app_state_update_tours(AppCommonState* state, uint32_t now, app_title_callback set_title_cb);
+void app_state_update_tours(AppCommonState* state, uint32_t now);
 
 // maps mouse coordinates to complex plane
 void app_state_get_mouse_coord(const AppCommonState* state, int mx, int my, double* re, double* im);
@@ -141,7 +150,7 @@ void app_state_calculate_boundaries(const AppCommonState* state, int width, int 
 // video studio controller: sets up the tour and starts the video rendering process
 void app_state_start_video_render(AppCommonState* state, uint32_t now);
 
-// abstraction of the core simulation step (updates tours and boundaries)
+// advances tours and boundaries by one simulation tick
 void app_state_step_simulation(AppCommonState* state, uint32_t now);
 
 // resolves a relative asset path (e.g. "assets/fonts/font.ttf") by hunting in common directories
@@ -150,7 +159,7 @@ void app_state_resolve_asset_path(const char* relative_path, char* out_path, siz
 // parses a string into a precise_float
 precise_float parse_precise_float(const char* str);
 
-// CLI arguments structure
+// cli arguments structure
 typedef struct {
     int parsed;
     int headless;
