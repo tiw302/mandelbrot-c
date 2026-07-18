@@ -12,7 +12,7 @@ if [ ! -f "$SHDC_BIN" ]; then
     echo "Downloading sokol-shdc..."
     OS=$(uname -s)
     ARCH=$(uname -m)
-    
+
     if [ "$OS" = "Linux" ]; then
         URL="https://github.com/floooh/sokol-tools-bin/raw/master/bin/linux/sokol-shdc"
     elif [ "$OS" = "Darwin" ]; then
@@ -25,7 +25,7 @@ if [ ! -f "$SHDC_BIN" ]; then
         echo "Unsupported OS for automatic sokol-shdc download"
         exit 1
     fi
-    
+
     wget -qO "$SHDC_BIN" "$URL"
     chmod +x "$SHDC_BIN"
 fi
