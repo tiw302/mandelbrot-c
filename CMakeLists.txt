@@ -5,12 +5,13 @@ set(CMAKE_C_STANDARD 99)
 set(CMAKE_C_STANDARD_REQUIRED ON)
 
 # ensure consistent optimization flags without breaking 128-bit strict IEEE754 math
-add_compile_options(-O3 -fno-math-errno -fno-signed-zeros -fno-trapping-math)
-
-# strict compiler warnings
 if(MSVC)
+    add_compile_options(/O2 /fp:fast)
+    # strict compiler warnings
     add_compile_options(/W4 /WX)
 else()
+    add_compile_options(-O3 -fno-math-errno -fno-signed-zeros -fno-trapping-math)
+    # strict compiler warnings
     add_compile_options(-Wall -Wextra -Werror -Wpedantic -Wno-unused-parameter -Wno-overlength-strings -Wno-unused-const-variable -Wno-unused-variable)
     # disable clang warnings for nan/infinity under fast-math and missing trailing newlines
     if(CMAKE_C_COMPILER_ID MATCHES "Clang")
@@ -20,20 +21,21 @@ else()
 endif()
 
 # --- build options ---
-option(BUILD_CPU     "Build CPU-Engine (Desktop)"       OFF)
-option(BUILD_GPU     "Build GPU-Engine (Desktop)"       OFF)
-option(BUILD_WEB     "Build Web-Engine (WASM)"          OFF)
-option(BUILD_DEEP    "Build Deep-Zoom Engine (Perturbation)" OFF)
+option(BUILD_CPU "Build CPU-Engine (Desktop)" OFF)
+option(BUILD_GPU "Build GPU-Engine (Desktop)" OFF)
+option(BUILD_WEB "Build Web-Engine (WASM)" OFF)
+option(BUILD_DEEP "Build Deep-Zoom Engine (Perturbation)" OFF)
+option(BUILD_VIDEO "Build Standalone Video Renderer" OFF)
 
 # architecture tuning — set USE_NATIVE_ARCH=ON if your target machine
 # matches the build machine. falls back to avx2+fma when OFF. if the
 # target cpu lacks avx2, set ARCH_GENERIC=ON for a safe scalar build.
 option(USE_NATIVE_ARCH "Use -march=native for host-optimal codegen" OFF)
-option(ARCH_GENERIC    "Disable all SIMD for maximum portability"   OFF)
+option(ARCH_GENERIC "Disable all SIMD for maximum portability" OFF)
 
 if(EMSCRIPTEN)
     # emscripten only supports -msimd128, not x86-specific -mavx2
-    set(ARCH_FLAGS -msimd128)
+    set(ARCH_FLAGS -msimd128 -pthread)
 elseif(ARCH_GENERIC)
     set(ARCH_FLAGS "")
 elseif(CMAKE_SYSTEM_PROCESSOR MATCHES "arm64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "aarch64" OR CMAKE_SYSTEM_PROCESSOR MATCHES "ARM64")
@@ -49,7 +51,7 @@ endif()
 set(CORE_SRC src/core/mandelbrot.c src/core/julia.c src/core/burning_ship.c src/core/tricorn.c src/core/celtic.c src/core/buffalo.c src/core/color.c src/core/fractal.c src/core/bignum.c src/core/mandelbrot_bignum.c)
 
 # common engine
-set(ENGINE_SRC src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/config_loader.c src/engine/cjsonx_impl.c src/engine/camera.c src/engine/app_state.c src/engine/input_handler.c)
+set(ENGINE_SRC src/engine/renderer.c src/engine/tour.c src/engine/bookmark.c src/engine/config_loader.c src/engine/cjsonx_impl.c src/engine/camera.c src/engine/app_state.c src/engine/input_handler.c src/engine/screenshot.c src/engine/perturbation.c)
 
 # --- 1a. static library definitions ---
 add_library(mandelbrot_lib STATIC ${CORE_SRC} ${ENGINE_SRC})
@@ -59,6 +61,7 @@ target_include_directories(mandelbrot_lib PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/src/core
     ${CMAKE_CURRENT_SOURCE_DIR}/src/engine
     ${CMAKE_CURRENT_SOURCE_DIR}/include
+    ${CMAKE_CURRENT_SOURCE_DIR}/include/app
     ${CMAKE_CURRENT_SOURCE_DIR}/include/core
     ${CMAKE_CURRENT_SOURCE_DIR}/include/engine
     ${CMAKE_CURRENT_SOURCE_DIR}/include/ui
@@ -70,17 +73,16 @@ target_include_directories(mandelbrot_lib SYSTEM PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/stb
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sokol
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cimgui
-    ${CMAKE_CURRENT_SOURCE_DIR}/third_party/fons
 )
 
 # --- 1b. ui library definitions ---
 set(IMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cimgui/imgui)
 set(CIMGUI_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/cimgui)
-set(UI_SRC 
-    ${IMGUI_DIR}/imgui.cpp 
-    ${IMGUI_DIR}/imgui_draw.cpp 
-    ${IMGUI_DIR}/imgui_tables.cpp 
-    ${IMGUI_DIR}/imgui_widgets.cpp 
+set(UI_SRC
+    ${IMGUI_DIR}/imgui.cpp
+    ${IMGUI_DIR}/imgui_draw.cpp
+    ${IMGUI_DIR}/imgui_tables.cpp
+    ${IMGUI_DIR}/imgui_widgets.cpp
     ${IMGUI_DIR}/imgui_demo.cpp
     ${CIMGUI_DIR}/cimgui.cpp
     src/ui/imgui_impl.cc
@@ -88,10 +90,13 @@ set(UI_SRC
 
 add_library(mandelbrot_ui STATIC ${UI_SRC})
 target_compile_features(mandelbrot_ui PRIVATE cxx_std_11)
-target_include_directories(mandelbrot_ui PUBLIC 
+if(NOT MSVC)
+    target_compile_options(mandelbrot_ui PRIVATE -Wno-unused-function)
+endif()
+target_include_directories(mandelbrot_ui PUBLIC
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party
-    ${IMGUI_DIR} 
-    ${CIMGUI_DIR} 
+    ${IMGUI_DIR}
+    ${CIMGUI_DIR}
     ${CMAKE_CURRENT_SOURCE_DIR}/third_party/sokol
 )
 
@@ -137,7 +142,7 @@ if(BUILD_CPU)
     if(APPLE)
         set_source_files_properties(src/app/app_runner.c src/app/desktop_cpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
     endif()
-    add_executable(mandelbrot_cpu src/engine/screenshot.c src/engine/perturbation.c src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/desktop_cpu_main.c ${GENERATED_SHADERS})
+    add_executable(mandelbrot_cpu src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/desktop_cpu_main.c ${GENERATED_SHADERS})
     target_compile_definitions(mandelbrot_cpu PRIVATE SOKOL_GLCORE)
     target_compile_options(mandelbrot_cpu PRIVATE -pthread)
     target_include_directories(mandelbrot_cpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app ${GENERATED_SHADERS_DIR})
@@ -152,7 +157,7 @@ if(BUILD_GPU)
         # sokol_app.h uses cocoa on macos, so its implementation file must be compiled as objective-c
         set_source_files_properties(src/app/app_runner.c src/app/desktop_gpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
     endif()
-    add_executable(mandelbrot_gpu src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/desktop_gpu_main.c ${GENERATED_SHADERS})
+    add_executable(mandelbrot_gpu src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/desktop_gpu_main.c ${GENERATED_SHADERS})
     target_compile_definitions(mandelbrot_gpu PRIVATE SOKOL_GLCORE BUILD_PERTURBATION=1)
     target_compile_options(mandelbrot_gpu PRIVATE -pthread)
     target_include_directories(mandelbrot_gpu PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app ${GENERATED_SHADERS_DIR})
@@ -166,7 +171,7 @@ if(BUILD_DEEP)
     if(APPLE)
         set_source_files_properties(src/app/app_runner.c src/app/desktop_gpu_main.c PROPERTIES COMPILE_FLAGS "-x objective-c")
     endif()
-    add_executable(mandelbrot_deep src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/desktop_gpu_main.c ${GENERATED_SHADERS})
+    add_executable(mandelbrot_deep src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/desktop_gpu_main.c ${GENERATED_SHADERS})
     target_compile_definitions(mandelbrot_deep PRIVATE SOKOL_GLCORE BUILD_PERTURBATION=1 BUILD_DEEP_TARGET=1)
     target_compile_options(mandelbrot_deep PRIVATE -pthread)
     target_include_directories(mandelbrot_deep PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app ${GENERATED_SHADERS_DIR})
@@ -177,12 +182,12 @@ endif()
 
 # --- 3. web engine ---
 if(BUILD_WEB)
-    add_executable(mandelbrot_web src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/web_main.c ${GENERATED_SHADERS})
+    add_executable(mandelbrot_web src/app/app_runner.c src/app/web_main.c src/app/wasm_bridge.c ${GENERATED_SHADERS})
     target_compile_definitions(mandelbrot_web PRIVATE SOKOL_GLES3)
-    target_compile_options(mandelbrot_web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__)
+    target_compile_options(mandelbrot_web PRIVATE -O3 -flto -msimd128 -D__wasm_simd128__ -pthread)
     target_include_directories(mandelbrot_web PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app)
-    target_link_options(mandelbrot_web PRIVATE "-O3" "-flto" "-sWASM=1" "-sUSE_SDL=0" "-sUSE_WEBGL2=1" "-sFULL_ES3=1" "-sMINIMAL_RUNTIME=0" "-sALLOW_MEMORY_GROWTH=1" "-sINITIAL_MEMORY=134217728" "-sMAXIMUM_MEMORY=1073741824")
-    target_link_libraries(mandelbrot_web PRIVATE mandelbrot_lib mandelbrot_ui)
+    set_target_properties(mandelbrot_web PROPERTIES LINK_FLAGS "-O3 -flto -s WASM=1 -s USE_SDL=0 -s USE_WEBGL2=1 -s FULL_ES3=1 -s MINIMAL_RUNTIME=0 -s ALLOW_MEMORY_GROWTH=1 -s INITIAL_MEMORY=134217728 -s MAXIMUM_MEMORY=1073741824 -pthread -s USE_PTHREADS=1 -s PTHREAD_POOL_SIZE=navigator.hardwareConcurrency")
+    target_link_libraries(mandelbrot_web PRIVATE mandelbrot_lib)
     set_target_properties(mandelbrot_web PROPERTIES OUTPUT_NAME "index")
 endif()
 
@@ -199,11 +204,14 @@ if(ipo_supported)
     if(BUILD_DEEP)
         set_target_properties(mandelbrot_deep PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
     endif()
+    if(BUILD_VIDEO)
+        set_target_properties(mandelbrot_video PROPERTIES INTERPROCEDURAL_OPTIMIZATION TRUE)
+    endif()
 endif()
 
 # --- 4. Standalone Video Renderer TUI ---
-if(NOT EMSCRIPTEN)
-    add_executable(mandelbrot_video src/engine/perturbation.c src/engine/screenshot.c src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/video_renderer_main.c src/app/headless_egl.c ${GENERATED_SHADERS})
+if(BUILD_VIDEO AND NOT EMSCRIPTEN)
+    add_executable(mandelbrot_video src/ui/hud_sokol.c src/ui/hud_settings.c src/ui/hud_video_studio.c src/app/app_runner.c src/app/video_renderer_main.c src/app/headless_egl.c ${GENERATED_SHADERS})
     target_compile_definitions(mandelbrot_video PRIVATE USE_SIMD_F128)
     target_compile_options(mandelbrot_video PRIVATE -pthread)
     target_include_directories(mandelbrot_video PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/src/app)
