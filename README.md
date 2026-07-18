@@ -1,15 +1,15 @@
 # Mandelbrot-C
 
-[![Linux](https://github.com/tiw302/mandelbrot-c/actions/workflows/linux.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/linux.yml) [![macOS](https://github.com/tiw302/mandelbrot-c/actions/workflows/macos.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/macos.yml) [![Windows](https://github.com/tiw302/mandelbrot-c/actions/workflows/windows.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/windows.yml) [![CodeQL](https://github.com/tiw302/mandelbrot-c/actions/workflows/codeql.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/codeql.yml) [![Memory Check](https://github.com/tiw302/mandelbrot-c/actions/workflows/memcheck.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/memcheck.yml) [![Formatting](https://github.com/tiw302/mandelbrot-c/actions/workflows/format.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/format.yml)
+[![Linux](https://github.com/tiw302/mandelbrot-c/actions/workflows/linux.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/linux.yml) [![macOS](https://github.com/tiw302/mandelbrot-c/actions/workflows/macos.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/macos.yml) [![Windows](https://github.com/tiw302/mandelbrot-c/actions/workflows/windows.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/windows.yml) [![WebAssembly](https://github.com/tiw302/mandelbrot-c/actions/workflows/wasm.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/wasm.yml) [![CodeQL](https://github.com/tiw302/mandelbrot-c/actions/workflows/codeql.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/codeql.yml) [![Memory Check](https://github.com/tiw302/mandelbrot-c/actions/workflows/memcheck.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/memcheck.yml) [![Formatting](https://github.com/tiw302/mandelbrot-c/actions/workflows/format.yml/badge.svg)](https://github.com/tiw302/mandelbrot-c/actions/workflows/format.yml)
 
-[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
-[![Language](https://img.shields.io/badge/Language-C99-00599C.svg)](https://en.wikipedia.org/wiki/C99)
-[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Web-lightgrey.svg)](#platform-implementations)
-[![SIMD](https://img.shields.io/badge/SIMD-AVX2%20%7C%20WASM--SIMD128-FF6B35.svg)](#platform-implementations)
-[![WebAssembly](https://img.shields.io/badge/WebAssembly-Supported-654FF0.svg)](https://tiw302.github.io/mandelbrot-c/)
-[![Renderer](https://img.shields.io/badge/Renderer-CPU%20%7C%20OpenGL%20%7C%20WebGL2-00B4D8.svg)](#platform-implementations)
-![GitHub repo size](https://img.shields.io/github/repo-size/tiw302/mandelbrot-c)
-![GitHub last commit](https://img.shields.io/github/last-commit/tiw302/mandelbrot-c)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg?logo=opensourceinitiative&logoColor=white)](https://opensource.org/licenses/MIT)
+[![Language](https://img.shields.io/badge/Language-C99-00599C.svg?logo=c&logoColor=white)](https://en.wikipedia.org/wiki/C99)
+[![Platform](https://img.shields.io/badge/Platform-Linux%20%7C%20macOS%20%7C%20Windows%20%7C%20Web-lightgrey.svg?logo=linux&logoColor=white)](#platform-implementations)
+[![SIMD](https://img.shields.io/badge/SIMD-AVX2%20%7C%20WASM--SIMD128-FF6B35.svg?logo=intel&logoColor=white)](#platform-implementations)
+[![WebAssembly](https://img.shields.io/badge/WebAssembly-Supported-654FF0.svg?logo=webassembly&logoColor=white)](https://tiw302.github.io/mandelbrot-c/)
+[![Renderer](https://img.shields.io/badge/Renderer-CPU%20%7C%20OpenGL%20%7C%20WebGL2-00B4D8.svg?logo=opengl&logoColor=white)](#platform-implementations)
+![GitHub repo size](https://img.shields.io/github/repo-size/tiw302/mandelbrot-c?logo=github&logoColor=white)
+![GitHub last commit](https://img.shields.io/github/last-commit/tiw302/mandelbrot-c?logo=github&logoColor=white)
 
 A high-performance, multi-threaded fractal explorer written in C99. Supports **6 fractal types** (Mandelbrot, Julia, Burning Ship, Tricorn, Celtic, Buffalo), **22 color palettes**, and an Engine-Centric Architecture targeting Native Desktop (CPU/AVX2/AVX-512/NEON), Web (WebAssembly/SIMD128), and hardware-accelerated GPU rendering (OpenGL/WebGL via Sokol GFX).
 
@@ -19,20 +19,37 @@ A high-performance, multi-threaded fractal explorer written in C99. Supports **6
 
 ## Table of Contents
 
-**Getting Started**
-[Quick Start](#quick-start) · [Prerequisites](#prerequisites) · [Build & Installation](#build-and-installation)
-
-**Features**
-[Introduction](#introduction) · [Core Features](#core-features) · [Interactive Controls](#interactive-controls) · [Technical Preview](#technical-preview)
-
-**Engineering**
-[The Mathematics](#the-mathematics) · [Technical Architecture](#technical-architecture) · [Platform Implementations](#platform-implementations) · [Performance Benchmarks](#performance-benchmarks)
-
-**Development**
-[Configuration](#configuration) · [Running Tests](#running-tests) · [Project Structure](#project-structure)
-
-**Project**
-[Roadmap](#roadmap) · [Contributing](#contributing) · [Development Methodology & AI Assistance](#development-methodology--ai-assistance) · [Author's Note](#authors-note) · [License](#license)
+- **Getting Started**
+  - [Quick Start](#quick-start)
+  - [Introduction](#introduction)
+  - [Technical Preview](#technical-preview)
+- **Features**
+  - [Core Features](#core-features)
+  - [Interactive Controls](#interactive-controls)
+- **Engineering**
+  - [The Mathematics](#the-mathematics)
+  - [Technical Architecture](#technical-architecture)
+  - [How a Frame is Rendered](#how-a-frame-is-rendered)
+  - [Platform Implementations](#platform-implementations)
+  - [Precision Ladder](#precision-ladder)
+  - [Performance Deep-Dive](#performance-deep-dive)
+  - [Performance Benchmarks](#performance-benchmarks)
+  - [Benchmark Methodology](#benchmark-methodology)
+- **Exploration**
+  - [Notable Zoom Coordinates](#notable-zoom-coordinates)
+  - [Web vs Desktop Feature Matrix](#web-vs-desktop-feature-matrix)
+- **Development**
+  - [Prerequisites](#prerequisites)
+  - [Build & Installation](#build-and-installation)
+  - [Configuration](#configuration)
+  - [Running Tests](#running-tests)
+  - [Project Structure](#project-structure)
+- **Project**
+  - [Roadmap](#roadmap)
+  - [Contributing](#contributing)
+  - [Development Methodology & AI Assistance](#development-methodology--ai-assistance)
+  - [Author's Note](#authors-note)
+  - [License](#license)
 
 ---
 
@@ -144,6 +161,9 @@ Example: `?re=-0.74364388797764&im=0.13182590414575&z=1.234568e+4&it=500&p=0&f=0
 | **Settings** | - | - | "Settings ⚙" Button |
 | **Quit** | `Esc` / `Q` | - | - |
 
+> [!NOTE]
+> The **About ℹ** panel explains the project overview and highlights differences between the Web and Desktop builds (e.g., features unavailable in the browser such as Mega Screenshot, Bookmark, and Video Studio).
+
 ---
 
 ## The Mathematics
@@ -169,7 +189,9 @@ To maintain high frame rates in dense regions, the engine implements several mat
 - **Period-2 Bulb Check:** Similar to the cardioid, points within the largest circular bulb are filtered out early.
 - **Normalized Iteration Count:** Prevents color banding by using a fractional iteration formula, resulting in smooth gradients.
 - **Perturbation Theory:** For extreme zoom depths ($>10^{14}$) where 64-bit doubles lose precision, the engine computes a single high-precision reference orbit at the screen center. All other pixels are rendered as low-precision complex deltas relative to that orbit — enabling infinite-precision-like rendering using standard GPU floats.
-- **Series Approximation (SA):** Coefficients A, B, C are computed alongside the reference orbit, allowing early iterations to be skipped by approximating the starting delta position with a polynomial, significantly reducing total iteration work at deep zoom levels.
+  - *Note on Deep Zoom Limits:* Despite perturbation theory, this engine employs a **hard zoom limit at $1e^{-14}$**. Pushing the GPU beyond this threshold without advanced error-correction leads to catastrophic precision loss (glitches and artifacts) because the GPU's `double-single` math emulation cannot track deltas smaller than $1e^{-14}$.
+- **Series Approximation (SA) [Not Implemented]:** To truly bypass the $1e^{-14}$ barrier and achieve infinite zoom (e.g., $1e^{-100}$), an architecture known as Series Approximation (Taylor Series / Bilinear Approximation) is required.
+  - *Why we stopped here:* SA requires a massive architectural shift. The CPU must compute complex polynomial derivatives in `bignum` to extract Taylor coefficients (A, B, C), and transfer them via SSBOs to the GPU, allowing the shader to skip thousands of iterations at once. While this grants incredible speed and infinite zoom, it introduces immense complexity, heavy CPU bottlenecks in distorted regions, and bandwidth issues on WebGL platforms. Since this project focuses on a clean, simple, and educational C99 codebase rather than competing with extreme deep-zoomers like *Kalles Fraktaler*, we opted to hard-limit the camera at $1e^{-14}$ (which is still a 100-trillion-times zoom) to preserve code simplicity.
 
 ---
 
@@ -179,13 +201,60 @@ To maintain high frame rates in dense regions, the engine implements several mat
 
 The codebase strictly adheres to a modular architecture to ensure Separation of Concerns (SoC):
 
-- **Core [SSOT]:** Pure mathematical definitions (`mandelbrot.c`, `julia.c`, `burning_ship.c`, `tricorn.c`, `celtic.c`, `buffalo.c`, `color.c`) are the Single Source of Truth, agnostic to rendering APIs. A central **Fractal Registry** (`fractal.c`) connects all fractal math kernels to the SIMD dispatch layer.
-- **Engine Layer:** Manages high-level rendering logic, thread-pools, perturbation theory (`perturbation.c`), tour system, bookmark I/O, screenshot pipeline, app state machine, and platform-agnostic graphics abstractions (via Sokol GFX).
+- **Core [SSOT]:** Pure mathematical definitions (`mandelbrot.c`, `julia.c`, `burning_ship.c`, `tricorn.c`, `celtic.c`, `buffalo.c`, `color.c`) are the Single Source of Truth, agnostic to rendering APIs. A central **Fractal Registry** (`fractal.c`) connects all fractal math kernels to the SIMD dispatch layer. Also includes `bignum.c` and `mandelbrot_bignum.c` — a software arbitrary-precision integer engine for research into infinite zoom.
+- **Engine Layer:** Manages high-level rendering logic, thread-pools, perturbation theory (`perturbation.c`), tour system, bookmark I/O, screenshot pipeline, app state machine, `config_loader.c` for persistent settings, and platform-agnostic graphics abstractions (via Sokol GFX).
+- **UI Layer:** HUD rendering split by backend — `hud_sdl.c` (CPU desktop), `hud_sokol.c` (GPU/Web), `hud_settings.c` (settings panel), and `hud_video_studio.c` (Video Studio GUI). Dear ImGui integration via `cimgui` is available for the Video Studio.
 - **Application Layer:** Platform-specific thin entry points (Sokol App for Desktop, Emscripten for Web) handle input and OS-level interactions. Each target compiles a separate `_main.c` file to avoid `#ifdef` proliferation.
 
 ### WebAssembly Subsystem
 
 The WASM implementation utilizes `SharedArrayBuffer` to enable real multi-threading in the browser. The built-in `scripts/server.py` is configured to handle the required COOP/COEP security headers for local development.
+
+---
+
+## How a Frame is Rendered
+
+Each frame follows a different path depending on the active engine. Here is what happens from input to pixel:
+
+### CPU Path
+
+```
+User Input
+    └─> app_runner.c (Sokol event)
+            └─> input_handler.c (key/mouse dispatch)
+                    └─> app_state.c (update center, zoom, palette, fractal type)
+                            └─> renderer.c (dispatch to thread pool)
+                                    ├─> Thread 0..N: claim next row via atomic counter
+                                    │       └─> fractal.c registry → math kernel
+                                    │               ├─> mandelbrot_check_avx2()   (AVX2)
+                                    │               ├─> mandelbrot_check_avx512() (AVX-512)
+                                    │               ├─> mandelbrot_check_neon()   (ARM NEON)
+                                    │               └─> mandelbrot_check()        (scalar fallback)
+                                    └─> pixel buffer (ARGB) → color.c LUT → screen
+```
+
+### GPU Path
+
+```
+User Input
+    └─> app_runner.c (Sokol event)
+            └─> input_handler.c
+                    └─> app_state.c (update uniforms)
+                            ├─> [if zoom < 1e-6] perturbation.c
+                            │       ├─> compute reference orbit (CPU, double precision)
+                            │       ├─> compute SA coefficients A, B, C
+                            │       └─> upload orbit as GPU texture
+                            └─> Sokol GFX draw call
+                                    └─> mandelbrot.glsl fragment shader
+                                            ├─> receive uniforms: center_hi/lo, zoom, iterations,
+                                            │   palette_idx, julia_mode, base_fractal_mode, high_precision
+                                            ├─> [hi_precision] Dekker ds_add + ds_mul → ~48-bit coords
+                                            ├─> [perturbation] delta arithmetic d_{n+1} = 2w_n*d_n + d_n^2 + Δc
+                                            └─> fractal iteration → smooth color → gl_FragColor
+```
+
+> [!NOTE]
+> The thread pool is **persistent** — threads are spawned once at startup and wait on condition variables between frames. This eliminates thread creation overhead entirely and keeps frame latency predictable.
 
 ---
 
@@ -235,6 +304,48 @@ The GPU path offloads all calculations to the graphics card for real-time smooth
 
 ---
 
+## Precision Ladder
+
+One of the core engineering challenges in a fractal renderer is floating-point precision. As you zoom deeper, standard 64-bit doubles run out of significant digits and the image pixelates. This engine solves this through a layered precision stack, where each level trades speed for accuracy.
+
+| Level | Mode | Mantissa Bits | Max Useful Zoom | Speed (1080p, 8 cores) |
+| :--- | :--- | :--- | :--- | :--- |
+| 32-bit float | GPU default (`E` off) | ~24 bits | ~$10^4$ | ~79 fps |
+| 64-bit double | CPU/GPU Hi-Lo Dekker | ~48–53 bits | ~$10^{12}$ | ~115 fps (AVX2) |
+| 128-bit double-double | CPU `simd-f128` (`E` on desktop) | ~106 bits | ~$10^{24}$ | ~16 fps |
+| BigNum (arbitrary) | CPU single ref point only | Configurable | Theoretical $\infty$ | Research only |
+
+> [!IMPORTANT]
+> BigNum is used exclusively for computing the single **reference orbit** in Perturbation Theory — not per-pixel. All other pixels are rendered as fast 32-bit delta offsets relative to that reference point, which is why extreme zoom remains interactive.
+
+The engine auto-selects the right level: Perturbation Theory activates automatically when `zoom < PERTURBATION_ZOOM_THRESHOLD` (`1e-6`) on Mandelbrot GPU mode. The precision mode can be toggled at runtime with `E`.
+
+---
+
+## Performance Deep-Dive
+
+Every optimization in the engine targets a specific bottleneck. Here is what each technique actually contributes:
+
+| Optimization | Technique | Speedup vs Baseline |
+| :--- | :--- | :--- |
+| Cardioid + period-2 bulb rejection | Skip iteration loop for guaranteed-interior points | ~2–4× on default views |
+| Fractional iteration (smooth coloring) | `log2(log(mag_sq))` normalized count | No speed cost; eliminates banding |
+| Color LUT | Pre-computed ARGB table per palette | Removes palette math from hot loop |
+| AVX2 SIMD | Process 4 doubles per cycle via YMM registers | ~3.7× over scalar |
+| AVX-512 SIMD | Process 8 doubles per cycle via ZMM registers | ~7× over scalar |
+| ARM NEON | Process 2 doubles per cycle on Apple Silicon / ARM64 | ~1.9× over scalar |
+| Persistent thread pool (8 cores) | Atomic row counter, no static partitioning | ~7.5× over single-threaded |
+| Atomic row counter load balancing | Threads claim next free row dynamically | Eliminates idle cores near black regions |
+| simd-f128 128-bit double-double | Software compensated arithmetic via AVX2 | Enables $10^{24}$ zoom at ~16 fps |
+| Perturbation Theory + SA | Single ref orbit + fast delta math per pixel | Enables $10^{14}$+ zoom at interactive fps |
+| GPU shader (32-bit) | Full render on graphics card | ~79 fps (no CPU iteration cost) |
+| GPU Hi-Lo Dekker | 2×`vec2` uniforms emulate 48-bit mantissa | Near-64-bit GPU zoom at ~60 fps |
+
+> [!TIP]
+> The biggest single win for typical use is the **combination of AVX2 + persistent thread pool**: together they deliver roughly **28× the throughput** of a naive single-threaded scalar loop on an 8-core machine.
+
+---
+
 ## Performance Benchmarks
 
 The following numbers were measured on a Linux system with an Intel CPU (AVX2-capable) and an integrated GPU. Results will vary by hardware.
@@ -259,7 +370,101 @@ The following numbers were measured on a Linux system with an Intel CPU (AVX2-ca
 | 64-bit emulation (Hi-Lo Dekker) | 1920×1080 | ~60 fps | ~124 Mpx/s |
 
 > [!TIP]
-> To reproduce these numbers, build with `-DBUILD_CPU=ON` or `-DBUILD_GPU=ON` and run the benchmarks in `benchmarks/cpu/` or `benchmarks/gpu/` respectively.
+> To reproduce these numbers, build with `-DBUILD_CPU=ON` or `-DBUILD_GPU=ON` and run the benchmarks in `benchmarks/cpu/` or `benchmarks/gpu/` respectively. See [Benchmark Methodology](#benchmark-methodology) for the full test setup.
+
+---
+
+## Benchmark Methodology
+
+All CPU benchmarks in `benchmarks/cpu/` are run using `CLOCK_MONOTONIC` for nanosecond-resolution wall-clock timing. The standard test grid is **1024×1024 pixels** at **1000 max iterations**, centered at the default Mandelbrot view. GPU benchmarks in `benchmarks/gpu/` measure frame time via `sokol_time`.
+
+**Reproducibility checklist:**
+
+1. Build with the appropriate CMake target and `Release` build type:
+   ```bash
+   cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
+   cmake --build build_bench
+   ./build_bench/benchmark_math
+   ./build_bench/benchmark_renderer
+   ```
+2. Close background applications to minimize OS scheduling noise.
+3. Ensure the CPU is not thermally throttled — run a warm-up pass before recording.
+4. The benchmark suite runs each kernel sequentially (scalar → AVX2 → AVX-512 → simd-f128) and prints time in seconds and throughput in Mpx/s.
+
+Benchmark results are also automatically reported as **GitHub Step Summary** in all CI pipelines (Linux, macOS, Windows) on every push.
+
+---
+
+## Notable Zoom Coordinates
+
+The following coordinates are hand-picked across all 6 fractal types and used as tour waypoints in `tour.c`. They are also excellent starting points for manual exploration. Paste them into the Settings panel or use URL deep-links.
+
+### Mandelbrot Set
+
+| Name | Re | Im | Character |
+| :--- | :--- | :--- | :--- |
+| Sea Horse Valley | `-0.743643887074537` | `0.131825904145753` | Dense spiral tendrils, classic deep zoom target |
+| Elephant Valley | `0.275275641098809` | `0.006942671571179` | Repeating elephant-trunk spirals |
+| Triple Spiral | `-0.162736800339303` | `0.878583137739572` | Triple-arm Misiurewicz point |
+| Quad Spiral | `-0.458345355141416` | `-0.633156886463435` | Four-fold spiral junction |
+| Lightning | `-0.761574` | `-0.0848` | High-contrast branching filaments |
+| Antenna Tip | `-1.768778833` | `-0.001738996` | Miniature full-set copy near the antenna |
+| Siegel Disk | `0.001643721` | `0.822467633` | Smooth quasiperiodic Siegel disk boundary |
+
+### Julia Set (c-parameter keyframes)
+
+| c (Re, Im) | Character |
+| :--- | :--- |
+| `(-0.7000, +0.2700)` | Classic connected Julia — smooth spirals |
+| `(-0.4000, +0.6000)` | Dendrite structure |
+| `(+0.2850, +0.0100)` | Cauliflower — near the real axis bulb |
+| `(-0.7269, +0.1889)` | Douady rabbit — three-period bulb |
+| `(-0.8000, +0.1560)` | Siegel dragon |
+| `(-0.1200, -0.7700)` | San Marco fractal |
+| `(-0.6180, +0.0000)` | Golden ratio Julia — self-similar spirals |
+
+### Burning Ship
+
+| Re | Im | Character |
+| :--- | :--- | :--- |
+| `-1.7550` | `-0.0300` | Ship prow region — flame-like structures |
+| `-1.8600` | `-0.0050` | Mini-ship copy — complete self-similar replica |
+| `-1.7455` | `-0.0400` | Mast and rigging — fine linear features |
+
+> [!TIP]
+> Use the URL deep-link format to share any view directly: `?re=<Re>&im=<Im>&z=<zoom>&it=<iterations>&p=<palette>&f=<fractal>`
+
+---
+
+## Web vs Desktop Feature Matrix
+
+Some features are only available on the native desktop build due to platform restrictions (filesystem access, OpenGL context requirements, or browser security policies).
+
+| Feature | Desktop CPU | Desktop GPU | Web (Browser) |
+| :--- | :---: | :---: | :---: |
+| Mandelbrot / Julia / Burning Ship | Yes | Yes | Yes |
+| Tricorn / Celtic / Buffalo | Yes | Yes | Yes |
+| 22 color palettes | Yes | Yes | Yes |
+| 14 GPU-exclusive shader palettes | - | Yes | Yes |
+| AVX2 / AVX-512 SIMD | Yes | - | - |
+| ARM NEON SIMD | Yes | - | - |
+| WASM-SIMD128 | - | - | Yes |
+| Multi-threaded rendering | Yes | - | Yes (Web Workers) |
+| 128-bit precision (`simd-f128`) | Yes | - | - |
+| GPU Hi-Lo Dekker 64-bit | - | Yes | Yes |
+| Perturbation Theory + SA | Yes | Yes | - |
+| Tour mode (all 6 fractal types) | Yes | Yes | Yes (Mandelbrot + Julia circular) |
+| Screenshot (PNG) | Yes | Yes | Yes |
+| Mega Screenshot (8K TGA) | Yes | - | - |
+| Bookmark save/load (JSON) | Yes | Yes | - |
+| URL deep-link sharing | - | - | Yes |
+| Video Studio (MP4 export) | Yes | - | - |
+| Touch / pinch-to-zoom | - | - | Yes |
+| Settings panel | Yes | Yes | Yes |
+| About panel | - | - | Yes |
+
+> [!NOTE]
+> The Web build uses a **Service Worker** (`coi-serviceworker.js`) to inject `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers, enabling `SharedArrayBuffer` for true multi-threading without requiring special server configuration.
 
 ---
 
@@ -394,14 +599,15 @@ Rendering parameters can be tuned in `include/config.h`:
 | Parameter | Default | Description |
 | :--- | :--- | :--- |
 | `WINDOW_WIDTH` / `WINDOW_HEIGHT` | `1024` / `768` | Initial window resolution |
-| `DEFAULT_ITERATIONS` | `500` | Initial iteration depth |
+| `DEFAULT_ITERATIONS` | `1200` (Desktop) / `350` (Web) | Initial iteration depth — lower on Web for browser responsiveness |
 | `MAX_ITERATIONS_LIMIT` | `10000` | Upper bound for runtime adjustments |
-| `DEFAULT_THREAD_COUNT` | `4` | Number of parallel threads (`0` = auto-detect from CPU cores, max 64) |
-| `ESCAPE_RADIUS` | `10` | Mathematical threshold for divergence |
+| `DEFAULT_THREAD_COUNT` | `0` (auto-detect) | Number of parallel threads (`0` = detect from CPU cores, max 64) |
+| `ESCAPE_RADIUS` | `10.0` | Squared-distance divergence threshold |
 | `DEFAULT_PALETTE` | `0` | Starting color palette index (see table below) |
 | `INITIAL_CENTER_RE` / `INITIAL_CENTER_IM` | `-0.5` / `0.0` | Initial view center (complex plane) |
 | `INITIAL_ZOOM` | `3.0` | Initial zoom level |
 | `MAX_HISTORY_SIZE` | `100` | Maximum undo history depth |
+| `PERTURBATION_ZOOM_THRESHOLD` | `1e-6` | Zoom level below which Perturbation Theory activates automatically |
 
 ### Color Palettes
 
@@ -449,6 +655,7 @@ ctest --test-dir build_cpu --output-on-failure
 | Test | Description |
 | :--- | :--- |
 | `test_math` | Verifies Mandelbrot/Julia/Burning Ship escape math, cardioid/period-2 bulb rejection, and AVX2 vs scalar consistency within `1e-7` |
+| `test_simd_math` | Dedicated SIMD path correctness tests — verifies AVX2/AVX-512/NEON outputs match scalar reference across all 6 fractal types |
 | `test_renderer` | Validates the persistent thread pool dispatch — ensures pixel output is correctly produced across all worker threads |
 | `test_color` | Confirms all 22 palette functions produce valid ARGB values and gradient continuity |
 | `test_bookmark` | Tests bookmark serialization and round-trip load/save correctness |
@@ -456,8 +663,9 @@ ctest --test-dir build_cpu --output-on-failure
 | `test_config` | Verifies `settings.txt` parsing and default fallback values |
 | `test_app_state` | Validates app state serialization, restoration, and cross-backend consistency |
 | `test_perturbation` | Verifies perturbation theory math consistency against the reference scalar path |
+| `test_bignum` | Validates the software arbitrary-precision BigNum engine — addition, multiplication, and division correctness |
 
-> AVX2 tests are compiled and run automatically if the host CPU supports it. On machines without AVX2, the scalar path is used and consistency tests are skipped.
+> AVX2/AVX-512 tests are compiled and run automatically if the host CPU supports them. On machines without SIMD support, the scalar path is used and consistency tests are skipped.
 
 ---
 
@@ -466,13 +674,19 @@ ctest --test-dir build_cpu --output-on-failure
 ```text
 .
 ├── include/             # Global configuration and platform headers
-│   └── config.h        # Tunable rendering parameters
+│   ├── config.h        # Tunable rendering parameters
+│   ├── core/           # Core math type headers (fractal.h, mandelbrot.h, etc.)
+│   ├── engine/         # Engine interface headers (renderer.h, tour.h, etc.)
+│   ├── ui/             # HUD and UI layer headers
+│   └── app/            # Application-layer headers (wasm_bridge.h)
 ├── src/
 │   ├── core/           # Pure Mathematical Engine (Single Source of Truth)
 │   │   ├── fractal.c   # Central fractal registry and SIMD dispatch
 │   │   ├── mandelbrot.c, julia.c, burning_ship.c
 │   │   ├── tricorn.c, celtic.c, buffalo.c
-│   │   └── color.c     # 22 palettes with LUT generation
+│   │   ├── color.c     # 22 palettes with LUT generation
+│   │   ├── bignum.c    # Software arbitrary-precision integer engine
+│   │   └── mandelbrot_bignum.c  # BigNum Mandelbrot iteration (research)
 │   ├── engine/         # Platform-Agnostic Logic
 │   │   ├── renderer.c  # Multi-threaded CPU renderer + thread pool
 │   │   ├── app_state.c # Shared application state machine
@@ -481,12 +695,20 @@ ctest --test-dir build_cpu --output-on-failure
 │   │   ├── screenshot.c # Deferred GPU readback + PNG/TGA export
 │   │   ├── perturbation.c # Reference-orbit engine for deep zoom
 │   │   ├── camera.c    # View transform and zoom history
-│   │   └── input_handler.c
+│   │   ├── config_loader.c # settings.json / settings.txt persistent config
+│   │   └── input_handler.c # Unified keyboard/mouse dispatch
+│   ├── ui/             # HUD & UI Rendering Layer
+│   │   ├── hud_sdl.c   # HUD for CPU desktop (SDL2)
+│   │   ├── hud_sokol.c # HUD for GPU desktop and Web (Sokol/Fontstash)
+│   │   ├── hud_settings.c  # Settings panel UI
+│   │   ├── hud_video_studio.c # Video Studio GUI (ImGui-based)
+│   │   └── imgui_impl.cc   # Dear ImGui backend for Video Studio
 │   └── app/            # Platform-Specific Entry Points (thin wrappers)
 │       ├── app_runner.c        # Unified Sokol app runner
 │       ├── desktop_cpu_main.c
 │       ├── desktop_gpu_main.c
 │       ├── web_main.c
+│       ├── wasm_bridge.c       # JS↔WASM function exports
 │       └── video_renderer_main.c
 ├── shaders/             # GLSL shader source files (sokol-shdc format)
 ├── web/                 # Web Frontend
@@ -501,7 +723,9 @@ ctest --test-dir build_cpu --output-on-failure
 │   ├── sokol/          # Sokol headers (GFX, App, GL, Time)
 │   ├── stb/            # stb_image_write for PNG/TGA export
 │   ├── fons/           # Fontstash for HUD text rendering
-│   └── simd-f128/      # AVX2-accelerated 128-bit double-double precision
+│   ├── simd-f128/      # AVX2-accelerated 128-bit double-double precision
+│   ├── cimgui/         # Dear ImGui C bindings (Video Studio GUI)
+│   └── cjsonx/         # Lightweight JSON parser (bookmark I/O)
 ├── scripts/             # Utility scripts
 │   └── server.py       # Local dev server with COOP/COEP headers
 ├── deploy/              # Generated by web build — ready-to-serve
@@ -550,7 +774,7 @@ ctest --test-dir build_cpu --output-on-failure
 - [x] Add Enterprise CI workflows: Code Formatter Enforcement (`clang-format`), Memory Safety (`Valgrind`), and Static Security Analysis (`CodeQL`).
 - [x] Implement Perturbation Theory reference-orbit engine and Series Approximation skip.
 - [x] Complete Perturbation Theory integration into the live GPU renderer — grid-search reference selection, Dekker-split orbit texture upload, and automatic activation below `PERTURBATION_ZOOM_THRESHOLD`.
-- [ ] Research and implement arbitrary-precision arithmetic for infinite zoom.
+- [x] Research and implement arbitrary-precision arithmetic for infinite zoom — `bignum.c` software BigNum engine, `mandelbrot_bignum.c` iteration kernel, and `perturbation_compute_bignum()` reference orbit integrated into the live renderer. Activates automatically below `BIGNUM_ZOOM_THRESHOLD` (`1e-60`).
 
 ---
 
