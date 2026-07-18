@@ -48,7 +48,7 @@ for line in gpu_code:
         if in_uniforms:
             gpu_final += "};\n"
             in_uniforms = False
-    
+
     if line.startswith('uniform'):
         gpu_final += "    " + line.replace('uniform ', '') + "\n"
     else:
