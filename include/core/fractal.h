@@ -1,10 +1,15 @@
+/* fractal.h
+ *
+ * generic fractal interface and struct definitions.
+ */
+
 #ifndef FRACTAL_H
 #define FRACTAL_H
 
 #include "core_math.h"
 
-// holds dynamic fractal iteration kernels for pluggable dispatch.
-// contains both standard 64-bit and high-precision 128-bit function pointers.
+/* holds dynamic fractal iteration kernels for pluggable dispatch. * contains both standard 64-bit
+ * and high-precision 128-bit function pointers. */
 typedef struct {
     RenderMode mode;
     const char* name;
@@ -48,5 +53,7 @@ typedef struct {
 void register_fractal(const FractalDefinition* def);
 const FractalDefinition* get_fractal_by_mode(RenderMode mode);
 void init_fractal_registry(void);
+int get_fractal_registry_count(void);
+const FractalDefinition* get_fractal_by_index(int idx);
 
 #endif
