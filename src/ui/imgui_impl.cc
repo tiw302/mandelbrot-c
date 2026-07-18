@@ -3,8 +3,8 @@
 #else
 #define SOKOL_GLCORE
 #endif
-#include "sokol/sokol_gfx.h"
 #include "sokol/sokol_app.h"
+#include "sokol/sokol_gfx.h"
 
 #ifndef SG_PIXELFORMAT_SBGR8A8
 #define SG_PIXELFORMAT_SBGR8A8 44
