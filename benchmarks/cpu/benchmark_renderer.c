@@ -47,19 +47,17 @@ static void run_benchmark(RendererContext* ctx, const char* name, int width, int
     printf("Running %d frames...\n", NUM_RUNS);
 
     complex_t julia_c = {0.0, 0.0};
-    RenderJob job = {
-        .pixels = pixels,
-        .pitch = width * 4,
-        .window_width = width,
-        .window_height = height,
-        .re_min = x_min,
-        .re_max = x_max,
-        .im_top = y_min,
-        .im_bottom = y_max,
-        .mode = RENDER_MANDELBROT,
-        .julia_c = julia_c,
-        .max_iterations = MAX_ITERATIONS
-    };
+    RenderJob job = {.pixels = pixels,
+                     .pitch = width * 4,
+                     .window_width = width,
+                     .window_height = height,
+                     .re_min = x_min,
+                     .re_max = x_max,
+                     .im_top = y_min,
+                     .im_bottom = y_max,
+                     .mode = RENDER_MANDELBROT,
+                     .julia_c = julia_c,
+                     .max_iterations = MAX_ITERATIONS};
     // warm up run
     render_fractal_threaded(ctx, &job);
 
@@ -112,9 +110,10 @@ static void run_scaling_sweep(RendererContext* ctx, int width, int height) {
         threads_to_test[num_tests++] = optimal;
     }
 
-    double time_1 = 1.0; // placeholder for speedup calculations
+    double time_1 = 1.0;  // placeholder for speedup calculations
 
-    printf("%-10s | %-12s | %-10s | %-12s | %-10s\n", "threads", "avg time", "speedup", "efficiency", "mpx/s");
+    printf("%-10s | %-12s | %-10s | %-12s | %-10s\n", "threads", "avg time", "speedup",
+           "efficiency", "mpx/s");
     printf("-----------------------------------------------------------------\n");
 
     for (int idx = 0; idx < num_tests; idx++) {
@@ -122,25 +121,23 @@ static void run_scaling_sweep(RendererContext* ctx, int width, int height) {
         set_renderer_thread_count(ctx, t);
 
         complex_t julia_c = {0.0, 0.0};
-        RenderJob job = {
-            .pixels = pixels,
-            .pitch = width * 4,
-            .window_width = width,
-            .window_height = height,
-            .re_min = x_min,
-            .re_max = x_max,
-            .im_top = y_min,
-            .im_bottom = y_max,
-            .mode = RENDER_MANDELBROT,
-            .julia_c = julia_c,
-            .max_iterations = MAX_ITERATIONS
-        };
+        RenderJob job = {.pixels = pixels,
+                         .pitch = width * 4,
+                         .window_width = width,
+                         .window_height = height,
+                         .re_min = x_min,
+                         .re_max = x_max,
+                         .im_top = y_min,
+                         .im_bottom = y_max,
+                         .mode = RENDER_MANDELBROT,
+                         .julia_c = julia_c,
+                         .max_iterations = MAX_ITERATIONS};
         // warm up run
         render_fractal_threaded(ctx, &job);
 
         // measure runs
         double total_time = 0.0;
-        int runs = (t == 1) ? 2 : 3; // run less for 1 thread to speed it up
+        int runs = (t == 1) ? 2 : 3;  // run less for 1 thread to speed it up
         for (int r = 0; r < runs; r++) {
             double start = get_time_sec();
             render_fractal_threaded(ctx, &job);
@@ -157,7 +154,8 @@ static void run_scaling_sweep(RendererContext* ctx, int width, int height) {
         double efficiency = (speedup / t) * 100.0;
         double mpx_s = ((double)width * height / 1e6) / avg_time;
 
-        printf("%-10d | %-10.4fs | %-8.2fx | %-10.1f%% | %-10.2f\n", t, avg_time, speedup, efficiency, mpx_s);
+        printf("%-10d | %-10.4fs | %-8.2fx | %-10.1f%% | %-10.2f\n", t, avg_time, speedup,
+               efficiency, mpx_s);
     }
     printf("-----------------------------------------------------------------\n\n");
 
@@ -166,7 +164,7 @@ static void run_scaling_sweep(RendererContext* ctx, int width, int height) {
 
 int main(void) {
     printf("Initializing renderer...\n");
-    RendererContext* ctx = init_renderer(MAX_ITERATIONS, 0); // 0 is default palette
+    RendererContext* ctx = init_renderer(MAX_ITERATIONS, 0);  // 0 is default palette
     if (!ctx) {
         printf("failed to initialize renderer\n");
         return 1;
