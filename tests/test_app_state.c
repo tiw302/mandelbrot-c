@@ -3,6 +3,7 @@
  * unit tests for the common application state manager.
  * validates state initialization, julia toggling, and boundaries.
  */
+
 #include <math.h>
 #include <stdio.h>
 #include <stdlib.h>
@@ -14,7 +15,7 @@ static void mock_title_callback(const char* title) {
     (void)title;
 }
 
-/* 
+/*
  * [TEST CASE] init
  * tests the functionality of init.
  */
@@ -37,7 +38,7 @@ int test_init() {
     return 1;
 }
 
-/* 
+/*
  * [TEST CASE] toggle julia
  * tests the functionality of toggle julia.
  */
@@ -63,7 +64,7 @@ int test_toggle_julia() {
     return 1;
 }
 
-/* 
+/*
  * [TEST CASE] cycle palette
  * tests the functionality of cycle palette.
  */
@@ -80,7 +81,7 @@ int test_cycle_palette() {
     return 1;
 }
 
-/* 
+/*
  * [TEST CASE] boundaries
  * tests the functionality of boundaries.
  */
