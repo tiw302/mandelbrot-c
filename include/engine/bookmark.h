@@ -1,3 +1,8 @@
+/* bookmark.h
+ *
+ * camera bookmarking and saving functionality.
+ */
+
 #ifndef BOOKMARK_H
 #define BOOKMARK_H
 
@@ -14,7 +19,6 @@ typedef struct {
     complex_t julia_c;
 } Bookmark;
 
-// saves a bookmark to bookmarks.json in the current directory
 // configures the target file for saving/loading bookmarks
 void set_bookmarks_file(const char* filepath);
 
@@ -33,7 +37,7 @@ int get_bookmark_count(void);
 // returns a pointer to the internal array of bookmarks
 const Bookmark* get_bookmarks_array(int* out_count);
 
-// frees the dynamically allocated memory used by the bookmark cache
+// frees the bookmark cache
 void bookmark_cache_free(void);
 
 #endif
