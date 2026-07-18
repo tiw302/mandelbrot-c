@@ -103,8 +103,7 @@ void burning_ship_check_avx2(__m256d cre, __m256d cim, int max_iterations, doubl
 #endif
 
 #ifdef __AVX512F__
-// avx-512 vectorized burning ship path:
-// processes 8 pixels simultaneously.
+/* avx-512 vectorized burning ship path: * processes 8 pixels simultaneously. */
 void burning_ship_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* results) {
     __m512d zre = _mm512_setzero_pd();
     __m512d zim = _mm512_setzero_pd();
@@ -160,8 +159,8 @@ void burning_ship_check_avx512(__m512d cre, __m512d cim, int max_iterations, dou
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
-// wasm simd128 vectorized burning ship path:
-// processes 2 pixels simultaneously for browser execution.
+/* wasm simd128 vectorized burning ship path: * processes 2 pixels simultaneously for browser
+ * execution. */
 void burning_ship_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, double* results) {
     v128_t zre = wasm_f64x2_splat(0.0);
     v128_t zim = wasm_f64x2_splat(0.0);
@@ -180,8 +179,8 @@ void burning_ship_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations,
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
 
-        // wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
-        // arguments are intentionally swapped vs the avx2 path.
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * * arguments are intentionally swapped vs the avx2 path. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -217,9 +216,10 @@ void burning_ship_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations,
 
 #ifdef __ARM_NEON
 #include <arm_neon.h>
-// arm neon vectorized burning ship path:
-// processes 2 pixels simultaneously using 64-bit float vectors.
-void burning_ship_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results) {
+/* arm neon vectorized burning ship path: * processes 2 pixels simultaneously using 64-bit float
+ * vectors. */
+void burning_ship_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations,
+                             double* results) {
     float64x2_t zre = vdupq_n_f64(0.0);
     float64x2_t zim = vdupq_n_f64(0.0);
     float64x2_t iters = vdupq_n_f64(0.0);
@@ -229,7 +229,8 @@ void burning_ship_check_neon(float64x2_t cre, float64x2_t cim, int max_iteration
     float64x2_t one = vdupq_n_f64(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL)
+            break;
 
         float64x2_t zre2 = vmulq_f64(zre, zre);
         float64x2_t zim2 = vmulq_f64(zim, zim);
@@ -269,8 +270,8 @@ void burning_ship_check_neon(float64x2_t cre, float64x2_t cim, int max_iteration
 #endif
 
 #ifdef USE_SIMD_F128
-// high-precision 128-bit burning ship path:
-// prevents pixelation for extreme deep zooms in burning ship mode.
+/* high-precision 128-bit burning ship path: * prevents pixelation for extreme deep zooms in burning
+ * ship mode. */
 double burning_ship_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     simd_f128 zre = simd_f128_from_double(0.0);
     simd_f128 zim = simd_f128_from_double(0.0);
@@ -278,8 +279,8 @@ double burning_ship_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations)
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_sqr(zre);
-        simd_f128 zim2 = simd_f128_sqr(zim);
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
