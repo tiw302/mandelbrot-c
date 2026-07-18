@@ -2,7 +2,8 @@
  *
  * provides the shared complex_t type, then pulls in mandelbrot and julia
  * headers so callers only need a single #include. the 128-bit simd_f128
- * type is conditionally included when building the high-precision engine. */
+ * type is conditionally included when building the high-precision engine.
+ */
 
 #ifndef CORE_MATH_H
 #define CORE_MATH_H
@@ -23,8 +24,8 @@
 
 #include "math_types.h"
 
-// 128-bit double-double type for extreme zoom precision.
-// only available when building with -DUSE_SIMD_F128.
+/* 128-bit double-double type for extreme zoom precision. * only available when building with
+ * -DUSE_SIMD_F128. */
 #ifdef USE_SIMD_F128
 #define SIMD_F128_IMPLEMENTATION
 #include "../third_party/simd-f128/simd_f128.h"
@@ -37,12 +38,12 @@
 #endif
 
 // pull in individual kernel headers — they depend on complex_t above
+#include "buffalo.h"
 #include "burning_ship.h"
+#include "celtic.h"
 #include "fractal.h"
 #include "julia.h"
 #include "mandelbrot.h"
 #include "tricorn.h"
-#include "celtic.h"
-#include "buffalo.h"
 
 #endif
