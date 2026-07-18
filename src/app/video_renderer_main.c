@@ -1,13 +1,10 @@
-/* 
- * [ARCH] platform entry point: video exporter (headless cli)
- * 
- * this is a specialized entry point that bypasses sokol and imgui entirely.
- * instead of displaying pixels to a screen, it drives the simulation loop 
- * as fast as the cpu can compute, dumping raw rgb frames directly into 
- * a pipe connected to ffmpeg.
- * 
- * separating this from the gui executable ensures that background rendering 
- * can run on servers without an active display (x11/wayland).
+/* video_renderer_main.c
+ *
+ * headless cli entry point for video export.
+ * bypasses sokol and imgui entirely — drives the simulation loop as fast
+ * as the cpu can compute, dumping raw rgb frames into a pipe to ffmpeg.
+ * separating this from the gui executable means it can run on servers
+ * without a display (x11/wayland).
  */
 #include "app_runner.h"
 #include "app_state.h"
@@ -21,6 +18,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
+#include <time.h>
 #include "headless_egl.h"
 
 #ifdef __linux__
@@ -31,7 +29,7 @@ GLAPI void APIENTRY glReadPixels(int x, int y, int width, int height, unsigned i
 #endif
 
 #define SAFE_STRCPY(dest, src) do { \
-    snprintf((dest), sizeof(dest), "%s", (src)); \
+    (void)snprintf((dest), sizeof(dest), "%s", (src)); \
 } while(0)
 
 void print_help(void) {
@@ -61,24 +59,20 @@ void print_help(void) {
 void run_headless_video_render(void) {
     AppCommonState state;
     
-    // Load config settings.json
     load_config_from_file("settings.json");
 
-    // Initialize state
     app_state_init(&state, g_cli_args.width, g_cli_args.height);
 
-    // Initialize color palette
     init_color_palette(state.max_iterations, state.palette_idx);
 
-    // Initialize CPU renderer
     RendererContext* render_ctx = init_renderer(state.max_iterations, state.palette_idx);
     if (!render_ctx) {
-        fprintf(stderr, "error: failed to initialize renderer\n");
+        (void)fprintf(stderr, "error: failed to initialize renderer\n");
         return;
     }
     set_renderer_thread_count(render_ctx, state.thread_count);
 
-    // Set up standard or custom targets using the shared controller
+    // set up standard or custom targets using the shared controller
     app_state_start_video_render(&state, 0);
 
     const char* presets[] = {"ultrafast", "superfast", "veryfast", "faster", "fast", "medium", "slow", "slower", "veryslow"};
@@ -92,10 +86,10 @@ void run_headless_video_render(void) {
                                    state.video_settings.crf_val, presets[state.video_settings.preset_idx],
                                    codecs[state.video_settings.codec_idx], aa_val,
                                    state.video_settings.show_log, state.video_settings.log_fontpath, state.video_settings.log_fontsize,
-                                   state.video_settings.output_filename, state.video_settings.log_position, state.video_settings.log_opacity,
+                                   state.video_settings.output_filename, state.video_settings.log_position,
                                    state.video_settings.log_fontcolor);
     if (!ok) {
-        fprintf(stderr, "error: failed to start video recording (is ffmpeg installed?)\n");
+        (void)fprintf(stderr, "error: failed to start video recording (is ffmpeg installed?)\n");
         cleanup_renderer(render_ctx);
         cleanup_color_palette();
         return;
@@ -104,7 +98,7 @@ void run_headless_video_render(void) {
     int total_frames = state.video_settings.duration_sec * state.video_settings.fps;
     uint32_t* vbuf = malloc((size_t)render_w * render_h * 4);
     if (!vbuf) {
-        fprintf(stderr, "error: failed to allocate memory for video frames\n");
+        (void)fprintf(stderr, "error: failed to allocate memory for video frames\n");
         stop_video_recording();
         cleanup_renderer(render_ctx);
         cleanup_color_palette();
@@ -117,7 +111,7 @@ void run_headless_video_render(void) {
     for (int frame_idx = 0; frame_idx < total_frames; frame_idx++) {
         uint32_t now = frame_idx * (1000 / state.video_settings.fps);
         
-        // Update simulation state (tours and camera boundaries)
+        // update simulation state (tours and camera boundaries)
         app_state_step_simulation(&state, now);
         
         if (state.m_tour.phase == 0 && frame_idx > 10) {
@@ -142,35 +136,38 @@ void run_headless_video_render(void) {
             .max_iterations = state.max_iterations
         };
 
+        // time the render, then append one log line (accumulates — newest at bottom)
+        struct timespec t_start, t_end;
+        clock_gettime(CLOCK_MONOTONIC, &t_start);
         render_fractal_threaded(render_ctx, &job);
+        clock_gettime(CLOCK_MONOTONIC, &t_end);
+        double render_ms = (t_end.tv_sec - t_start.tv_sec) * 1000.0
+                         + (t_end.tv_nsec - t_start.tv_nsec) / 1e6;
 
         if (state.video_settings.show_log) {
-            FILE* log_f = fopen("video_log.txt", "w");
+            FILE* log_f = fopen("video_log.txt", "a");
             if (log_f) {
-                fprintf(log_f, "Frame: %d / %d\n", frame_idx + 1, total_frames);
-                fprintf(log_f, "Center Re: %.15f\n", (double)state.cam.view.center_re);
-                fprintf(log_f, "Center Im: %.15f\n", (double)state.cam.view.center_im);
-                fprintf(log_f, "Zoom: %.3e\n", (double)state.cam.view.zoom);
-                fprintf(log_f, "Iterations: %d\n", state.max_iterations);
-                fclose(log_f);
+                (void)fprintf(log_f,
+                    "[RENDER] frame %d/%d (%.1f%%) complete in %.1f ms | "
+                    "Center: Re=%.8f, Im=%.8f, Zoom=%.6g\n",
+                    frame_idx + 1, total_frames,
+                    (float)(frame_idx + 1) / total_frames * 100.0f,
+                    render_ms,
+                    (double)state.cam.view.center_re,
+                    (double)state.cam.view.center_im,
+                    (double)state.cam.view.zoom);
+                (void)fclose(log_f);
             }
         }
 
-        /* 
-         * [WARNING] synchronous blocking call
-         * this passes the raw pixel buffer (vbuf) down the pipe directly to ffmpeg.
-         * if the system io is slow, or ffmpeg lags behind, this `fwrite()` inside
-         * append_video_frame() will block the entire thread.
-         * TODO: tech debt - move this to a dedicated background i/o thread using
-         * a ring buffer (e.g. moodycamel::ConcurrentQueue in c++) so the renderer 
-         * never waits on ffmpeg to finish encoding a frame.
-         */
+        /* fwrite() inside append_video_frame() is a blocking call — if the system io
+         * is slow or ffmpeg lags, this will stall the render thread. move to a ring buffer
+         * with a dedicated io thread if this becomes a bottleneck. */
         append_video_frame(vbuf, render_w, render_h);
         
-        // check if the pipe was closed prematurely (e.g., ffmpeg crashed or wasn't found in path)
-        // if this happens, we must bail out immediately to prevent a hang.
+        /* check if the pipe was closed prematurely (e.g., ffmpeg crashed or wasn't found in path)         * if this happens, we must bail out immediately to prevent a hang. */
         if (!is_video_recording()) {
-            fprintf(stderr, "\nerror: ffmpeg pipe broken unexpectedly. Aborting.\n");
+            (void)fprintf(stderr, "\nerror: ffmpeg pipe broken unexpectedly. Aborting.\n");
             break;
         }
 
@@ -199,7 +196,7 @@ void run_headless_gpu_video_render(void) {
     int render_h = state.video_settings.res_h * aa_val;
 
     if (!init_headless_egl(render_w, render_h)) {
-        fprintf(stderr, "error: EGL context creation failed. Make sure you are on Linux with a supported GPU.\n");
+        (void)fprintf(stderr, "error: EGL context creation failed. Make sure you are on Linux with a supported GPU.\n");
         return;
     }
 
@@ -239,17 +236,17 @@ void run_headless_gpu_video_render(void) {
                                    state.video_settings.crf_val, presets[state.video_settings.preset_idx],
                                    codecs[state.video_settings.codec_idx], aa_val,
                                    state.video_settings.show_log, state.video_settings.log_fontpath, state.video_settings.log_fontsize,
-                                   state.video_settings.output_filename, state.video_settings.log_position, state.video_settings.log_opacity,
+                                   state.video_settings.output_filename, state.video_settings.log_position,
                                    state.video_settings.log_fontcolor);
     if (!ok) {
-        fprintf(stderr, "error: failed to start video recording (is ffmpeg installed?)\n");
+        (void)fprintf(stderr, "error: failed to start video recording (is ffmpeg installed?)\n");
         return;
     }
 
     int total_frames = state.video_settings.duration_sec * state.video_settings.fps;
     uint32_t* pixel_buf = malloc((size_t)render_w * render_h * 4);
     if (!pixel_buf) {
-        fprintf(stderr, "error: out of memory\n");
+        (void)fprintf(stderr, "error: out of memory\n");
         return;
     }
 
@@ -324,7 +321,6 @@ void run_headless_gpu_video_render(void) {
 #endif
 
 sapp_desc sokol_main(int argc, char* argv[]) {
-    // Set default values in g_cli_args
     g_cli_args.width = 1280;
     g_cli_args.height = 720;
     g_cli_args.fps = 60;
@@ -350,17 +346,17 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--headless") == 0) {
             g_cli_args.headless = 1;
         } else if ((strcmp(argv[i], "-w") == 0 || strcmp(argv[i], "--width") == 0) && i + 1 < argc) {
-            g_cli_args.width = atoi(argv[++i]);
+            g_cli_args.width = (int)strtol(argv[++i], NULL, 10);
         } else if ((strcmp(argv[i], "-g") == 0 || strcmp(argv[i], "--height") == 0) && i + 1 < argc) {
-            g_cli_args.height = atoi(argv[++i]);
+            g_cli_args.height = (int)strtol(argv[++i], NULL, 10);
         } else if ((strcmp(argv[i], "-f") == 0 || strcmp(argv[i], "--fps") == 0) && i + 1 < argc) {
-            g_cli_args.fps = atoi(argv[++i]);
+            g_cli_args.fps = (int)strtol(argv[++i], NULL, 10);
         } else if ((strcmp(argv[i], "-d") == 0 || strcmp(argv[i], "--duration") == 0) && i + 1 < argc) {
-            g_cli_args.duration = atoi(argv[++i]);
+            g_cli_args.duration = (int)strtol(argv[++i], NULL, 10);
         } else if ((strcmp(argv[i], "-o") == 0 || strcmp(argv[i], "--out") == 0) && i + 1 < argc) {
             SAFE_STRCPY(g_cli_args.out, argv[++i]);
         } else if ((strcmp(argv[i], "-c") == 0 || strcmp(argv[i], "--crf") == 0) && i + 1 < argc) {
-            g_cli_args.crf = atoi(argv[++i]);
+            g_cli_args.crf = (int)strtol(argv[++i], NULL, 10);
         } else if ((strcmp(argv[i], "-p") == 0 || strcmp(argv[i], "--path") == 0) && i + 1 < argc) {
             SAFE_STRCPY(g_cli_args.path, argv[++i]);
         } else if ((strcmp(argv[i], "-s") == 0 || strcmp(argv[i], "--preset") == 0) && i + 1 < argc) {
@@ -368,23 +364,23 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         } else if (strcmp(argv[i], "--codec") == 0 && i + 1 < argc) {
             SAFE_STRCPY(g_cli_args.codec, argv[++i]);
         } else if (strcmp(argv[i], "--aa") == 0 && i + 1 < argc) {
-            g_cli_args.aa = atoi(argv[++i]);
+            g_cli_args.aa = (int)strtol(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--log") == 0) {
             g_cli_args.log = 1;
         } else if (strcmp(argv[i], "--log-size") == 0 && i + 1 < argc) {
-            g_cli_args.log_size = atoi(argv[++i]);
+            g_cli_args.log_size = (int)strtol(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--log-font") == 0 && i + 1 < argc) {
             SAFE_STRCPY(g_cli_args.log_font, argv[++i]);
         } else if (strcmp(argv[i], "--log-pos") == 0 && i + 1 < argc) {
-            g_cli_args.log_pos = atoi(argv[++i]);
+            g_cli_args.log_pos = (int)strtol(argv[++i], NULL, 10);
         } else if (strcmp(argv[i], "--log-opacity") == 0 && i + 1 < argc) {
-            g_cli_args.log_opacity = (float)atof(argv[++i]);
+            g_cli_args.log_opacity = (float)strtod(argv[++i], NULL);
         } else if (strcmp(argv[i], "--log-color") == 0 && i + 1 < argc) {
             SAFE_STRCPY(g_cli_args.log_color, argv[++i]);
         } else if (strcmp(argv[i], "--gpu") == 0) {
             g_cli_args.gpu = 1;
         } else if (strcmp(argv[i], "--curve") == 0 && i + 1 < argc) {
-            g_cli_args.curve = atoi(argv[++i]);
+            g_cli_args.curve = (int)strtol(argv[++i], NULL, 10);
         }
     }
     g_cli_args.parsed = 1;
@@ -397,7 +393,7 @@ sapp_desc sokol_main(int argc, char* argv[]) {
         }
 #else
         if (g_cli_args.gpu) {
-            fprintf(stderr, "warning: --gpu headless mode is only supported on Linux right now. Falling back to CPU.\n");
+            (void)fprintf(stderr, "warning: --gpu headless mode is only supported on Linux right now. Falling back to CPU.\n");
         }
 #endif
         run_headless_video_render();
