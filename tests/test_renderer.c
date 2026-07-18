@@ -3,13 +3,14 @@
  * unit tests for the multithreaded renderer thread pool.
  * validates thread pool dispatch and rendering output changes.
  */
+
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 
 #include "renderer.h"
 
-/* 
+/*
  * [TEST CASE] pool dispatch
  * tests the functionality of pool dispatch.
  */
@@ -37,21 +38,18 @@ int test_pool_dispatch() {
 
     // dispatch a small render job
     complex_t julia_c = {0.0, 0.0};
-    RenderJob job = {
-        .pixels = pixels,
-        .pitch = pitch,
-        .window_width = width,
-        .window_height = height,
-        .re_min = -2.0,
-        .re_max = 1.0,
-        .im_top = 1.5,
-        .im_bottom = -1.5,
-        .mode = RENDER_MANDELBROT,
-        .julia_c = julia_c,
-        .max_iterations = max_iterations
-    };
+    RenderJob job = {.pixels = pixels,
+                     .pitch = pitch,
+                     .window_width = width,
+                     .window_height = height,
+                     .re_min = -2.0,
+                     .re_max = 1.0,
+                     .im_top = 1.5,
+                     .im_bottom = -1.5,
+                     .mode = RENDER_MANDELBROT,
+                     .julia_c = julia_c,
+                     .max_iterations = max_iterations};
     render_fractal_threaded(ctx, &job);
-
 
     // validate some pixels got modified (at least the center shouldn't be all 0 if mapped properly)
     int modified = 0;
