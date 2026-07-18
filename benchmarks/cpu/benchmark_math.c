@@ -59,6 +59,49 @@ int main(void) {
     printf("   -> Time taken: %.4f seconds\n", time_taken);
     printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
 
+    // scalar double benchmark - julia
+    printf("1a. Running Scalar (double) - Julia...\n");
+    start = get_time_sec();
+    complex_t julia_c = {-0.7, 0.27015};
+    for (int y = 0; y < GRID_HEIGHT; y++) {
+        for (int x = 0; x < GRID_WIDTH; x++) {
+            complex_t z = {x_min + x * dx, y_min + y * dy};
+            results[y * GRID_WIDTH + x] = julia_check(z, julia_c, MAX_ITERATIONS);
+        }
+    }
+    end = get_time_sec();
+    time_taken = end - start;
+    printf("   -> Time taken: %.4f seconds\n", time_taken);
+    printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
+
+    // scalar double benchmark - tricorn
+    printf("1b. Running Scalar (double) - Tricorn...\n");
+    start = get_time_sec();
+    for (int y = 0; y < GRID_HEIGHT; y++) {
+        for (int x = 0; x < GRID_WIDTH; x++) {
+            complex_t c = {x_min + x * dx, y_min + y * dy};
+            results[y * GRID_WIDTH + x] = tricorn_check(c, MAX_ITERATIONS);
+        }
+    }
+    end = get_time_sec();
+    time_taken = end - start;
+    printf("   -> Time taken: %.4f seconds\n", time_taken);
+    printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
+
+    // scalar double benchmark - celtic
+    printf("1c. Running Scalar (double) - Celtic...\n");
+    start = get_time_sec();
+    for (int y = 0; y < GRID_HEIGHT; y++) {
+        for (int x = 0; x < GRID_WIDTH; x++) {
+            complex_t c = {x_min + x * dx, y_min + y * dy};
+            results[y * GRID_WIDTH + x] = celtic_check(c, MAX_ITERATIONS);
+        }
+    }
+    end = get_time_sec();
+    time_taken = end - start;
+    printf("   -> Time taken: %.4f seconds\n", time_taken);
+    printf("   -> Speed:      %.2f Mpx/s\n\n", (total_pixels / 1e6) / time_taken);
+
 #ifdef __AVX2__
     // avx2 double benchmark
     printf("2. Running AVX2 (4x double)...\n");
@@ -83,10 +126,10 @@ int main(void) {
     start = get_time_sec();
     for (int y = 0; y < GRID_HEIGHT; y++) {
         for (int x = 0; x < GRID_WIDTH; x += 8) {
-            __m512d cre = _mm512_set_pd(x_min + (x + 7) * dx, x_min + (x + 6) * dx,
-                                        x_min + (x + 5) * dx, x_min + (x + 4) * dx,
-                                        x_min + (x + 3) * dx, x_min + (x + 2) * dx,
-                                        x_min + (x + 1) * dx, x_min + x * dx);
+            __m512d cre =
+                _mm512_set_pd(x_min + (x + 7) * dx, x_min + (x + 6) * dx, x_min + (x + 5) * dx,
+                              x_min + (x + 4) * dx, x_min + (x + 3) * dx, x_min + (x + 2) * dx,
+                              x_min + (x + 1) * dx, x_min + x * dx);
             __m512d cim = _mm512_set1_pd(y_min + y * dy);
             mandelbrot_check_avx512(cre, cim, MAX_ITERATIONS, &results[y * GRID_WIDTH + x]);
         }
