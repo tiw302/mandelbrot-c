@@ -1,3 +1,7 @@
+/* config.h
+ *
+ * default application settings and constants.
+ */
 #ifndef CONFIG_H
 #define CONFIG_H
 
@@ -59,7 +63,18 @@
 #define INITIAL_CENTER_IM 0.0
 #define INITIAL_ZOOM 3.0
 
-// zoom threshold below which perturbation is used (screen units)
-#define PERTURBATION_ZOOM_THRESHOLD 1e-6
+/* zoom threshold below which perturbation theory is used for the reference orbit.
+ * dekker double-single (64-bit emulation on 32-bit gpu floats) handles ~14 decimal
+ * digits of precision, covering zoom levels down to ~1e-13 without artifacts.
+ * perturbation is only necessary past that point. setting the threshold at 1e-13
+ * ensures dekker is used in the comfortable [1e-5, 1e-13] range and perturbation
+ * kicks in only where it is actually required. */
+#define PERTURBATION_ZOOM_THRESHOLD 1e-13
+
+/* zoom threshold below which the reference orbit is computed using BigNum
+ * instead of double-precision. kept for documentation; the bignum code path
+ * is currently disabled because the camera is capped at 1e-32 (within __float128
+ * precision range) so this threshold is never reached in practice. */
+#define BIGNUM_ZOOM_THRESHOLD 1e-60
 
 #endif
