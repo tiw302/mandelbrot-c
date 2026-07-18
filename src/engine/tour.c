@@ -10,8 +10,8 @@
 #include <stdint.h>
 #include <stdlib.h>
 
-#include "config.h"
 #include "bookmark.h"
+#include "config.h"
 
 // tour configuration constants
 #define TOUR_ZOOM_DEPTH 6000.0   // target zoom depth (relative to current)
@@ -70,39 +70,32 @@ static const struct {
 // preset coordinates for the tricorn fractal tour
 static const struct {
     double re, im;
-} TRICORN_ZOOM_TARGETS[] = {
-    {-0.743643887074537, 0.131825904145753},
-    {-0.162736800339303, 0.878583137739572},
-    {0.0, 1.0},
-    {-1.25, 0.02},
-    {-0.458345355141416, -0.633156886463435},
-    {-1.768778833, 0.0}
-};
-#define NUM_TRICORN_ZOOM_TARGETS (int)(sizeof(TRICORN_ZOOM_TARGETS) / sizeof(TRICORN_ZOOM_TARGETS[0]))
+} TRICORN_ZOOM_TARGETS[] = {{-0.743643887074537, 0.131825904145753},
+                            {-0.162736800339303, 0.878583137739572},
+                            {0.0, 1.0},
+                            {-1.25, 0.02},
+                            {-0.458345355141416, -0.633156886463435},
+                            {-1.768778833, 0.0}};
+#define NUM_TRICORN_ZOOM_TARGETS \
+    (int)(sizeof(TRICORN_ZOOM_TARGETS) / sizeof(TRICORN_ZOOM_TARGETS[0]))
 
 // preset coordinates for the celtic fractal tour
 static const struct {
     double re, im;
-} CELTIC_ZOOM_TARGETS[] = {
-    {-0.5, 0.5},
-    {-0.162736800339303, 0.878583137739572},
-    {0.275275641098809, 0.006942671571179},
-    {-0.743643887074537, 0.131825904145753},
-    {-0.1, 0.838}
-};
+} CELTIC_ZOOM_TARGETS[] = {{-0.5, 0.5},
+                           {-0.162736800339303, 0.878583137739572},
+                           {0.275275641098809, 0.006942671571179},
+                           {-0.743643887074537, 0.131825904145753},
+                           {-0.1, 0.838}};
 #define NUM_CELTIC_ZOOM_TARGETS (int)(sizeof(CELTIC_ZOOM_TARGETS) / sizeof(CELTIC_ZOOM_TARGETS[0]))
 
 // preset coordinates for the buffalo fractal tour
 static const struct {
     double re, im;
 } BUFFALO_ZOOM_TARGETS[] = {
-    {-1.75, -0.03},
-    {-1.86, -0.005},
-    {-1.745, -0.04},
-    {-1.797, -0.02},
-    {-0.4, 0.4}
-};
-#define NUM_BUFFALO_ZOOM_TARGETS (int)(sizeof(BUFFALO_ZOOM_TARGETS) / sizeof(BUFFALO_ZOOM_TARGETS[0]))
+    {-1.75, -0.03}, {-1.86, -0.005}, {-1.745, -0.04}, {-1.797, -0.02}, {-0.4, 0.4}};
+#define NUM_BUFFALO_ZOOM_TARGETS \
+    (int)(sizeof(BUFFALO_ZOOM_TARGETS) / sizeof(BUFFALO_ZOOM_TARGETS[0]))
 
 #define JULIA_TOUR_MOVE_MS 3000.0   // duration of parameter interpolation
 #define JULIA_TOUR_DWELL_MS 1200.0  // duration of pause at keyframes
@@ -117,19 +110,14 @@ static const struct {
 };
 #define NUM_JULIA_C_TARGETS (int)(sizeof(JULIA_C_TARGETS) / sizeof(JULIA_C_TARGETS[0]))
 
-/* 
- * [MATH] smoothstep interpolation
- * standard hermite interpolation curve. it provides zero velocity at t=0 and t=1.
- * we use this heavily to avoid jarring camera starts and stops between keyframes.
- */
+/* smoothstep interpolation: standard hermite curve — zero velocity at t=0 and t=1.
+ * avoids jarring camera starts and stops between keyframes. */
 static inline double smoothstep(double t) {
     return t * t * (3.0 - 2.0 * t);
 }
 
-/* 
- * [MATH] quadratic bezier interpolation
- * creates a smooth curve rather than a straight line between two points.
- */
+/* quadratic bezier interpolation:
+ * creates a smooth curve rather than a straight line between two points. */
 static inline double bezier_q(double p0, double p1, double p2, double t) {
     double u = 1.0 - t;
     return u * u * p0 + 2.0 * u * t * p1 + t * t * p2;
@@ -147,13 +135,10 @@ static int pick_idx(int last, int count) {
     return idx;
 }
 
-/* 
- * [ARCH] dynamic target selection
- * instead of hardcoding camera paths, this function reads user-saved keyframes
- * (bookmarks) directly from the dynamic memory cache and filters them by the
- * currently active fractal type. it then randomly selects the next keyframe.
- */
-static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im, double* out_zoom, int* out_idx, int* out_count) {
+/* dynamic target selection: reads user-saved bookmarks from the cache and
+ * filters by active fractal type. randomly picks the next keyframe. */
+static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im, double* out_zoom,
+                               int* out_idx, int* out_count) {
     int total = 0;
     const Bookmark* bookmarks = get_bookmarks_array(&total);
 
@@ -166,9 +151,12 @@ static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im,
 
     int match_count = 0;
     for (int i = 0; i < total; i++) {
-        // exclude default view or too zoomed out bookmarks to ensure interesting tour targets
         if (bookmarks[i].fractal_type == base_fractal) {
-            if (bookmarks[i].zoom >= 0.05 || (fabs(bookmarks[i].center_re - -0.5) < 1e-4 && fabs(bookmarks[i].center_im - 0.0) < 1e-4)) {
+            /* skip the default view and any bookmark that's too zoomed out to be interesting.
+             * zoom > 0.5 means barely zoomed in — not a useful tour target.
+             * also skip the exact default center to avoid a boring starting position. */
+            if (bookmarks[i].zoom > 0.5 || (fabs(bookmarks[i].center_re - -0.5) < 1e-4 &&
+                                            fabs(bookmarks[i].center_im - 0.0) < 1e-4)) {
                 continue;
             }
             candidates_orig_idx[match_count++] = i;
@@ -182,7 +170,7 @@ static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im,
 
     int r = pick_idx(*out_idx, match_count);
     int selected_idx = candidates_orig_idx[r];
-    
+
     *out_idx = r;
     *out_count = match_count;
     *out_re = bookmarks[selected_idx].center_re;
@@ -194,15 +182,17 @@ static int get_dynamic_targets(int base_fractal, double* out_re, double* out_im,
 }
 
 // advances the main fractal tour state machine based on current timestamp
-void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fractal) {
+void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fractal, double speed) {
     if (state->phase == TOUR_IDLE) return;
     if (state->phase_start == 0) {
         state->phase_start = now;
     }
+    if (speed <= 0.0) speed = 1.0;
 
     double duration = (state->phase == TOUR_PANNING)      ? TOUR_PAN_MS
                       : (state->phase == TOUR_ZOOMING_IN) ? TOUR_ZOOM_IN_MS
                                                           : TOUR_ZOOM_OUT_MS;
+    duration /= speed;
     int32_t dt = (int32_t)(now - state->phase_start);
     double raw_t = fmax(0.0, fmin((double)dt / duration, 1.0));
     double e = smoothstep(raw_t);
@@ -214,9 +204,9 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
             double mid_im = (state->home_im + state->target_im) * 0.5;
             double dx = state->target_re - state->home_re;
             double dy = state->target_im - state->home_im;
-            double cp_re = mid_re - dy * 0.3; // perpendicular offset
+            double cp_re = mid_re - dy * 0.3;  // perpendicular offset
             double cp_im = mid_im + dx * 0.3;
-            
+
             view->center_re = bezier_q(state->home_re, cp_re, state->target_re, e);
             view->center_im = bezier_q(state->home_im, cp_im, state->target_im, e);
             view->zoom = state->home_zoom;
@@ -248,7 +238,7 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
             double dy = state->home_im - state->target_im;
             double cp_re = mid_re - dy * 0.3;
             double cp_im = mid_im + dx * 0.3;
-            
+
             view->center_re = bezier_q(state->target_re, cp_re, state->home_re, e);
             view->center_im = bezier_q(state->target_im, cp_im, state->home_im, e);
             view->zoom =
@@ -264,7 +254,8 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
                 double dyn_zoom = 0.0;
                 int dyn_idx = 0;
                 int dyn_count = 0;
-                if (get_dynamic_targets(base_fractal, &dyn_re, &dyn_im, &dyn_zoom, &dyn_idx, &dyn_count)) {
+                if (get_dynamic_targets(base_fractal, &dyn_re, &dyn_im, &dyn_zoom, &dyn_idx,
+                                        &dyn_count)) {
                     state->is_dynamic = 1;
                     state->last_zoom_idx = dyn_idx;
                     state->target_re = dyn_re;
@@ -278,22 +269,26 @@ void update_tour(TourState* state, ViewState* view, uint32_t now, int base_fract
                     state->is_dynamic = 0;
                     switch (base_fractal) {
                         case RENDER_BURNING_SHIP:
-                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_SHIP_ZOOM_TARGETS);
+                            state->last_zoom_idx =
+                                pick_idx(state->last_zoom_idx, NUM_SHIP_ZOOM_TARGETS);
                             state->target_re = SHIP_ZOOM_TARGETS[state->last_zoom_idx].re;
                             state->target_im = SHIP_ZOOM_TARGETS[state->last_zoom_idx].im;
                             break;
                         case RENDER_TRICORN:
-                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_TRICORN_ZOOM_TARGETS);
+                            state->last_zoom_idx =
+                                pick_idx(state->last_zoom_idx, NUM_TRICORN_ZOOM_TARGETS);
                             state->target_re = TRICORN_ZOOM_TARGETS[state->last_zoom_idx].re;
                             state->target_im = TRICORN_ZOOM_TARGETS[state->last_zoom_idx].im;
                             break;
                         case RENDER_CELTIC:
-                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_CELTIC_ZOOM_TARGETS);
+                            state->last_zoom_idx =
+                                pick_idx(state->last_zoom_idx, NUM_CELTIC_ZOOM_TARGETS);
                             state->target_re = CELTIC_ZOOM_TARGETS[state->last_zoom_idx].re;
                             state->target_im = CELTIC_ZOOM_TARGETS[state->last_zoom_idx].im;
                             break;
                         case RENDER_BUFFALO:
-                            state->last_zoom_idx = pick_idx(state->last_zoom_idx, NUM_BUFFALO_ZOOM_TARGETS);
+                            state->last_zoom_idx =
+                                pick_idx(state->last_zoom_idx, NUM_BUFFALO_ZOOM_TARGETS);
                             state->target_re = BUFFALO_ZOOM_TARGETS[state->last_zoom_idx].re;
                             state->target_im = BUFFALO_ZOOM_TARGETS[state->last_zoom_idx].im;
                             break;
@@ -320,8 +315,8 @@ void start_tour(TourState* state, ViewState* view, int base_fractal) {
     state->home_re = view->center_re;
     state->home_im = view->center_im;
     state->home_zoom = view->zoom;
-    
-    // Pick the first target coordinate immediately
+
+    // pick the first target coordinate immediately
     double dyn_re = 0.0;
     double dyn_im = 0.0;
     double dyn_zoom = 0.0;
@@ -368,8 +363,8 @@ void start_tour(TourState* state, ViewState* view, int base_fractal) {
         }
         state->deep_zoom = state->home_zoom / TOUR_ZOOM_DEPTH;
     }
-    
-    // Smooth start: if already zoomed out, pan directly. Otherwise, zoom out first.
+
+    // smooth start: if already zoomed out, pan directly. otherwise, zoom out first.
     if (view->zoom >= 0.1) {
         state->phase = TOUR_PANNING;
     } else {
@@ -395,12 +390,14 @@ void stop_julia_tour(JuliaTourState* state) {
 }
 
 // advances the julia parameter state machine (keyframe interpolation)
-void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now) {
+void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now, double speed) {
     if (state->phase == JULIA_TOUR_IDLE) return;
+    if (speed <= 0.0) speed = 1.0;
 
     if (state->phase == JULIA_TOUR_MOVING) {
         int32_t dt = (int32_t)(now - state->phase_start);
-        double raw_t = fmax(0.0, fmin((double)dt / JULIA_TOUR_MOVE_MS, 1.0));
+        double duration = JULIA_TOUR_MOVE_MS / speed;
+        double raw_t = fmax(0.0, fmin((double)dt / duration, 1.0));
         double e = smoothstep(raw_t);
         julia_c->re = state->from_re + (state->to_re - state->from_re) * e;
         julia_c->im = state->from_im + (state->to_im - state->from_im) * e;
@@ -413,7 +410,8 @@ void update_julia_tour(JuliaTourState* state, complex_t* julia_c, uint32_t now) 
     } else {
         // dwell phase: stay at keyframe for a brief moment before moving again
         int32_t dt = (int32_t)(now - state->phase_start);
-        if ((double)dt >= JULIA_TOUR_DWELL_MS) {
+        double duration = JULIA_TOUR_DWELL_MS / speed;
+        if ((double)dt >= duration) {
             state->from_re = julia_c->re;
             state->from_im = julia_c->im;
             state->last_julia_idx = pick_idx(state->last_julia_idx, NUM_JULIA_C_TARGETS);
@@ -467,25 +465,36 @@ int get_num_tour_targets(int base_fractal) {
     }
 
     switch (base_fractal) {
-        case RENDER_BURNING_SHIP: return NUM_SHIP_ZOOM_TARGETS;
-        case RENDER_TRICORN: return NUM_TRICORN_ZOOM_TARGETS;
-        case RENDER_CELTIC: return NUM_CELTIC_ZOOM_TARGETS;
-        case RENDER_BUFFALO: return NUM_BUFFALO_ZOOM_TARGETS;
-        default: return NUM_ZOOM_TARGETS;
+        case RENDER_BURNING_SHIP:
+            return NUM_SHIP_ZOOM_TARGETS;
+        case RENDER_TRICORN:
+            return NUM_TRICORN_ZOOM_TARGETS;
+        case RENDER_CELTIC:
+            return NUM_CELTIC_ZOOM_TARGETS;
+        case RENDER_BUFFALO:
+            return NUM_BUFFALO_ZOOM_TARGETS;
+        default:
+            return NUM_ZOOM_TARGETS;
     }
 }
 
 // retrieves current target coordinate for hud telemetry
 double get_tour_target_re(const TourState* state, int base_fractal) {
+    (void)base_fractal;
     if (state->phase == TOUR_IDLE) return 0.0;
     return state->target_re;
 }
 
 double get_tour_target_im(const TourState* state, int base_fractal) {
+    (void)base_fractal;
     if (state->phase == TOUR_IDLE) return 0.0;
     return state->target_im;
 }
 
 int get_julia_tour_target_idx(const JuliaTourState* state) {
     return state->last_julia_idx;
+}
+
+int get_num_julia_tour_targets(void) {
+    return NUM_JULIA_C_TARGETS;
 }
