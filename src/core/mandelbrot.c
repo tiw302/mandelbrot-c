@@ -45,8 +45,8 @@ double mandelbrot_check(complex_t c, int max_iterations) {
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
-    // core iterative loop: z = z^2 + c
-    // using x^2 and y^2 saves one multiplication per iteration.
+    /* core iterative loop: z = z^2 + c     * using x^2 and y^2 saves one multiplication per
+     * iteration. */
     while (iterations < max_iterations) {
         double zre2 = z.re * z.re;
         double zim2 = z.im * z.im;
@@ -190,8 +190,8 @@ void mandelbrot_check_avx512(__m512d cre, __m512d cim, int max_iterations, doubl
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
-// wasm simd128 vectorized path:
-// processes 2 pixels simultaneously for high performance in modern browsers.
+/* wasm simd128 vectorized path: * processes 2 pixels simultaneously for high performance in modern
+ * browsers. */
 void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, double* results) {
     v128_t cre_m_025 = wasm_f64x2_sub(cre, wasm_f64x2_splat(0.25));
     v128_t cim2 = wasm_f64x2_mul(cim, cim);
@@ -222,8 +222,8 @@ void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, d
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
 
-        // wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
-        // arguments are intentionally swapped vs the avx2 path above.
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * * arguments are intentionally swapped vs the avx2 path above. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -255,18 +255,17 @@ void mandelbrot_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, d
 
 #ifdef __ARM_NEON
 #include <arm_neon.h>
-// arm neon vectorized path:
-// processes 2 pixels simultaneously using 64-bit float vectors.
+/* arm neon vectorized path: * processes 2 pixels simultaneously using 64-bit float vectors. */
 void mandelbrot_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results) {
     float64x2_t cre_m_025 = vsubq_f64(cre, vdupq_n_f64(0.25));
     float64x2_t cim2 = vmulq_f64(cim, cim);
     float64x2_t q = vaddq_f64(vmulq_f64(cre_m_025, cre_m_025), cim2);
-    uint64x2_t cardioid_mask = vcleq_f64(vmulq_f64(q, vaddq_f64(q, cre_m_025)),
-                                         vmulq_f64(vdupq_n_f64(0.25), cim2));
+    uint64x2_t cardioid_mask =
+        vcleq_f64(vmulq_f64(q, vaddq_f64(q, cre_m_025)), vmulq_f64(vdupq_n_f64(0.25), cim2));
 
     float64x2_t cre_p_1 = vaddq_f64(cre, vdupq_n_f64(1.0));
-    uint64x2_t bulb_mask = vcleq_f64(vaddq_f64(vmulq_f64(cre_p_1, cre_p_1), cim2),
-                                     vdupq_n_f64(0.0625));
+    uint64x2_t bulb_mask =
+        vcleq_f64(vaddq_f64(vmulq_f64(cre_p_1, cre_p_1), cim2), vdupq_n_f64(0.0625));
 
     uint64x2_t in_set_mask = vorrq_u64(cardioid_mask, bulb_mask);
 
@@ -279,7 +278,8 @@ void mandelbrot_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations,
     float64x2_t one = vdupq_n_f64(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL)
+            break;
 
         float64x2_t zre2 = vmulq_f64(zre, zre);
         float64x2_t zim2 = vmulq_f64(zim, zim);
@@ -291,7 +291,7 @@ void mandelbrot_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations,
         // vbslq_f64(mask, true_val, false_val) -> bitwise select
         final_mag_sq = vbslq_f64(just_escaped, mag_sq, final_mag_sq);
         escaped_mask = vorrq_u64(escaped_mask, mask);
-        
+
         // iters += (1.0 where not escaped)
         float64x2_t iters_inc = vbslq_f64(escaped_mask, vdupq_n_f64(0.0), one);
         iters = vaddq_f64(iters, iters_inc);
@@ -354,8 +354,8 @@ double mandelbrot_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
      * arithmetic functions (add, sub, mul, sqr) handle error propagation
      * using dekker/knuth split techniques on double-precision pairs. */
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_sqr(zre);
-        simd_f128 zim2 = simd_f128_sqr(zim);
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
@@ -392,17 +392,17 @@ void mandelbrot_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iteration
     __m256d x_minus_025 = _mm256_sub_pd(x, _mm256_set1_pd(0.25));
     __m256d y_sq = _mm256_mul_pd(y, y);
     __m256d q = _mm256_add_pd(_mm256_mul_pd(x_minus_025, x_minus_025), y_sq);
-    
+
     // q * (q + x_minus_025) <= 0.25 * y_sq
     __m256d cardioid_lhs = _mm256_mul_pd(q, _mm256_add_pd(q, x_minus_025));
     __m256d cardioid_rhs = _mm256_mul_pd(_mm256_set1_pd(0.25), y_sq);
     __m256d inside_cardioid = _mm256_cmp_pd(cardioid_lhs, cardioid_rhs, _CMP_LE_OQ);
-    
+
     // (x + 1.0) * (x + 1.0) + y_sq <= 0.0625
     __m256d x_plus_1 = _mm256_add_pd(x, _mm256_set1_pd(1.0));
     __m256d bulb_lhs = _mm256_add_pd(_mm256_mul_pd(x_plus_1, x_plus_1), y_sq);
     __m256d inside_bulb = _mm256_cmp_pd(bulb_lhs, _mm256_set1_pd(0.0625), _CMP_LE_OQ);
-    
+
     __m256d rejected_mask = _mm256_or_pd(inside_cardioid, inside_bulb);
 
     simd_f128x4 zre = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
