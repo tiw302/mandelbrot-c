@@ -3,7 +3,8 @@
  * the burning ship fractal is a variant of the mandelbrot set where
  * the real and imaginary parts of z are replaced with their absolute
  * values before squaring: z = (|re(z)| + i*|im(z)|)^2 + c.
- * this produces an asymmetric, ship-shaped fractal. */
+ * this produces an asymmetric, ship-shaped fractal.
+ */
 
 #ifndef BURNING_SHIP_H
 #define BURNING_SHIP_H
