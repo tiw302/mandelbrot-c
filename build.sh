@@ -42,7 +42,9 @@ build_web() {
     cp web/coi-serviceworker.js deploy/
     cp build_web/index.js deploy/
     cp build_web/index.wasm deploy/
+    if [ -f "build_web/index.worker.js" ]; then cp build_web/index.worker.js deploy/; fi
     if [ -d "assets" ]; then cp -r assets deploy/; fi
+    if [ -d "web/assets" ]; then cp -r web/assets/* deploy/assets/; fi
     echo "web: build and deployment package ready in 'deploy/' folder."
     echo ""
     echo "===================================================================================="
@@ -100,6 +102,12 @@ run_benchmarks() {
     echo "Running math benchmark..."
     ./build_bench/benchmarks/benchmark_math || return $?
     echo ""
+    echo "Running perturbation benchmark..."
+    ./build_bench/benchmarks/benchmark_perturbation || return $?
+    echo ""
+    echo "Running bignum benchmark..."
+    ./build_bench/benchmarks/benchmark_bignum || return $?
+    echo ""
     echo "Running renderer benchmark..."
     ./build_bench/benchmarks/benchmark_renderer || return $?
     echo ""
@@ -143,8 +151,8 @@ echo "==========================================================================
 echo "  1) cpu (combined 64/128-bit)"
 echo "  2) gpu (combined 32/64-bit)"
 echo "  3) web"
-echo "  4) deep zoom (gpu + perturbation)"
-echo "  5) video renderer TUI (multithreaded CLI)"
+echo "  4) deep/infinite zoom (gpu + perturbation + bignum)"
+echo "  5) video renderer"
 echo "  6) run tests"
 echo "  7) run benchmarks"
 echo "  8) build all"
