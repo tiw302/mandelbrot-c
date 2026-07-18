@@ -26,9 +26,10 @@
  */
 
 #include "bignum.h"
+
 #include <math.h>
-#include <string.h>
 #include <stdint.h>
+#include <string.h>
 
 /* -------------------------------------------------------------------------
  * internal helpers
@@ -88,7 +89,7 @@ void bn_from_double(BigNum* bn, double val) {
     for (int i = BN_INT_LIMBS - 1; i >= 0; i--) {
         double word_scale = 1.0;
         for (int p = 0; p < i; p++) {
-            word_scale *= 4294967296.0; // 2^32
+            word_scale *= 4294967296.0;  // 2^32
         }
         uint32_t word = (uint32_t)(remaining / word_scale);
         bn->limbs[BN_FRAC_LIMBS + i] = word;
@@ -99,8 +100,8 @@ void bn_from_double(BigNum* bn, double val) {
      * limbs[BN_FRAC_LIMBS - 1] holds the most significant fraction word
      * (value 2^-32 per unit), limbs[0] holds the least significant. */
     for (int i = BN_FRAC_LIMBS - 1; i >= 0; i--) {
-        remaining *= 4294967296.0; // shift left by 32 bits
-        uint32_t word = (uint32_t)remaining;
+        remaining *= 4294967296.0;  // shift left by 32 bits
+        uint32_t word = (remaining >= 4294967296.0) ? 0xFFFFFFFFu : (uint32_t)remaining;
         bn->limbs[i] = word;
         remaining -= (double)word;
     }
@@ -112,15 +113,16 @@ double bn_to_double(const BigNum* bn) {
      * only the top few limbs are significant in a 53-bit double mantissa. */
     double result = 0.0;
 
-    // integer part: limbs[BN_FRAC_LIMBS..BN_LIMBS-1]
-    // limbs[BN_FRAC_LIMBS] has weight 1.0, limbs[BN_FRAC_LIMBS+1] has weight 2^32, etc.
+    /* integer part: limbs[BN_FRAC_LIMBS..BN_LIMBS-1]     * limbs[BN_FRAC_LIMBS] has weight 1.0,
+     * limbs[BN_FRAC_LIMBS+1] has weight 2^32, etc. */
     double int_weight = 1.0;
     for (int i = BN_FRAC_LIMBS; i < BN_LIMBS; i++) {
         result += (double)bn->limbs[i] * int_weight;
         int_weight *= 4294967296.0;
     }
 
-    // fractional part: limbs[BN_FRAC_LIMBS-1] has weight 2^-32, limbs[0] has weight 2^(-32*BN_FRAC_LIMBS)
+    // fractional part: limbs[BN_FRAC_LIMBS-1] has weight 2^-32, limbs[0] has weight
+    // 2^(-32*BN_FRAC_LIMBS)
     double frac_weight = 1.0 / 4294967296.0;
     for (int i = BN_FRAC_LIMBS - 1; i >= 0; i--) {
         result += (double)bn->limbs[i] * frac_weight;
@@ -230,7 +232,10 @@ void bn_mul(BigNum* out, const BigNum* a, const BigNum* b) {
     // zero result should always have positive sign (canonical form)
     int is_zero = 1;
     for (int i = 0; i < BN_LIMBS; i++) {
-        if (out->limbs[i] != 0) { is_zero = 0; break; }
+        if (out->limbs[i] != 0) {
+            is_zero = 0;
+            break;
+        }
     }
     if (is_zero) out->sign = 1;
 }
