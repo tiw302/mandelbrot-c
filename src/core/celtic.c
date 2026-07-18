@@ -12,20 +12,14 @@
 #include <math.h>
 #include <stdint.h>
 
-/* scalar celtic path:
- * calculates iterations for a single pixel.
- * uses early rejection to skip points inside the main cardioid and period-2 bulb. */
+// scalar celtic path: single pixel, no cardioid rejection (celtic has none)
 double celtic_check(complex_t c, int max_iterations) {
-    /* early rejection for the main cardioid and period-2 bulb.
-     * points in these regions are guaranteed to be in the set (infinite iterations).
-     * skipping them saves massive amounts of cpu cycles in the dark center. */
-
     complex_t z = {0, 0};
     int iterations = 0;
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
-    // core iterative loop: z = z^2 + c
-    // using x^2 and y^2 saves one multiplication per iteration.
+    /* celtic formula: z_{n+1} = {abs(zre^2 - zim^2) + c.re, 2*zre*zim + c.im}     * pre-computing
+     * zre2 and zim2 saves one multiplication per iteration. */
     while (iterations < max_iterations) {
         double zre2 = z.re * z.re;
         double zim2 = z.im * z.im;
@@ -50,13 +44,7 @@ double celtic_check(complex_t c, int max_iterations) {
  * processes 4 pixels simultaneously. employs a parallel bitmask
  * to track which pixels have escaped, stopping only when all 4 are done. */
 void celtic_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* results) {
-    __m256d cre_m_025 = _mm256_sub_pd(cre, _mm256_set1_pd(0.25));
-    __m256d cim2 = _mm256_mul_pd(cim, cim);
-    __m256d q = _mm256_add_pd(_mm256_mul_pd(cre_m_025, cre_m_025), cim2);
-    __m256d cardioid_mask = _mm256_setzero_pd();
-    __m256d cre_p_1 = _mm256_add_pd(cre, _mm256_set1_pd(1.0));
-    __m256d bulb_mask = _mm256_setzero_pd();
-    __m256d in_set_mask = _mm256_or_pd(cardioid_mask, bulb_mask);
+    __m256d in_set_mask = _mm256_setzero_pd();
 
     __m256d zre = _mm256_setzero_pd();
     __m256d zim = _mm256_setzero_pd();
@@ -112,13 +100,7 @@ void celtic_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* res
  * processes 8 pixels simultaneously. employs a parallel bitmask
  * to track which pixels have escaped, stopping only when all 8 are done. */
 void celtic_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* results) {
-    __m512d cre_m_025 = _mm512_sub_pd(cre, _mm512_set1_pd(0.25));
-    __m512d cim2 = _mm512_mul_pd(cim, cim);
-    __m512d q = _mm512_add_pd(_mm512_mul_pd(cre_m_025, cre_m_025), cim2);
-    __mmask8 cardioid_mask = 0;
-    __m512d cre_p_1 = _mm512_add_pd(cre, _mm512_set1_pd(1.0));
-    __mmask8 bulb_mask = 0;
-    __mmask8 in_set_mask = cardioid_mask | bulb_mask;
+    __mmask8 in_set_mask = 0;
 
     __m512d zre = _mm512_setzero_pd();
     __m512d zim = _mm512_setzero_pd();
@@ -168,18 +150,10 @@ void celtic_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* r
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
-// wasm simd128 vectorized path:
-// processes 2 pixels simultaneously for high performance in modern browsers.
+/* wasm simd128 vectorized path: * processes 2 pixels simultaneously for high performance in modern
+ * browsers. */
 void celtic_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, double* results) {
-    v128_t cre_m_025 = wasm_f64x2_sub(cre, wasm_f64x2_splat(0.25));
-    v128_t cim2 = wasm_f64x2_mul(cim, cim);
-    v128_t q = wasm_f64x2_add(wasm_f64x2_mul(cre_m_025, cre_m_025), cim2);
-    v128_t cardioid_mask = wasm_i64x2_const(0, 0);
-
-    v128_t cre_p_1 = wasm_f64x2_add(cre, wasm_f64x2_splat(1.0));
-    v128_t bulb_mask = wasm_i64x2_const(0, 0);
-
-    v128_t in_set_mask = wasm_v128_or(cardioid_mask, bulb_mask);
+    v128_t in_set_mask = wasm_i64x2_const(0, 0);
 
     v128_t zre = wasm_f64x2_splat(0.0);
     v128_t zim = wasm_f64x2_splat(0.0);
@@ -198,8 +172,8 @@ void celtic_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, doubl
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
 
-        // wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
-        // arguments are intentionally swapped vs the avx2 path above.
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * * arguments are intentionally swapped vs the avx2 path above. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -232,18 +206,9 @@ void celtic_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, doubl
 
 #ifdef __ARM_NEON
 #include <arm_neon.h>
-// arm neon vectorized path:
-// processes 2 pixels simultaneously using 64-bit float vectors.
+/* arm neon vectorized path: * processes 2 pixels simultaneously using 64-bit float vectors. */
 void celtic_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results) {
-    float64x2_t cre_m_025 = vsubq_f64(cre, vdupq_n_f64(0.25));
-    float64x2_t cim2 = vmulq_f64(cim, cim);
-    float64x2_t q = vaddq_f64(vmulq_f64(cre_m_025, cre_m_025), cim2);
-    uint64x2_t cardioid_mask = vdupq_n_u64(0);
-
-    float64x2_t cre_p_1 = vaddq_f64(cre, vdupq_n_f64(1.0));
-    uint64x2_t bulb_mask = vdupq_n_u64(0);
-
-    uint64x2_t in_set_mask = vorrq_u64(cardioid_mask, bulb_mask);
+    uint64x2_t in_set_mask = vdupq_n_u64(0);
 
     float64x2_t zre = vdupq_n_f64(0.0);
     float64x2_t zim = vdupq_n_f64(0.0);
@@ -254,7 +219,8 @@ void celtic_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, dou
     float64x2_t one = vdupq_n_f64(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL)
+            break;
 
         float64x2_t zre2 = vmulq_f64(zre, zre);
         float64x2_t zim2 = vmulq_f64(zim, zim);
@@ -294,15 +260,12 @@ void celtic_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, dou
 #endif
 
 #ifdef USE_SIMD_F128
-/* high-precision 128-bit path (double-double):
- * utilizes simd intrinsics for single-pixel precision enhancement.
- * used for deep zooming (beyond 10^14) where standard 64-bit float degrades. */
+/* high-precision 128-bit celtic path (double-double):
+ *  used for deep zooming (beyond 10^14) where standard 64-bit float degrades. */
 double celtic_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     double cre_hi, cre_lo, cim_hi, cim_lo;
     simd_f128_extract(cre, &cre_hi, &cre_lo);
     simd_f128_extract(cim, &cim_hi, &cim_lo);
-
-
 
     simd_f128 zre = simd_f128_from_double(0.0);
     simd_f128 zim = simd_f128_from_double(0.0);
@@ -310,8 +273,8 @@ double celtic_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_sqr(zre);
-        simd_f128 zim2 = simd_f128_sqr(zim);
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
@@ -336,8 +299,7 @@ double celtic_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
 /* avx2 high-precision 128-bit celtic path:
  * processes 4 pixels simultaneously with double-double precision.
  * prevents pixelation for extremely deep zooms with high throughput. */
-void celtic_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations,
-                             double* results) {
+void celtic_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations, double* results) {
     simd_f128x4 zre = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
     simd_f128x4 zim = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
     __m256d iters = _mm256_setzero_pd();
