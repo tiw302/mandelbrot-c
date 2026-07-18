@@ -25,7 +25,7 @@ static int approx_eq(double a, double b) {
     return fabs(a - b) < 1e-7;
 }
 
-/* 
+/*
  * [TEST CASE] mandelbrot basics
  * tests the functionality of mandelbrot basics.
  */
@@ -51,7 +51,7 @@ void test_mandelbrot_basics(void) {
     TEST_END();
 }
 
-/* 
+/*
  * [TEST CASE] julia basics
  * tests the functionality of julia basics.
  */
@@ -70,7 +70,7 @@ void test_julia_basics(void) {
     TEST_END();
 }
 
-/* 
+/*
  * [TEST CASE] smooth coloring
  * tests the functionality of smooth coloring.
  */
@@ -90,7 +90,7 @@ void test_smooth_coloring(void) {
 }
 
 #ifdef __AVX2__
-/* 
+/*
  * [TEST CASE] avx2 consistency
  * tests the functionality of avx2 consistency.
  */
@@ -128,7 +128,7 @@ void test_avx2_consistency(void) {
 #endif
 
 #ifdef __AVX512F__
-/* 
+/*
  * [TEST CASE] avx512 consistency
  * tests the functionality of avx512 consistency.
  */
@@ -174,7 +174,7 @@ void test_avx512_consistency(void) {
 #endif
 
 #ifdef USE_SIMD_F128
-/* 
+/*
  * [TEST CASE] f128 vs scalar
  * tests the functionality of f128 vs scalar.
  */
@@ -201,7 +201,7 @@ void test_f128_vs_scalar(void) {
     TEST_END();
 }
 
-/* 
+/*
  * [TEST CASE] f128 julia vs scalar
  * tests the functionality of f128 julia vs scalar.
  */
@@ -230,7 +230,7 @@ void test_f128_julia_vs_scalar(void) {
     TEST_END();
 }
 
-/* 
+/*
  * [TEST CASE] f128 burning ship vs scalar
  * tests the functionality of f128 burning ship vs scalar.
  */
@@ -256,7 +256,7 @@ void test_f128_burning_ship_vs_scalar(void) {
 }
 
 #ifdef __AVX2__
-/* 
+/*
  * [TEST CASE] f128x4 vs scalar
  * tests the functionality of f128x4 vs scalar.
  */
@@ -314,7 +314,7 @@ void test_f128x4_vs_scalar(void) {
 #endif
 
 #ifdef __AVX2__
-/* 
+/*
  * [TEST CASE] boundary escaping consistency
  * tests the functionality of boundary escaping consistency.
  */
