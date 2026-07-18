@@ -1,3 +1,8 @@
+/* math_types.h
+ *
+ * arbitrary precision math types and structs.
+ */
+
 #ifndef MATH_TYPES_H
 #define MATH_TYPES_H
 
@@ -17,7 +22,10 @@ typedef enum {
     RENDER_BUFFALO = 5
 } RenderMode;
 
-// high-precision floating point type for deep zooms
+/* high-precision floating point type for deep zooms.
+ * note: MSVC does not support __float128. on Windows MSVC, this falls back
+ * to 'long double' (which is identical to 64-bit 'double' in MSVC).
+ * this limits native MSVC builds to ~1e-15 zoom. */
 #ifdef __SIZEOF_FLOAT128__
 typedef __float128 precise_float;
 #else
@@ -31,4 +39,4 @@ typedef struct {
     precise_float zoom;
 } ViewState;
 
-#endif // math_types_h
+#endif  // math_types_h
