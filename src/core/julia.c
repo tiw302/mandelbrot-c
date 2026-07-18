@@ -43,8 +43,8 @@ void julia_check_wasm_simd128(v128_t zre, v128_t zim, complex_t c, int max_itera
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
 
-        // wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
-        // arguments are intentionally swapped vs the avx2 path.
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * * arguments are intentionally swapped vs the avx2 path. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -74,8 +74,8 @@ void julia_check_wasm_simd128(v128_t zre, v128_t zim, complex_t c, int max_itera
 #endif
 
 #ifdef __AVX512F__
-// avx-512 vectorized julia path:
-// processes 8 pixels simultaneously for maximum desktop cpu throughput.
+/* avx-512 vectorized julia path: * processes 8 pixels simultaneously for maximum desktop cpu
+ * throughput. */
 void julia_check_avx512(__m512d zre, __m512d zim, complex_t c, int max_iterations,
                         double* results) {
     __m512d cre = _mm512_set1_pd(c.re);
@@ -151,8 +151,8 @@ double julia_check(complex_t z, complex_t c, int max_iterations) {
 }
 
 #ifdef __AVX2__
-// avx2 vectorized julia path:
-// processes 4 pixels simultaneously for maximum desktop cpu throughput.
+/* avx2 vectorized julia path: * processes 4 pixels simultaneously for maximum desktop cpu
+ * throughput. */
 void julia_check_avx2(__m256d zre, __m256d zim, complex_t c, int max_iterations, double* results) {
     __m256d cre = _mm256_set1_pd(c.re);
     __m256d cim = _mm256_set1_pd(c.im);
@@ -201,8 +201,7 @@ void julia_check_avx2(__m256d zre, __m256d zim, complex_t c, int max_iterations,
 
 #ifdef __ARM_NEON
 #include <arm_neon.h>
-// arm neon vectorized path:
-// processes 2 pixels simultaneously using 64-bit float vectors.
+/* arm neon vectorized path: * processes 2 pixels simultaneously using 64-bit float vectors. */
 void julia_check_neon(float64x2_t zre, float64x2_t zim, float64x2_t cre, float64x2_t cim,
                       int max_iterations, double* results) {
     float64x2_t iters = vdupq_n_f64(0.0);
@@ -212,7 +211,8 @@ void julia_check_neon(float64x2_t zre, float64x2_t zim, float64x2_t cre, float64
     float64x2_t one = vdupq_n_f64(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL)
+            break;
 
         float64x2_t zre2 = vmulq_f64(zre, zre);
         float64x2_t zim2 = vmulq_f64(zim, zim);
@@ -263,8 +263,8 @@ double julia_check_f128(simd_f128 zre, simd_f128 zim, simd_f128 cre, simd_f128 c
      * arithmetic functions (add, sub, mul, sqr) handle error propagation
      * using dekker/knuth split techniques on double-precision pairs. */
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_sqr(zre);
-        simd_f128 zim2 = simd_f128_sqr(zim);
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
