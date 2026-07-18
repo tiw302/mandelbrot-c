@@ -10,14 +10,15 @@
  */
 
 #include "screenshot.h"
-// screenshot.c is the sole owner of stb_image_write implementation.
-// do not define STB_IMAGE_WRITE_IMPLEMENTATION anywhere else.
+/* screenshot.c is the sole owner of stb_image_write implementation. * do not define
+ * STB_IMAGE_WRITE_IMPLEMENTATION anywhere else. */
 #define STB_IMAGE_WRITE_IMPLEMENTATION
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
 #if !defined(_WIN32)
 #include <signal.h>
+#include <unistd.h>
 #endif
 
 #include "renderer.h"
@@ -25,7 +26,7 @@
 int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int target_width,
                          int target_height, precise_float re_min, precise_float re_max,
                          precise_float im_min, precise_float im_max, int max_iterations,
-                         int palette_idx, int fractal_type, complex_t julia_c) {
+                         int fractal_type, complex_t julia_c) {
     static uint32_t mega_counter = 0;
     char filename[256];
     snprintf(filename, sizeof(filename), "mega_screenshot_%u_%u.tga", (unsigned int)time(NULL),
@@ -35,6 +36,13 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
     if (!file) {
         fprintf(stderr, "error: failed to open mega screenshot file for writing\n");
         return 0;
+    }
+
+    if (state) {
+        pthread_mutex_lock(&state->state_mutex);
+        snprintf(state->mega_screenshot_filename, sizeof(state->mega_screenshot_filename), "%s",
+                 filename);
+        pthread_mutex_unlock(&state->state_mutex);
     }
 
     /* write tga header (uncompressed true-color image).
@@ -49,7 +57,11 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
     header[15] = (target_height >> 8);
     header[16] = 32;    // 32 bits per pixel
     header[17] = 0x20;  // top-down origin
-    fwrite(header, 1, 18, file);
+    if (fwrite(header, 1, 18, file) != 18) {
+        fprintf(stderr, "error: failed to write tga header\n");
+        fclose(file);
+        return 0;
+    }
 
     /* we render in chunks (strips) to save memory.
      * by allocating a small 256-line buffer instead of the whole target_height,
@@ -57,7 +69,8 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
     int chunk_height = 256;
     if (chunk_height > target_height) chunk_height = target_height;
 
-    uint32_t* chunk_pixels = (uint32_t*)malloc((size_t)target_width * chunk_height * 4);
+    uint32_t* chunk_pixels =
+        (uint32_t*)malloc((size_t)target_width * chunk_height * sizeof(uint32_t));
     if (!chunk_pixels) {
         fprintf(stderr, "error: failed to allocate memory for mega screenshot chunk\n");
         fclose(file);
@@ -93,10 +106,18 @@ int save_mega_screenshot(RendererContext* render_ctx, AppCommonState* state, int
                          .max_iterations = max_iterations};
         render_fractal_threaded(render_ctx, &job);
 
-        fwrite(chunk_pixels, 4, (size_t)target_width * lines, file);
+        if (fwrite(chunk_pixels, 4, (size_t)target_width * lines, file) !=
+            (size_t)target_width * lines) {
+            fprintf(stderr, "error: failed to write screenshot chunk\n");
+            free(chunk_pixels);
+            fclose(file);
+            return 0;
+        }
         int progress = (y_start + lines) * 100 / target_height;
         if (state) {
+            pthread_mutex_lock(&state->state_mutex);
             state->mega_screenshot_progress = progress;
+            pthread_mutex_unlock(&state->state_mutex);
         }
         printf("\rprogress: %d%%", progress);
         fflush(stdout);
@@ -122,19 +143,20 @@ typedef struct {
     precise_float im_min;
     precise_float im_max;
     int max_iterations;
-    int palette_idx;
     int fractal_type;
     complex_t julia_c;
 } MegaScreenshotArgs;
 
 static void* mega_screenshot_thread_func(void* arg) {
     MegaScreenshotArgs* args = (MegaScreenshotArgs*)arg;
-    int success = save_mega_screenshot(args->render_ctx, args->state, args->target_width,
-                                       args->target_height, args->re_min, args->re_max,
-                                       args->im_min, args->im_max, args->max_iterations,
-                                       args->palette_idx, args->fractal_type, args->julia_c);
+    int success =
+        save_mega_screenshot(args->render_ctx, args->state, args->target_width, args->target_height,
+                             args->re_min, args->re_max, args->im_min, args->im_max,
+                             args->max_iterations, args->fractal_type, args->julia_c);
     if (args->state) {
+        pthread_mutex_lock(&args->state->state_mutex);
         args->state->mega_screenshot_active = success ? 2 : 3;
+        pthread_mutex_unlock(&args->state->state_mutex);
     }
     free(args);
     return NULL;
@@ -143,8 +165,7 @@ static void* mega_screenshot_thread_func(void* arg) {
 void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* state,
                                 int target_width, int target_height, precise_float re_min,
                                 precise_float re_max, precise_float im_min, precise_float im_max,
-                                int max_iterations, int palette_idx, int fractal_type,
-                                complex_t julia_c) {
+                                int max_iterations, int fractal_type, complex_t julia_c) {
     if (state && state->mega_screenshot_active) {
         return;  // already rendering
     }
@@ -161,7 +182,6 @@ void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* sta
     args->im_min = im_min;
     args->im_max = im_max;
     args->max_iterations = max_iterations;
-    args->palette_idx = palette_idx;
     args->fractal_type = fractal_type;
     args->julia_c = julia_c;
 
@@ -175,11 +195,13 @@ void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* sta
         pthread_detach(thread);
     } else {
         // fallback to sync
-        int success = save_mega_screenshot(render_ctx, state, target_width, target_height, re_min,
-                                           re_max, im_min, im_max, max_iterations, palette_idx,
-                                           fractal_type, julia_c);
+        int success =
+            save_mega_screenshot(render_ctx, state, target_width, target_height, re_min, re_max,
+                                 im_min, im_max, max_iterations, fractal_type, julia_c);
         if (state) {
+            pthread_mutex_lock(&state->state_mutex);
             state->mega_screenshot_active = success ? 2 : 3;
+            pthread_mutex_unlock(&state->state_mutex);
         }
         free(args);
     }
@@ -192,6 +214,7 @@ void save_mega_screenshot_async(RendererContext* render_ctx, AppCommonState* sta
 // async video recording state
 static FILE* ffmpeg_pipe = NULL;
 static int is_recording = 0;
+static char s_log_path[512] = "";  // absolute path to video_log.txt, resolved at start
 
 static int check_ffmpeg_installed(void) {
 #ifdef _WIN32
@@ -204,7 +227,7 @@ static int check_ffmpeg_installed(void) {
 int start_video_recording(int width, int height, int fps, int is_bgra_topdown, int crf,
                           const char* preset, const char* codec, int aa_level, int show_log,
                           const char* log_fontpath, int log_fontsize, const char* custom_filename,
-                          int log_position, float log_opacity, const char* log_fontcolor) {
+                          int log_position, const char* log_fontcolor) {
     if (is_recording) return 0;
 
     if (!check_ffmpeg_installed()) {
@@ -226,11 +249,16 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
         strftime(filename, sizeof(filename), "mandelbrot_video_%Y%m%d_%H%M%S.mp4", t);
     }
 
-    char command[1024];
+    /* use a large unified command buffer to avoid truncation.
+     * vf_chain alone can be ~1600 bytes with drawtext filter + long font path,
+     * so 1024 is not enough. 4096 gives comfortable headroom. */
+    char command[4096];
     int render_w = width * aa_level;
     int render_h = height * aa_level;
 
-    char vf_chain[768];
+    /* vf_chain holds the -vf filter string. with drawtext it can be ~1600 bytes,
+     * so size it large enough to hold both the base filter and the drawtext suffix. */
+    char vf_chain[2048];
     if (is_bgra_topdown) {
         if (aa_level > 1) {
             snprintf(vf_chain, sizeof(vf_chain), "scale=%d:%d", width, height);
@@ -246,41 +274,48 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
     }
 
     if (show_log) {
-        // Ensure video_log.txt exists and has enough size for in-place updates
-        FILE* log_f = fopen("video_log.txt", "w");
-        if (log_f) {
-            char buffer[1024];
-            memset(buffer, ' ', sizeof(buffer) - 1);
-            buffer[sizeof(buffer) - 1] = '\0';
-            memcpy(buffer, "Rendering...\n", 13);
-            fwrite(buffer, 1, sizeof(buffer) - 1, log_f);
-            fclose(log_f);
+        /* resolve absolute path for video_log.txt so both fopen() and ffmpeg         * can find it
+         * regardless of working directory. */
+        char cwd[384];
+        if (getcwd(cwd, sizeof(cwd)) != NULL) {
+            snprintf(s_log_path, sizeof(s_log_path), "%s/video_log.txt", cwd);
+        } else {
+            strncpy(s_log_path, "video_log.txt", sizeof(s_log_path) - 1);
         }
 
-        // Log position coordinates in FFmpeg drawtext format
-        const char* x_pos = "20";
-        const char* y_pos = "20";
-        if (log_position == 1) {  // Top-Right
-            x_pos = "w-text_w-20";
-            y_pos = "20";
-        } else if (log_position == 2) {  // Bottom-Left
-            x_pos = "20";
-            y_pos = "h-text_h-20";
-        } else if (log_position == 3) {  // Bottom-Right
-            x_pos = "w-text_w-20";
-            y_pos = "h-text_h-20";
+        // initialize empty log file — each frame appends one line
+        FILE* log_f = fopen(s_log_path, "w");
+        if (log_f) fclose(log_f);
+
+        // anchor y at bottom so accumulated lines grow upward (latest line stays at bottom)
+        const char* x_pos;
+        const char* y_pos;
+        if (log_position == 1) {  // bottom-right
+            x_pos = "w-text_w-10";
+            y_pos = "h-text_h-10";
+        } else if (log_position == 2) {  // top-left (overflow downward)
+            x_pos = "10";
+            y_pos = "10";
+        } else if (log_position == 3) {  // top-right (overflow downward)
+            x_pos = "w-text_w-10";
+            y_pos = "10";
+        } else {  // bottom-left default — scroll upward
+            x_pos = "10";
+            y_pos = "h-text_h-10";
         }
 
-        // Append FFmpeg drawtext filter to draw stats with custom font path and size
-        char drawtext_filter[512];
+        /* build drawtext suffix separately, then append with bounds check.
+         * the old strcat(vf_chain, drawtext_filter) had no size guard and could
+         * silently overflow vf_chain when font paths are long. */
+        char drawtext_filter[2048];
         snprintf(drawtext_filter, sizeof(drawtext_filter),
-                 ",drawtext=fontfile='%s':textfile=video_log.txt:reload=1:x=%s:y=%s:fontsize=%d:"
-                 "fontcolor=%s:box=1:boxcolor=black@%.2f:line_spacing=4",
+                 ",drawtext=fontfile='%s':textfile='%s':reload=1:x=%s:y=%s:fontsize=%d:"
+                 "fontcolor=%s:line_spacing=2:expansion=none",
                  (log_fontpath && log_fontpath[0] != '\0') ? log_fontpath : "assets/fonts/font.ttf",
-                 x_pos, y_pos, log_fontsize > 0 ? log_fontsize : 20,
-                 (log_fontcolor && log_fontcolor[0] != '\0') ? log_fontcolor : "white",
-                 (log_opacity >= 0.0f && log_opacity <= 1.0f) ? log_opacity : 0.6f);
-        strcat(vf_chain, drawtext_filter);
+                 s_log_path, x_pos, y_pos, log_fontsize > 0 ? log_fontsize : 20,
+                 (log_fontcolor && log_fontcolor[0] != '\0') ? log_fontcolor : "white");
+        size_t rem = sizeof(vf_chain) - strlen(vf_chain) - 1;
+        strncat(vf_chain, drawtext_filter, rem);
     }
 
     if (is_bgra_topdown) {
@@ -340,8 +375,11 @@ void stop_video_recording(void) {
     ffmpeg_pipe = NULL;
     printf("stopped video recording.\n");
 
-    // Clean up temporary log file if it was created
-    remove("video_log.txt");
+    // clean up temporary log file and reset path
+    if (s_log_path[0]) {
+        remove(s_log_path);
+        s_log_path[0] = '\0';
+    }
 }
 
 int is_video_recording(void) {
@@ -377,11 +415,40 @@ void save_screenshot(AppCommonState* state, const uint32_t* pixels, int width, i
         }
     }
 
+#if defined(__EMSCRIPTEN__)
+#pragma clang diagnostic push
+#pragma clang diagnostic ignored "-Wc11-extensions"
+#pragma clang diagnostic ignored "-Wvariadic-macro-arguments-omitted"
+#pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
+#pragma clang diagnostic ignored "-Wdollar-in-identifier-extension"
+    EM_ASM(
+        {
+            try {
+                if (window.downloadScreenshotData) {
+                    var heap = (typeof HEAPU8 !== 'undefined') ? HEAPU8 : Module.HEAPU8;
+                    window.downloadScreenshotData($0, $1, $2, heap, $3);
+                }
+            } catch (e) {
+                console.error("Screenshot error:", e);
+            }
+        },
+        (void*)(rgba_pixels ? rgba_pixels : pixels), width, height, is_bottom_up);
+#pragma clang diagnostic pop
+
+    if (rgba_pixels) free(rgba_pixels);
+    if (state) app_state_push_notification(state, "screenshot captured!", now);
+    return;
+#endif
+
     stbi_flip_vertically_on_write(is_bottom_up);
 
     if (stbi_write_png(filename, width, height, 4, rgba_pixels ? rgba_pixels : pixels, width * 4)) {
         printf("screenshot saved to %s\n", filename);
-        if (state) app_state_push_notification(state, "screenshot saved!", now);
+        if (state) {
+            char buf[512];
+            snprintf(buf, sizeof(buf), "Saved to %s", filename);
+            app_state_push_notification(state, buf, now);
+        }
     } else {
         fprintf(stderr, "error: failed to save screenshot\n");
         if (state) app_state_push_notification(state, "error: screenshot failed!", now);
@@ -393,7 +460,7 @@ void save_screenshot(AppCommonState* state, const uint32_t* pixels, int width, i
 }
 
 // ---------------------------------------------------------
-// Async Background Video Export
+// async background video export
 // ---------------------------------------------------------
 
 typedef struct {
@@ -414,8 +481,6 @@ static void* video_export_thread_func(void* arg) {
     int render_w = state->video_settings.res_w * aa_level;
     int render_h = state->video_settings.res_h * aa_level;
 
-    printf("[DEBUG] video_export_thread_func: fps=%d, duration=%d, total_frames=%d, res=%dx%d\n", fps, duration, total_frames, render_w, render_h);
-
     // start ffmpeg pipe using existing function
     const char* presets[] = {"ultrafast", "superfast", "veryfast", "faster",  "fast",
                              "medium",    "slow",      "slower",   "veryslow"};
@@ -427,10 +492,10 @@ static void* video_export_thread_func(void* arg) {
         codecs[state->video_settings.codec_idx], aa_level, state->video_settings.show_log,
         state->video_settings.log_fontpath, state->video_settings.log_fontsize,
         state->video_settings.output_filename, state->video_settings.log_position,
-        state->video_settings.log_opacity, state->video_settings.log_fontcolor);
+        state->video_settings.log_fontcolor);
 
     if (!ok) {
-        printf("[DEBUG] start_video_recording failed!\n");
+        fprintf(stderr, "error: failed to start video recording\n");
         real_state->video_settings.is_rendering = 0;
         app_state_push_notification(real_state, "error: failed to start ffmpeg!",
                                     0);  // time doesn't matter much here
@@ -438,10 +503,10 @@ static void* video_export_thread_func(void* arg) {
         return NULL;
     }
 
-    // initialize isolated CPU renderer
+    // initialize isolated cpu renderer
     RendererContext* render_ctx = init_renderer(state->max_iterations, state->palette_idx);
     if (!render_ctx) {
-        printf("[DEBUG] init_renderer failed!\n");
+        fprintf(stderr, "error: failed to init renderer\n");
         stop_video_recording();
         real_state->video_settings.is_rendering = 0;
         free(args);
@@ -450,7 +515,7 @@ static void* video_export_thread_func(void* arg) {
 
     uint32_t* vbuf = malloc((size_t)render_w * render_h * 4);
     if (!vbuf) {
-        printf("[DEBUG] malloc failed for vbuf!\n");
+        fprintf(stderr, "error: failed to allocate frame buffer\n");
         cleanup_renderer(render_ctx);
         stop_video_recording();
         real_state->video_settings.is_rendering = 0;
@@ -458,14 +523,12 @@ static void* video_export_thread_func(void* arg) {
         return NULL;
     }
 
-    // initialize Tour
+    // initialize tour
     app_state_start_video_render(state, 0);
 
-    printf("[DEBUG] Entering render loop...\n");
     for (int frame_idx = 0; frame_idx < total_frames; frame_idx++) {
         // check for cancellation
         if (real_state->video_settings.export_cancelled) {
-            printf("[DEBUG] Loop broken due to export_cancelled == 1 at frame %d\n", frame_idx);
             break;
         }
 
@@ -488,42 +551,28 @@ static void* video_export_thread_func(void* arg) {
                          .julia_c = state->julia_c,
                          .max_iterations = state->max_iterations};
 
+        // time the render, then append one log line (accumulates — newest at bottom)
+        struct timespec t_start, t_end;
+        clock_gettime(CLOCK_MONOTONIC, &t_start);
         render_fractal_threaded(render_ctx, &job);
+        clock_gettime(CLOCK_MONOTONIC, &t_end);
+        double render_ms =
+            (t_end.tv_sec - t_start.tv_sec) * 1000.0 + (t_end.tv_nsec - t_start.tv_nsec) / 1e6;
 
-        // update log file in-place to avoid 0-byte truncation race condition with ffmpeg drawtext
         if (state->video_settings.show_log) {
-            FILE* log_f = fopen("video_log.txt", "r+");
-            if (!log_f) log_f = fopen("video_log.txt", "w");
+            FILE* log_f = fopen(s_log_path[0] ? s_log_path : "video_log.txt", "a");
             if (log_f) {
-                fseek(log_f, 0, SEEK_SET);
-                
-                char buffer[1024];
-                memset(buffer, ' ', sizeof(buffer) - 1);
-                buffer[sizeof(buffer) - 1] = '\0';
-                
-                int len = snprintf(buffer, sizeof(buffer),
-                    "Frame: %d / %d\n"
-                    "Center Re: %.15f\n"
-                    "Center Im: %.15f\n"
-                    "Zoom: %.3e\n"
-                    "Iterations: %d\n",
-                    frame_idx + 1, total_frames,
-                    (double)state->cam.view.center_re,
-                    (double)state->cam.view.center_im,
-                    (double)state->cam.view.zoom,
-                    state->max_iterations);
-                
-                // restore spaces that snprintf overwrote with null terminator
-                if (len >= 0 && len < (int)sizeof(buffer)) {
-                    buffer[len] = ' ';
-                }
-                
-                fwrite(buffer, 1, sizeof(buffer) - 1, log_f);
+                fprintf(log_f,
+                        "[RENDER] frame %d/%d (%.1f%%) complete in %.1f ms | "
+                        "Center: Re=%.8f, Im=%.8f, Zoom=%.6g\n",
+                        frame_idx + 1, total_frames, (float)(frame_idx + 1) / total_frames * 100.0f,
+                        render_ms, (double)state->cam.view.center_re,
+                        (double)state->cam.view.center_im, (double)state->cam.view.zoom);
                 fclose(log_f);
             }
         }
 
-        // dump frame to ffmpeg pipe (append_video_frame pushes to video_worker queue)
+        // dump frame to ffmpeg pipe
         append_video_frame(vbuf, render_w, render_h);
 
         // update progress on real state
@@ -536,14 +585,18 @@ static void* video_export_thread_func(void* arg) {
     cleanup_renderer(render_ctx);
     free(vbuf);
 
+    /* take the mutex before touching real_state — the main thread reads
+     * notifications and is_rendering every frame without synchronization otherwise. */
+    pthread_mutex_lock(&real_state->state_mutex);
     if (real_state->video_settings.export_cancelled) {
         app_state_push_notification(real_state, "video export cancelled.", 0);
     } else {
         app_state_push_notification(real_state, "video export completed!", 0);
     }
-
     real_state->video_settings.is_rendering = 0;
     real_state->video_settings.export_cancelled = 0;
+    pthread_mutex_unlock(&real_state->state_mutex);
+
     free(args);
     return NULL;
 }
