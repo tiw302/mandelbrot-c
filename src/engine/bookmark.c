@@ -16,7 +16,7 @@ static char bookmarks_file_path[256] = "bookmarks.json";
 
 static Bookmark* bookmark_cache = NULL;
 static int bookmark_cache_capacity = 0;
-static int bookmark_cache_count = -1; // -1 means stale/unloaded
+static int bookmark_cache_count = -1;  // -1 means stale/unloaded
 
 void bookmark_cache_free(void) {
     if (bookmark_cache) {
@@ -29,7 +29,7 @@ void bookmark_cache_free(void) {
 
 static void bookmark_cache_load(void);
 
-// sets the active bookmark filename
+// configures the target file for saving/loading bookmarks
 void set_bookmarks_file(const char* filepath) {
     if (filepath) {
         strncpy(bookmarks_file_path, filepath, sizeof(bookmarks_file_path) - 1);
@@ -37,6 +37,51 @@ void set_bookmarks_file(const char* filepath) {
     }
 }
 
+/* serializes the in-memory cache back to the json file.
+ * uses a tmp-then-rename pattern so a crash midway doesn't corrupt the file. */
+static void write_cache_to_file(void) {
+    cjsonx_doc_t* doc = cjsonx_doc_new();
+    if (!doc) return;
+
+    cjsonx_val_t root = cjsonx_create_array(doc);
+    for (int i = 0; i < bookmark_cache_count; i++) {
+        cjsonx_val_t obj = cjsonx_create_object(doc);
+        cjsonx_object_set(obj, "name", cjsonx_create_string(doc, bookmark_cache[i].name));
+        cjsonx_object_set(obj, "center_re", cjsonx_create_number(doc, bookmark_cache[i].center_re));
+        cjsonx_object_set(obj, "center_im", cjsonx_create_number(doc, bookmark_cache[i].center_im));
+        cjsonx_object_set(obj, "zoom", cjsonx_create_number(doc, bookmark_cache[i].zoom));
+        cjsonx_object_set(obj, "max_iterations",
+                          cjsonx_create_number(doc, bookmark_cache[i].max_iterations));
+        cjsonx_object_set(obj, "fractal_type",
+                          cjsonx_create_number(doc, bookmark_cache[i].fractal_type));
+        cjsonx_object_set(obj, "julia_c_re",
+                          cjsonx_create_number(doc, bookmark_cache[i].julia_c.re));
+        cjsonx_object_set(obj, "julia_c_im",
+                          cjsonx_create_number(doc, bookmark_cache[i].julia_c.im));
+        cjsonx_array_push(root, obj);
+    }
+    doc->root = root;
+
+    char* json_string = cjsonx_stringify(doc);
+    cjsonx_doc_free(doc);
+    if (!json_string) return;
+
+    char tmp_file_path[512];
+    snprintf(tmp_file_path, sizeof(tmp_file_path), "%s.tmp", bookmarks_file_path);
+    FILE* f = fopen(tmp_file_path, "w");
+    if (!f) {
+        free(json_string);
+        return;
+    }
+    fprintf(f, "%s\n", json_string);
+    free(json_string);
+    fflush(f);
+    fclose(f);
+#ifdef _WIN32
+    remove(bookmarks_file_path);
+#endif
+    rename(tmp_file_path, bookmarks_file_path);
+}
 
 // simple json writer that rewrites the whole file using cJSON
 void save_bookmark(const Bookmark* b) {
@@ -50,62 +95,11 @@ void save_bookmark(const Bookmark* b) {
         bookmark_cache_capacity = new_cap;
     }
     bookmark_cache[bookmark_cache_count++] = *b;
-
-    cjsonx_doc_t* doc = cjsonx_doc_new();
-    if (!doc) return;
-
-    cjsonx_val_t root = cjsonx_create_array(doc);
-
-    for (int i = 0; i < bookmark_cache_count; i++) {
-        cjsonx_val_t obj = cjsonx_create_object(doc);
-        cjsonx_object_set(obj, "name", cjsonx_create_string(doc, bookmark_cache[i].name));
-        cjsonx_object_set(obj, "center_re", cjsonx_create_number(doc, bookmark_cache[i].center_re));
-        cjsonx_object_set(obj, "center_im", cjsonx_create_number(doc, bookmark_cache[i].center_im));
-        cjsonx_object_set(obj, "zoom", cjsonx_create_number(doc, bookmark_cache[i].zoom));
-        cjsonx_object_set(obj, "max_iterations",
-                          cjsonx_create_number(doc, bookmark_cache[i].max_iterations));
-        cjsonx_object_set(obj, "fractal_type",
-                          cjsonx_create_number(doc, bookmark_cache[i].fractal_type));
-        cjsonx_object_set(obj, "julia_c_re", cjsonx_create_number(doc, bookmark_cache[i].julia_c.re));
-        cjsonx_object_set(obj, "julia_c_im", cjsonx_create_number(doc, bookmark_cache[i].julia_c.im));
-        cjsonx_array_push(root, obj);
-    }
-
-    doc->root = root;
-    char* json_string = cjsonx_stringify(doc);
-    cjsonx_doc_free(doc);
-
-    if (!json_string) {
-        return;
-    }
-
-    char tmp_file_path[512];
-    snprintf(tmp_file_path, sizeof(tmp_file_path), "%s.tmp", bookmarks_file_path);
-    FILE* f = fopen(tmp_file_path, "w");
-    if (!f) {
-        free(json_string);
-        return;
-    }
-
-    fprintf(f, "%s\n", json_string);
-    free(json_string);
-
-    // ensure durable write
-    fflush(f);
-    fclose(f);
-
-    /* write to a temporary file first, then atomically rename to prevent
-     * data corruption if the program crashes midway through writing. */
-#ifdef _WIN32
-    /* on windows rename fails if destination already exists */
-    remove(bookmarks_file_path);
-#endif
-    rename(tmp_file_path, bookmarks_file_path);
+    write_cache_to_file();
 }
 
-// robust scanner using cJSON
 static void bookmark_cache_load(void) {
-    if (bookmark_cache_count >= 0) return; // already fresh
+    if (bookmark_cache_count >= 0) return;  // already fresh
 
     cjsonx_doc_t* doc = cjsonx_read_file(bookmarks_file_path);
     if (!doc) {
@@ -126,7 +120,7 @@ static void bookmark_cache_load(void) {
         if (count >= bookmark_cache_capacity) {
             int new_cap = (bookmark_cache_capacity == 0) ? 16 : bookmark_cache_capacity * 2;
             Bookmark* new_cache = realloc(bookmark_cache, new_cap * sizeof(Bookmark));
-            if (!new_cache) break; // out of memory
+            if (!new_cache) break;  // out of memory
             bookmark_cache = new_cache;
             bookmark_cache_capacity = new_cap;
         }
@@ -144,18 +138,26 @@ static void bookmark_cache_load(void) {
 
         memset(bookmark_cache[count].name, 0, sizeof(bookmark_cache[count].name));
         if (cjsonx_get_type(name) == CJSONX_STRING) {
-            strncpy(bookmark_cache[count].name, cjsonx_str(name), sizeof(bookmark_cache[count].name) - 1);
+            strncpy(bookmark_cache[count].name, cjsonx_str(name),
+                    sizeof(bookmark_cache[count].name) - 1);
         } else {
-            snprintf(bookmark_cache[count].name, sizeof(bookmark_cache[count].name), "Bookmark #%d", count + 1);
+            snprintf(bookmark_cache[count].name, sizeof(bookmark_cache[count].name), "Bookmark #%d",
+                     count + 1);
         }
 
-        if (cjsonx_get_type(cre) == CJSONX_NUMBER) bookmark_cache[count].center_re = cjsonx_num(cre);
-        if (cjsonx_get_type(cim) == CJSONX_NUMBER) bookmark_cache[count].center_im = cjsonx_num(cim);
+        if (cjsonx_get_type(cre) == CJSONX_NUMBER)
+            bookmark_cache[count].center_re = cjsonx_num(cre);
+        if (cjsonx_get_type(cim) == CJSONX_NUMBER)
+            bookmark_cache[count].center_im = cjsonx_num(cim);
         if (cjsonx_get_type(z) == CJSONX_NUMBER) bookmark_cache[count].zoom = cjsonx_num(z);
-        if (cjsonx_get_type(mi) == CJSONX_NUMBER) bookmark_cache[count].max_iterations = cjsonx_int(mi);
-        if (cjsonx_get_type(ft) == CJSONX_NUMBER) bookmark_cache[count].fractal_type = cjsonx_int(ft);
-        if (cjsonx_get_type(jre) == CJSONX_NUMBER) bookmark_cache[count].julia_c.re = cjsonx_num(jre);
-        if (cjsonx_get_type(jim) == CJSONX_NUMBER) bookmark_cache[count].julia_c.im = cjsonx_num(jim);
+        if (cjsonx_get_type(mi) == CJSONX_NUMBER)
+            bookmark_cache[count].max_iterations = cjsonx_int(mi);
+        if (cjsonx_get_type(ft) == CJSONX_NUMBER)
+            bookmark_cache[count].fractal_type = cjsonx_int(ft);
+        if (cjsonx_get_type(jre) == CJSONX_NUMBER)
+            bookmark_cache[count].julia_c.re = cjsonx_num(jre);
+        if (cjsonx_get_type(jim) == CJSONX_NUMBER)
+            bookmark_cache[count].julia_c.im = cjsonx_num(jim);
 
         count++;
     }
@@ -173,7 +175,6 @@ int load_bookmark(int index, Bookmark* b) {
     return 0;
 }
 
-// returns the count of correctly formatted bookmark objects
 int get_bookmark_count(void) {
     bookmark_cache_load();
     return bookmark_cache_count;
@@ -189,45 +190,10 @@ void delete_bookmark(int index) {
     bookmark_cache_load();
     if (index < 0 || index >= bookmark_cache_count) return;
 
-    // Shift everything down
+    // shift everything down
     for (int i = index; i < bookmark_cache_count - 1; i++) {
         bookmark_cache[i] = bookmark_cache[i + 1];
     }
     bookmark_cache_count--;
-
-    // Re-save entire file from cache
-    cjsonx_doc_t* doc = cjsonx_doc_new();
-    if (!doc) return;
-
-    cjsonx_val_t root = cjsonx_create_array(doc);
-    for (int i = 0; i < bookmark_cache_count; i++) {
-        cjsonx_val_t obj = cjsonx_create_object(doc);
-        cjsonx_object_set(obj, "name", cjsonx_create_string(doc, bookmark_cache[i].name));
-        cjsonx_object_set(obj, "center_re", cjsonx_create_number(doc, bookmark_cache[i].center_re));
-        cjsonx_object_set(obj, "center_im", cjsonx_create_number(doc, bookmark_cache[i].center_im));
-        cjsonx_object_set(obj, "zoom", cjsonx_create_number(doc, bookmark_cache[i].zoom));
-        cjsonx_object_set(obj, "max_iterations", cjsonx_create_number(doc, bookmark_cache[i].max_iterations));
-        cjsonx_object_set(obj, "fractal_type", cjsonx_create_number(doc, bookmark_cache[i].fractal_type));
-        cjsonx_object_set(obj, "julia_c_re", cjsonx_create_number(doc, bookmark_cache[i].julia_c.re));
-        cjsonx_object_set(obj, "julia_c_im", cjsonx_create_number(doc, bookmark_cache[i].julia_c.im));
-        cjsonx_array_push(root, obj);
-    }
-    doc->root = root;
-
-    char* json_string = cjsonx_stringify(doc);
-    cjsonx_doc_free(doc);
-    if (!json_string) return;
-
-    char tmp_file_path[512];
-    snprintf(tmp_file_path, sizeof(tmp_file_path), "%s.tmp", bookmarks_file_path);
-    FILE* f = fopen(tmp_file_path, "w");
-    if (!f) {
-        free(json_string);
-        return;
-    }
-    fprintf(f, "%s\n", json_string);
-    free(json_string);
-    fflush(f);
-    fclose(f);
-    rename(tmp_file_path, bookmarks_file_path);
+    write_cache_to_file();
 }
