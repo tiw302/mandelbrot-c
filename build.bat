@@ -187,6 +187,20 @@ if exist build_bench\benchmarks\Release\benchmark_math.exe (
     build_bench\benchmarks\benchmark_math.exe
 )
 echo.
+echo Running perturbation benchmark...
+if exist build_bench\benchmarks\Release\benchmark_perturbation.exe (
+    build_bench\benchmarks\Release\benchmark_perturbation.exe
+) else (
+    build_bench\benchmarks\benchmark_perturbation.exe
+)
+echo.
+echo Running bignum benchmark...
+if exist build_bench\benchmarks\Release\benchmark_bignum.exe (
+    build_bench\benchmarks\Release\benchmark_bignum.exe
+) else (
+    build_bench\benchmarks\benchmark_bignum.exe
+)
+echo.
 echo Running renderer benchmark...
 if exist build_bench\benchmarks\Release\benchmark_renderer.exe (
     build_bench\benchmarks\Release\benchmark_renderer.exe
