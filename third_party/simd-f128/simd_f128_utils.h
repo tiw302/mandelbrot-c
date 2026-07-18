@@ -19,7 +19,10 @@
 extern "C" {
 #endif
 
-// compare two double-double numbers, returning -1 if a < b, 1 if a > b, and 0 if a == b
+/* compare two double-double numbers.
+ * returns -1 if a < b, 1 if a > b, 0 if a == b.
+ * returns -2 if either operand is nan (unordered). callers must check for -2
+ * separately — do not treat a negative return as simply "less than". */
 SIMD_F128_INLINE int simd_f128_cmp(simd_f128 a, simd_f128 b);
 
 // check if two numbers are equal
@@ -71,7 +74,7 @@ SIMD_F128_INLINE int simd_f128_cmp(simd_f128 a, simd_f128 b) {
 
     // check for nan explicitly, since standard double comparison with nan is false.
     // we return a distinct value (-2) to signal unordered if someone relies on cmp directly.
-    if (isnan(ahi) || isnan(bhi) || isnan(alo) || isnan(blo)) return -2;
+    if (_simd_f128_isnan_double(ahi) || _simd_f128_isnan_double(bhi) || _simd_f128_isnan_double(alo) || _simd_f128_isnan_double(blo)) return -2;
 
     // double-double comparison logic:
     // compare the hi components first. if they are different, we can immediately return.
@@ -98,7 +101,7 @@ SIMD_F128_INLINE int simd_f128_gt(simd_f128 a, simd_f128 b) {
 SIMD_F128_INLINE int simd_f128_lt(simd_f128 a, simd_f128 b) {
     // ieee-754: nan is not less than anything
     if (simd_f128_isnan(a) || simd_f128_isnan(b)) return 0;
-    return simd_f128_cmp(a, b) < 0;
+    return simd_f128_cmp(a, b) == -1;
 }
 
 SIMD_F128_INLINE int simd_f128_ge(simd_f128 a, simd_f128 b) {
@@ -110,7 +113,8 @@ SIMD_F128_INLINE int simd_f128_ge(simd_f128 a, simd_f128 b) {
 SIMD_F128_INLINE int simd_f128_le(simd_f128 a, simd_f128 b) {
     // ieee-754: nan is not <= anything
     if (simd_f128_isnan(a) || simd_f128_isnan(b)) return 0;
-    return simd_f128_cmp(a, b) <= 0;
+    int cmp = simd_f128_cmp(a, b);
+    return cmp == -1 || cmp == 0;
 }
 
 SIMD_F128_INLINE int simd_f128_isnan(simd_f128 x) {
@@ -119,20 +123,31 @@ SIMD_F128_INLINE int simd_f128_isnan(simd_f128 x) {
     // so checking only hi is correct and preserves the fast path.
     double hi, lo;
     simd_f128_extract(x, &hi, &lo);
-    return isnan(hi);
+    return _simd_f128_isnan_double(hi);
 }
 
 SIMD_F128_INLINE int simd_f128_isinf(simd_f128 x) {
     // check only the hi component for infinite values
     double hi, lo;
     simd_f128_extract(x, &hi, &lo);
-    return isinf(hi);
+    return _simd_f128_isinf_double(hi);
 }
 
 SIMD_F128_INLINE simd_f128 simd_f128_abs(simd_f128 x) {
+#if defined(SIMD_F128_USE_AVX2) || defined(SIMD_F128_USE_SSE2)
+    // branchless simd abs: flip signs of both hi and lo if hi is negative.
+    // we extract the sign bit of hi, broadcast it, and xor with the vector.
+    __m128d sign_mask = _mm_set_pd(0.0, -0.0);
+    __m128d hi_sign = _mm_and_pd(x, sign_mask);
+    __m128d flip_mask = _mm_unpacklo_pd(hi_sign, hi_sign);
+    return _mm_xor_pd(x, flip_mask);
+#else
     double hi, lo;
     simd_f128_extract(x, &hi, &lo);
     
+    // check for nan to prevent converting nan to a normal value
+    if (__builtin_expect(_simd_f128_isnan_double(hi), 0)) return x;
+
     // absolute value logic:
     // negate both components if hi is negative.
     // if hi is positive, keep signs.
@@ -140,6 +155,7 @@ SIMD_F128_INLINE simd_f128 simd_f128_abs(simd_f128 x) {
     if (hi > 0.0) return x;
     if (hi < 0.0) return simd_f128_neg(x);
     return simd_f128_from_hi_lo(0.0, fabs(lo));
+#endif
 }
 
 SIMD_F128_INLINE simd_f128 simd_f128_min(simd_f128 a, simd_f128 b) {
