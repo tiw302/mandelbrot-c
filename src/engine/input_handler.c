@@ -5,14 +5,19 @@
  */
 
 #include "input_handler.h"
+
 #include <stdio.h>
+
+#include "bookmark.h"
 #include "config.h"
+#include "fractal.h"
 
 InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, uint32_t now) {
     if (!state || !event) return ACTION_NONE;
 
     if (event->type == INPUT_MOUSE_SCROLL) {
-        camera_handle_wheel(&state->cam, event->scroll_y, state->cam.mouse_x, state->cam.mouse_y);
+        camera_handle_wheel(&state->cam, event->scroll_y * state->zoom_sensitivity,
+                            state->cam.mouse_x, state->cam.mouse_y);
         state->needs_redraw = 1;
         return ACTION_NONE;
     } else if (event->type == INPUT_MOUSE_DOWN) {
@@ -22,7 +27,8 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
         camera_handle_mouse_motion(&state->cam, event->mouse_x, event->mouse_y);
         if (state->cam.is_panning) {
             state->needs_redraw = 1;
-        } else if (state->julia_mode && !state->cam.is_zooming) {
+        } else if (state->julia_mode && !state->julia_locked && !state->cam.is_zooming &&
+                   state->j_tour.phase == JULIA_TOUR_IDLE) {
             // tracking mouse cursor for real-time julia set update
             app_state_get_mouse_coord(state, state->cam.mouse_x, state->cam.mouse_y,
                                       &state->julia_c.re, &state->julia_c.im);
@@ -40,6 +46,7 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
             case KEY_Q:
                 return ACTION_QUIT;
 
+#ifndef __EMSCRIPTEN__
             case KEY_H:
                 state->show_help = !state->show_help;
                 return ACTION_NONE;
@@ -47,6 +54,7 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
             case KEY_TAB:
                 state->show_settings = !state->show_settings;
                 return ACTION_NONE;
+#endif
 
             case KEY_Z:
                 if (event->mod_ctrl) {
@@ -66,21 +74,36 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
                 app_state_cycle_palette(state);
                 {
                     char buf[64];
-                    snprintf(buf, sizeof(buf), "palette: %s", get_palette_name(state->palette_idx % get_palette_count()));
+                    snprintf(buf, sizeof(buf), "palette: %s",
+                             get_palette_name(state->palette_idx % get_palette_count()));
                     app_state_push_notification(state, buf, now);
                 }
                 return ACTION_NONE;
 
-            case KEY_0: case KEY_1: case KEY_2: case KEY_3: case KEY_4:
-            case KEY_5: case KEY_6: case KEY_7: case KEY_8: case KEY_9:
-                state->palette_idx = event->key - KEY_0;
+            case KEY_0:
+            case KEY_1:
+            case KEY_2:
+            case KEY_3:
+            case KEY_4:
+            case KEY_5:
+            case KEY_6:
+            case KEY_7:
+            case KEY_8:
+            case KEY_9: {
+                int pal = event->key - KEY_0;
+                /* clamp to valid range — number keys 0-9 but we may have fewer palettes */
+                if (pal < get_palette_count()) {
+                    state->palette_idx = pal;
+                }
                 state->needs_redraw = 1;
                 {
                     char buf[64];
-                    snprintf(buf, sizeof(buf), "palette: %s", get_palette_name(state->palette_idx % get_palette_count()));
+                    snprintf(buf, sizeof(buf), "palette: %s",
+                             get_palette_name(state->palette_idx % get_palette_count()));
                     app_state_push_notification(state, buf, now);
                 }
                 return ACTION_NONE;
+            }
 
             case KEY_UP:
             case KEY_DOWN: {
@@ -104,18 +127,32 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
 
             case KEY_J:
                 app_state_toggle_julia(state, NULL);
-                app_state_push_notification(state, state->julia_mode ? "julia mode: active" : "julia mode: inactive", now);
+                app_state_push_notification(
+                    state, state->julia_mode ? "julia mode: active" : "julia mode: inactive", now);
+                return ACTION_NONE;
+
+            case KEY_K:
+                if (state->julia_mode) {
+                    state->julia_locked = !state->julia_locked;
+                    app_state_push_notification(
+                        state, state->julia_locked ? "julia mode: locked" : "julia mode: unlocked",
+                        now);
+                } else {
+                    app_state_push_notification(state, "press 'J' to enter julia mode first", now);
+                }
                 return ACTION_NONE;
 
             case KEY_B:
-            case KEY_F:
+            case KEY_F: {
                 app_state_cycle_fractal(state, NULL);
-                app_state_push_notification(state, state->base_fractal == RENDER_BURNING_SHIP ? "burning ship mode" : (state->base_fractal == RENDER_TRICORN ? "tricorn mode" : (state->base_fractal == RENDER_CELTIC ? "celtic mode" : (state->base_fractal == RENDER_BUFFALO ? "buffalo mode" : "mandelbrot mode"))), now);
+                const FractalDefinition* fd = get_fractal_by_mode(state->base_fractal);
+                app_state_push_notification(state, fd ? fd->display_name : "unknown mode", now);
                 return ACTION_NONE;
+            }
 
             case KEY_S:
                 state->needs_redraw = 1;
-                return ACTION_NONE; // the backend sets screenshot_requested itself, wait... we should let backend do it.
+                return ACTION_NONE;  // screenshot is handled by the backend directly
 
             case KEY_X:
                 return ACTION_MEGA_SCREENSHOT;
@@ -128,21 +165,25 @@ InputAction app_handle_input(AppCommonState* state, const AppInputEvent* event, 
                 app_state_push_notification(state, "bookmark saved!", now);
                 return ACTION_NONE;
 
-            case KEY_L:
-                app_state_load_next_bookmark(state);
-                app_state_push_notification(state, "bookmark loaded!", now);
+            case KEY_L: {
+                int count = get_bookmark_count();
+                if (count > 0) {
+                    app_state_load_next_bookmark(state);
+                    char msg[64];
+                    snprintf(msg, sizeof(msg), "bookmark %d/%d loaded!",
+                             state->current_bookmark_idx + 1, count);
+                    app_state_push_notification(state, msg, now);
+                } else {
+                    app_state_push_notification(state, "no bookmarks saved!", now);
+                }
+            }
                 return ACTION_NONE;
 
-#ifndef BUILD_DEEP_TARGET
-            case KEY_T:
+            case KEY_T: {
                 app_state_toggle_tour(state, now, NULL);
-                if (state->julia_mode) {
-                    app_state_push_notification(state, state->j_tour.phase != JULIA_TOUR_IDLE ? "julia tour started" : "tour stopped", now);
-                } else {
-                    app_state_push_notification(state, state->m_tour.phase != TOUR_IDLE ? (state->base_fractal == RENDER_BURNING_SHIP ? "burning ship tour started" : (state->base_fractal == RENDER_TRICORN ? "tricorn tour started" : (state->base_fractal == RENDER_CELTIC ? "celtic tour started" : (state->base_fractal == RENDER_BUFFALO ? "buffalo tour started" : "mandelbrot tour started")))) : "tour stopped", now);
-                }
+                /* notification text intentionally omitted in deep zoom mode */
                 return ACTION_NONE;
-#endif
+            }
 
             case KEY_LEFT_BRACKET:
                 return ACTION_RESIZE_THREADS_DOWN;
