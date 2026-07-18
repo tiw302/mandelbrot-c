@@ -1,3 +1,8 @@
+/* tricorn.h
+ *
+ * tricorn fractal mathematical definitions.
+ */
+
 #ifndef TRICORN_H
 #define TRICORN_H
 
