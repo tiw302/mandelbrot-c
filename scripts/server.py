@@ -50,7 +50,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
         clean_path = path.split('?')[0]
         if clean_path == "/" or clean_path == "":
             clean_path = "/index.html"
-            
+
         if DIRECTORY == "web" or DIRECTORY == ".":
             # custom mapping to allow serving artifacts from the build folder
             if clean_path.startswith("/index.js") or clean_path.startswith("/index.wasm"):
@@ -59,7 +59,7 @@ class Handler(http.server.SimpleHTTPRequestHandler):
                 return os.path.abspath(os.path.join(".", clean_path.lstrip("/")))
             elif clean_path == "/index.html" or clean_path == "/coi-serviceworker.js" or clean_path == "/style.css" or clean_path == "/app.js":
                 return os.path.abspath(os.path.join("web", clean_path.lstrip("/")))
-            
+
         return super().translate_path(path)
 
     def end_headers(self):
@@ -82,7 +82,7 @@ def run_server():
 
     kill_port_owner(port)
     socketserver.TCPServer.allow_reuse_address = True
-    
+
     try:
         with socketserver.TCPServer(("", port), Handler) as httpd:
             print(f"server: serving '{DIRECTORY}' at http://localhost:{port}")
