@@ -17,16 +17,10 @@
 #endif
 #endif
 
+#include "core/math_types.h"
 #include "sokol/sokol_app.h"
 
-#include "core/math_types.h"
-
-typedef enum {
-    APP_BACKEND_CPU,
-    APP_BACKEND_GPU,
-    APP_BACKEND_WEB,
-    APP_BACKEND_VIDEO
-} AppBackend;
+typedef enum { APP_BACKEND_CPU, APP_BACKEND_GPU, APP_BACKEND_WEB, APP_BACKEND_VIDEO } AppBackend;
 
 // return the sokol_main app descriptor for the given mode
 sapp_desc app_runner_get_desc(AppBackend mode);
