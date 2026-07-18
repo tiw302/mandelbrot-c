@@ -1,3 +1,8 @@
+/* buffalo.h
+ *
+ * buffalo fractal mathematical definitions.
+ */
+
 #ifndef BUFFALO_H
 #define BUFFALO_H
 
