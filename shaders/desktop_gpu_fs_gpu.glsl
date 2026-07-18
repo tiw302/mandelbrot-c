@@ -154,17 +154,21 @@ void main() {
     vec2 dn_re = d0_re;
     vec2 dn_im = d0_im;
     int orbit_n = int(u_orbit_len);
+    vec2 last_Wn_re = vec2(0.0);
+    vec2 last_Wn_im = vec2(0.0);
     for (; i < 2000; i++) {
       if (i >= orbit_n || i >= m) break;
       vec4 Zn_data = texture(u_orbit, vec2((float(i) + 0.5) / 10000.0, 0.5));
       vec2 Zn_re = vec2(Zn_data.r, Zn_data.g);
       vec2 Zn_im = vec2(Zn_data.b, Zn_data.a);
-      
+
       vec2 Wn_re = ds_add(Zn_re, dn_re);
       vec2 Wn_im = ds_add(Zn_im, dn_im);
       vec2 Wn = vec2(Wn_re.x, Wn_im.x);
       mag2 = dot(Wn, Wn);
       if (mag2 > 100.0) break;
+      last_Wn_re = Wn_re;
+      last_Wn_im = Wn_im;
 
       // track derivative and orbit trap using reconstructed coordinate
       dz = get_next_dz(Wn, dz, u_fractal_type, c_deriv);
@@ -207,11 +211,125 @@ void main() {
       dn_im = ds_add(ds_add(two_Zn_dn_im, dn_sq_im), d0_im);
     }
 
+    if (i >= orbit_n && i < m && mag2 <= 100.0) {
+      bool fallback = true;
+      if (u_zoom < 1e-14) fallback = false;
+      if (fallback) {
+        vec2 cx = vec2(u_center_hi.x, u_center_lo.x);
+        vec2 cy = vec2(u_center_hi.y, u_center_lo.y);
+        vec2 uv_dx = vec2(uv.x - 0.5, 0.0);
+        vec2 uv_dy = vec2(0.5 - uv.y, 0.0);
+        vec2 zoom_a = vec2(u_zoom, u_zoom_lo);
+        vec2 aspect_a = vec2(u_aspect, 0.0);
+        vec2 px = ds_add(ds_mul(ds_mul(uv_dx, zoom_a), aspect_a), cx);
+        vec2 py = ds_add(ds_mul(uv_dy, zoom_a), cy);
+        vec2 c_val_x = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.x, u_julia_c_lo.x) : px;
+        vec2 c_val_y = (u_fractal_type == 1.0) ? vec2(u_julia_c_hi.y, u_julia_c_lo.y) : py;
+        vec2 zx = last_Wn_re;
+        vec2 zy = last_Wn_im;
+        vec2 x2 = ds_sqr(zx);
+        vec2 y2 = ds_sqr(zy);
+        if (u_fractal_type == 2.0) {
+          zx = vec2(abs(zx.x), (zx.x == 0.0) ? 0.0 : ((zx.x > 0.0) ? zx.y : -zx.y));
+          zy = vec2(abs(zy.x), (zy.x == 0.0) ? 0.0 : ((zy.x > 0.0) ? zy.y : -zy.y));
+          vec2 new_zx = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+          zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+          zx = new_zx;
+        } else if (u_fractal_type == 3.0) {
+          zy = vec2(-zy.x, -zy.y);
+          vec2 new_zx = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+          zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+          zx = new_zx;
+        } else if (u_fractal_type == 4.0) {
+          vec2 z_re2_diff = ds_add(x2, vec2(-y2.x, -y2.y));
+          z_re2_diff = vec2(abs(z_re2_diff.x), (z_re2_diff.x == 0.0) ? 0.0 : ((z_re2_diff.x > 0.0) ? z_re2_diff.y : -z_re2_diff.y));
+          vec2 new_zx = ds_add(z_re2_diff, c_val_x);
+          zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+          zx = new_zx;
+        } else if (u_fractal_type == 5.0) {
+          zx = vec2(abs(zx.x), (zx.x == 0.0) ? 0.0 : ((zx.x > 0.0) ? zx.y : -zx.y));
+          zy = vec2(abs(zy.x), (zy.x == 0.0) ? 0.0 : ((zy.x > 0.0) ? zy.y : -zy.y));
+          vec2 z_re2_diff = ds_add(x2, vec2(-y2.x, -y2.y));
+          z_re2_diff = vec2(abs(z_re2_diff.x), (z_re2_diff.x == 0.0) ? 0.0 : ((z_re2_diff.x > 0.0) ? z_re2_diff.y : -z_re2_diff.y));
+          vec2 new_zx = ds_add(z_re2_diff, c_val_x);
+          zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+          zx = new_zx;
+        } else {
+          vec2 new_zx = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+          zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+          zx = new_zx;
+        }
+        for (; i < 2000; i++) {
+          if (i >= m) break;
+          x2 = ds_sqr(zx);
+          y2 = ds_sqr(zy);
+          mag2 = x2.x + y2.x;
+          if (mag2 > 100.0) break;
+          vec2 z_approx = vec2(zx.x, zy.x);
+          dz = get_next_dz(z_approx, dz, u_fractal_type, c_deriv);
+          if (dot(z_approx, z_approx) > 1e-12) {
+            trap_dist = min(trap_dist, abs(z_approx.x * z_approx.y));
+            linear_trap = min(linear_trap, min(abs(z_approx.x), abs(z_approx.y)));
+          }
+          prev_u = curr_u;
+          curr_u = vec2(z_approx.x * dz.x + z_approx.y * dz.y, z_approx.y * dz.x - z_approx.x * dz.y);
+          final_z = z_approx;
+          float ang = atan(z_approx.y, z_approx.x);
+          float diff = abs(ang - prev_ang);
+          if (diff > 3.14159) diff = 6.28318 - diff;
+          curve_sum += diff;
+          prev_ang = ang;
+          ripple_sum += sin(8.0 * length(z_approx));
+          inner_axes = min(inner_axes, min(abs(z_approx.x), abs(z_approx.y)));
+          float cell_dist = length(fract(z_approx) - 0.5);
+          if (cell_dist < min_bubble_dist) {
+            min_bubble_dist = cell_dist;
+            bubble_z = fract(z_approx) - 0.5;
+            bubble_iter = float(i);
+          }
+          float current_grid = min(abs(fract(z_approx.x) - 0.5), abs(fract(z_approx.y) - 0.5)) / length(dz);
+          min_grid_dist = min(min_grid_dist, current_grid);
+          if (u_fractal_type == 2.0) {
+            zx = vec2(abs(zx.x), (zx.x == 0.0) ? 0.0 : ((zx.x > 0.0) ? zx.y : -zx.y));
+            zy = vec2(abs(zy.x), (zy.x == 0.0) ? 0.0 : ((zy.x > 0.0) ? zy.y : -zy.y));
+            vec2 new_zx = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+            zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+            zx = new_zx;
+          } else if (u_fractal_type == 3.0) {
+            zy = vec2(-zy.x, -zy.y);
+            vec2 new_zx = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+            zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+            zx = new_zx;
+          } else if (u_fractal_type == 4.0) {
+            vec2 z_re2_diff = ds_add(x2, vec2(-y2.x, -y2.y));
+            z_re2_diff = vec2(abs(z_re2_diff.x), (z_re2_diff.x == 0.0) ? 0.0 : ((z_re2_diff.x > 0.0) ? z_re2_diff.y : -z_re2_diff.y));
+            vec2 new_zx = ds_add(z_re2_diff, c_val_x);
+            zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+            zx = new_zx;
+          } else if (u_fractal_type == 5.0) {
+            zx = vec2(abs(zx.x), (zx.x == 0.0) ? 0.0 : ((zx.x > 0.0) ? zx.y : -zx.y));
+            zy = vec2(abs(zy.x), (zy.x == 0.0) ? 0.0 : ((zy.x > 0.0) ? zy.y : -zy.y));
+            vec2 z_re2_diff = ds_add(x2, vec2(-y2.x, -y2.y));
+            z_re2_diff = vec2(abs(z_re2_diff.x), (z_re2_diff.x == 0.0) ? 0.0 : ((z_re2_diff.x > 0.0) ? z_re2_diff.y : -z_re2_diff.y));
+            vec2 new_zx = ds_add(z_re2_diff, c_val_x);
+            zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+            zx = new_zx;
+          } else {
+            vec2 new_zx = ds_add(ds_add(x2, vec2(-y2.x, -y2.y)), c_val_x);
+            zy = ds_add(ds_mul(ds_mul(zx, zy), vec2(2.0, 0.0)), c_val_y);
+            zx = new_zx;
+          }
+        }
+      } else {
+        i = m;
+      }
+    }
+
   // path 1: dekker double-single 64-bit emulation.
   } else if (u_high_precision > 0.5) {
     vec2 uv_dx = vec2(uv.x - 0.5, 0.0);
     vec2 uv_dy = vec2(0.5 - uv.y, 0.0);
-    vec2 zoom_a = vec2(u_zoom, 0.0);
+    vec2 zoom_a = vec2(u_zoom, u_zoom_lo);
     vec2 aspect_a = vec2(u_aspect, 0.0);
     vec2 cx = vec2(u_center_hi.x, u_center_lo.x);
     vec2 cy = vec2(u_center_hi.y, u_center_lo.y);
@@ -452,7 +570,7 @@ void main() {
       vec3 view = vec3(0.0, 0.0, 1.0);
       vec3 half_vec = normalize(light + view);
       float specular = pow(max(0.0, dot(normal, half_vec)), 48.0);
-      
+
       float t = clamp(bubble_iter / float(m), 0.0, 1.0);
       vec3 base = mix(vec3(0.1, 0.35, 0.6), vec3(0.7, 0.4, 0.2), t);
       vec3 lit = base * (0.3 + 0.7 * diffuse) + vec3(0.85 * specular);
@@ -579,11 +697,11 @@ void main() {
       float wave = 0.6 + 0.4 * sin(s * 0.8 + 6.0 * atan(normal2d.y, normal2d.x));
       vec3 silver_color = vec3(0.82 + 0.15 * wave);
       vec3 lit = silver_color * (0.65 + 0.35 * diffuse) + vec3(0.6 * specular);
-      
+
       // Glowing crimson border
       float red_factor = clamp(exp(-0.04 * (float(m) - s)), 0.0, 1.0);
       red_factor = pow(red_factor, 0.6); // widen the glow
-      
+
       color = vec4(mix(lit, vec3(0.95, 0.08, 0.02), red_factor), 1.0);
     } else {
       color = vec4(lut_color(max(0.0, s), pal), 1.0);
