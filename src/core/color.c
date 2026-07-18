@@ -21,14 +21,28 @@ static uint32_t* old_luts[MAX_OLD_LUTS];
 static int num_old_luts = 0;
 
 #define NUM_BUILTIN_PALETTES 22
-static const char* builtin_palette_names[NUM_BUILTIN_PALETTES] = {
-    "Sine Wave", "Volumetric Magma", "Viridis",
-    "Grayscale", "Electric", "Ocean", "Inferno", "Retro Binary",
-    "Orbit Mesh (GPU)", "Biomorph Trap (GPU)", "Conformal Ripples (GPU)", "Curvature Marble (GPU)",
-    "Conformal Grid (GPU)", "Cyber Grid (GPU)",
-    "Bubble Pearl (GPU)", "Liquid Chrome (GPU)", "Refractive 3D Glass (GPU)",
-    "Ultra Fractal Classic (GPU)", "Pure Binary BW", "Classic Royal Blue (GPU)", "Classic Fire Red (GPU)",
-    "Silver Crimson (GPU)"};
+static const char* builtin_palette_names[NUM_BUILTIN_PALETTES] = {"Sine Wave",
+                                                                  "Volumetric Magma",
+                                                                  "Viridis",
+                                                                  "Grayscale",
+                                                                  "Electric",
+                                                                  "Ocean",
+                                                                  "Inferno",
+                                                                  "Retro Binary",
+                                                                  "Orbit Mesh (GPU)",
+                                                                  "Biomorph Trap (GPU)",
+                                                                  "Conformal Ripples (GPU)",
+                                                                  "Curvature Marble (GPU)",
+                                                                  "Conformal Grid (GPU)",
+                                                                  "Cyber Grid (GPU)",
+                                                                  "Bubble Pearl (GPU)",
+                                                                  "Liquid Chrome (GPU)",
+                                                                  "Refractive 3D Glass (GPU)",
+                                                                  "Ultra Fractal Classic (GPU)",
+                                                                  "Pure Binary BW",
+                                                                  "Classic Royal Blue (GPU)",
+                                                                  "Classic Fire Red (GPU)",
+                                                                  "Silver Crimson (GPU)"};
 
 static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_t* b) {
     double i_val = floor(fi);
@@ -75,9 +89,13 @@ static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_
         } else if (pal == 7) {
             // retro binary: alternate green and blue
             if (fmod(iv, 2.0) < 1.0) {
-                out[0] = 0.25; out[1] = 0.75; out[2] = 0.25; // green
+                out[0] = 0.25;
+                out[1] = 0.75;
+                out[2] = 0.25;  // green
             } else {
-                out[0] = 0.1; out[1] = 0.2; out[2] = 0.8;    // blue
+                out[0] = 0.1;
+                out[1] = 0.2;
+                out[2] = 0.8;  // blue
             }
         } else if (pal == 8) {
             // orbit mesh fallback: smooth cyan-to-navy gradient
@@ -256,7 +274,7 @@ int init_color_palette(int max_iterations, int palette_idx) {
 
     int needed_size = (max_iterations + 2) * 256;
     if (!palette_lut_argb || lut_size < needed_size) {
-        /* allocate a new lut instead of realloc to prevent use-after-free 
+        /* allocate a new lut instead of realloc to prevent use-after-free
            in background rendering threads. old luts are deferred for free. */
         uint32_t* new_lut = (uint32_t*)malloc(sizeof(uint32_t) * needed_size);
         if (new_lut) {
