@@ -1,3 +1,8 @@
+/* camera.h
+ *
+ * viewport and camera movement logic.
+ */
+
 #ifndef CAMERA_H
 #define CAMERA_H
 
