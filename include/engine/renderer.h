@@ -26,7 +26,7 @@ int get_optimal_thread_count(void);
 int get_actual_thread_count(const RendererContext* ctx);
 int set_renderer_thread_count(RendererContext* ctx, int count);
 
-// encapsulating all render job parameters
+// all parameters for a single render dispatch
 typedef struct {
     uint32_t* pixels;
     int pitch;
@@ -43,7 +43,6 @@ typedef struct {
 
 // high-level render dispatch — blocks until all rows are painted
 void render_fractal_threaded(RendererContext* ctx, const RenderJob* job);
-
 
 // dynamic precision control
 void set_cpu_precision(RendererContext* ctx, int use_128bit);
