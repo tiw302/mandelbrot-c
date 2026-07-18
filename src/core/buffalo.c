@@ -14,7 +14,7 @@
 #include <math.h>
 #include <stdint.h>
 
-/* scalar burning ship path:
+/* scalar buffalo path:
  * identical to mandelbrot except z.re and z.im are replaced with
  * their absolute values before the squaring step. this single change
  * produces a dramatically different fractal shape. */
@@ -44,7 +44,7 @@ double buffalo_check(complex_t c, int max_iterations) {
 }
 
 #ifdef __AVX2__
-/* avx2 vectorized burning ship path:
+/* avx2 vectorized buffalo path:
  * processes 4 pixels simultaneously using _mm256_andnot_pd to
  * clear the sign bit for the absolute value operation. */
 void buffalo_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* results) {
@@ -79,7 +79,8 @@ void buffalo_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* re
         __m256d abs_im = _mm256_and_pd(zim, sign_mask);
 
         __m256d zre_zim = _mm256_mul_pd(abs_re, abs_im);
-        zim = _mm256_add_pd(_mm256_sub_pd(_mm256_setzero_pd(), _mm256_add_pd(zre_zim, zre_zim)), cim);
+        zim =
+            _mm256_add_pd(_mm256_sub_pd(_mm256_setzero_pd(), _mm256_add_pd(zre_zim, zre_zim)), cim);
         __m256d zre2_zim2 = _mm256_sub_pd(zre2, zim2);
         zre = _mm256_add_pd(_mm256_and_pd(zre2_zim2, sign_mask), cre);
     }
@@ -104,8 +105,7 @@ void buffalo_check_avx2(__m256d cre, __m256d cim, int max_iterations, double* re
 #endif
 
 #ifdef __AVX512F__
-// avx-512 vectorized burning ship path:
-// processes 8 pixels simultaneously.
+/* avx-512 vectorized buffalo path: * processes 8 pixels simultaneously. */
 void buffalo_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* results) {
     __m512d zre = _mm512_setzero_pd();
     __m512d zim = _mm512_setzero_pd();
@@ -139,7 +139,8 @@ void buffalo_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* 
         __m512d abs_zim = _mm512_castsi512_pd(_mm512_and_si512(_mm512_castpd_si512(zim), abs_mask));
 
         __m512d abs_zre_zim = _mm512_mul_pd(abs_zre, abs_zim);
-        zim = _mm512_add_pd(_mm512_sub_pd(_mm512_setzero_pd(), _mm512_add_pd(abs_zre_zim, abs_zre_zim)), cim);
+        zim = _mm512_add_pd(
+            _mm512_sub_pd(_mm512_setzero_pd(), _mm512_add_pd(abs_zre_zim, abs_zre_zim)), cim);
         __m512d zre2_zim2 = _mm512_sub_pd(zre2, zim2);
         __m512d my_abs_mask = _mm512_castsi512_pd(_mm512_set1_epi64(0x7FFFFFFFFFFFFFFFULL));
         zre = _mm512_add_pd(_mm512_and_pd(zre2_zim2, my_abs_mask), cre);
@@ -163,8 +164,8 @@ void buffalo_check_avx512(__m512d cre, __m512d cim, int max_iterations, double* 
 
 #ifdef __wasm_simd128__
 #include <wasm_simd128.h>
-// wasm simd128 vectorized burning ship path:
-// processes 2 pixels simultaneously for browser execution.
+/* wasm simd128 vectorized buffalo path: * processes 2 pixels simultaneously for browser execution.
+ */
 void buffalo_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, double* results) {
     v128_t zre = wasm_f64x2_splat(0.0);
     v128_t zim = wasm_f64x2_splat(0.0);
@@ -183,8 +184,8 @@ void buffalo_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, doub
 
         v128_t mask = wasm_f64x2_gt(mag_sq, esc_radius_sq);
 
-        // wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
-        // arguments are intentionally swapped vs the avx2 path.
+        /* wasm_v128_andnot(a,b) = a & ~b — opposite of intel _mm256_andnot_pd(a,b) = ~a & b.
+         * * arguments are intentionally swapped vs the avx2 path. */
         v128_t just_escaped = wasm_v128_andnot(mask, escaped_mask);
 
         final_mag_sq = wasm_v128_or(final_mag_sq, wasm_v128_and(just_escaped, mag_sq));
@@ -196,7 +197,8 @@ void buffalo_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, doub
         v128_t abs_im = wasm_f64x2_abs(zim);
 
         v128_t zre_zim = wasm_f64x2_mul(abs_re, abs_im);
-        zim = wasm_f64x2_add(wasm_f64x2_sub(wasm_f64x2_splat(0.0), wasm_f64x2_add(zre_zim, zre_zim)), cim);
+        zim = wasm_f64x2_add(
+            wasm_f64x2_sub(wasm_f64x2_splat(0.0), wasm_f64x2_add(zre_zim, zre_zim)), cim);
         v128_t zre2_zim2 = wasm_f64x2_sub(zre2, zim2);
         zre = wasm_f64x2_add(wasm_f64x2_abs(zre2_zim2), cre);
     }
@@ -221,8 +223,8 @@ void buffalo_check_wasm_simd128(v128_t cre, v128_t cim, int max_iterations, doub
 
 #ifdef __ARM_NEON
 #include <arm_neon.h>
-// arm neon vectorized burning ship path:
-// processes 2 pixels simultaneously using 64-bit float vectors.
+/* arm neon vectorized buffalo path: * processes 2 pixels simultaneously using 64-bit float vectors.
+ */
 void buffalo_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results) {
     float64x2_t zre = vdupq_n_f64(0.0);
     float64x2_t zim = vdupq_n_f64(0.0);
@@ -233,7 +235,8 @@ void buffalo_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, do
     float64x2_t one = vdupq_n_f64(1.0);
 
     for (int i = 0; i < max_iterations; i++) {
-        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL) break;
+        if (vgetq_lane_u64(escaped_mask, 0) == ~0ULL && vgetq_lane_u64(escaped_mask, 1) == ~0ULL)
+            break;
 
         float64x2_t zre2 = vmulq_f64(zre, zre);
         float64x2_t zim2 = vmulq_f64(zim, zim);
@@ -274,8 +277,8 @@ void buffalo_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, do
 #endif
 
 #ifdef USE_SIMD_F128
-// high-precision 128-bit burning ship path:
-// prevents pixelation for extreme deep zooms in burning ship mode.
+/* high-precision 128-bit buffalo path: * prevents pixelation for extreme deep zooms in buffalo
+ * mode. */
 double buffalo_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     simd_f128 zre = simd_f128_from_double(0.0);
     simd_f128 zim = simd_f128_from_double(0.0);
@@ -283,8 +286,8 @@ double buffalo_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
     const double escape_radius_sq = ESCAPE_RADIUS * ESCAPE_RADIUS;
 
     while (iterations < max_iterations) {
-        simd_f128 zre2 = simd_f128_sqr(zre);
-        simd_f128 zim2 = simd_f128_sqr(zim);
+        simd_f128 zre2 = simd_f128_mul(zre, zre);
+        simd_f128 zim2 = simd_f128_mul(zim, zim);
         simd_f128 mag_sq = simd_f128_add(zre2, zim2);
 
         double mag_hi, mag_lo;
@@ -300,7 +303,8 @@ double buffalo_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
         simd_f128 abs_im = simd_f128_abs(zim);
 
         simd_f128 zre_zim = simd_f128_mul(abs_re, abs_im);
-        zim = simd_f128_add(simd_f128_sub(simd_f128_from_double(0.0), simd_f128_add(zre_zim, zre_zim)), cim);
+        zim = simd_f128_add(
+            simd_f128_sub(simd_f128_from_double(0.0), simd_f128_add(zre_zim, zre_zim)), cim);
         zre = simd_f128_add(simd_f128_abs(simd_f128_sub(zre2, zim2)), cre);
 
         iterations++;
@@ -309,11 +313,10 @@ double buffalo_check_f128(simd_f128 cre, simd_f128 cim, int max_iterations) {
 }
 
 #ifdef __AVX2__
-/* avx2 high-precision 128-bit burning ship path:
+/* avx2 high-precision 128-bit buffalo path:
  * processes 4 pixels simultaneously with 128-bit precision.
  * combines high throughput with deep zoom capability. */
-void buffalo_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations,
-                               double* results) {
+void buffalo_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations, double* results) {
     simd_f128x4 zre = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
     simd_f128x4 zim = simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0);
     __m256d iters = _mm256_setzero_pd();
@@ -342,7 +345,9 @@ void buffalo_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations,
         simd_f128x4 abs_im = simd_f128x4_abs(zim);
 
         simd_f128x4 zre_zim = simd_f128x4_mul(abs_re, abs_im);
-        zim = simd_f128x4_add(simd_f128x4_sub(simd_f128x4_from_doubles(0.0,0.0,0.0,0.0), simd_f128x4_mul2(zre_zim)), cim);
+        zim = simd_f128x4_add(simd_f128x4_sub(simd_f128x4_from_doubles(0.0, 0.0, 0.0, 0.0),
+                                              simd_f128x4_mul2(zre_zim)),
+                              cim);
         zre = simd_f128x4_add(simd_f128x4_abs(simd_f128x4_sub(zre2, zim2)), cre);
     }
 
