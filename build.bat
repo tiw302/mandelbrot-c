@@ -55,6 +55,8 @@ echo.
 goto menu
 
 :build_cpu
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Configuring CPU build...
 cmake -S . -B build_cpu -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
@@ -71,6 +73,8 @@ echo.
 goto end
 
 :build_gpu
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Configuring GPU build...
 cmake -S . -B build_gpu -DBUILD_GPU=ON -DCMAKE_BUILD_TYPE=Release
@@ -87,6 +91,8 @@ echo.
 goto end
 
 :build_web
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 where emcmake >nul 2>nul
 if %errorlevel% neq 0 (
@@ -108,8 +114,12 @@ copy /y web\app.js deploy\ >nul
 copy /y web\coi-serviceworker.js deploy\ >nul
 copy /y build_web\index.js deploy\ >nul
 copy /y build_web\index.wasm deploy\ >nul
+if exist build_web\index.worker.js copy /y build_web\index.worker.js deploy\ >nul
 if exist assets\ (
     xcopy /s /y /i assets deploy\assets\ >nul
+)
+if exist web\assets\ (
+    xcopy /s /y /i web\assets\* deploy\assets\ >nul
 )
 echo web: build and deployment package ready in 'deploy\' folder.
 echo.
@@ -122,6 +132,8 @@ echo.
 goto end
 
 :build_deep
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Configuring Deep Zoom (Perturbation) build...
 cmake -S . -B build_deep -DBUILD_DEEP=ON -DCMAKE_BUILD_TYPE=Release
@@ -138,6 +150,8 @@ echo.
 goto end
 
 :build_video
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Configuring Video Renderer build...
 cmake -S . -B build_video -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
@@ -154,6 +168,8 @@ echo.
 goto end
 
 :run_tests
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Configuring tests...
 cmake -S . -B build_test -DBUILD_CPU=ON -DBUILD_TESTING=ON -DCMAKE_BUILD_TYPE=Release
@@ -172,6 +188,8 @@ echo.
 goto end
 
 :run_benchmarks
+call scripts\compile_shaders.bat
+if %errorlevel% neq 0 exit /b %errorlevel%
 echo.
 echo Configuring benchmarks...
 cmake -S . -B build_bench -DBUILD_CPU=ON -DCMAKE_BUILD_TYPE=Release
