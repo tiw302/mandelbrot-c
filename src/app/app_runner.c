@@ -420,7 +420,7 @@ static void frame(void* user_data) {
     }
 
 #if defined(__EMSCRIPTEN__)
-    // Performance Optimization: skip WebGL rendering if nothing changed
+    // Performance optimization: skip WebGL rendering if nothing changed
     int should_render =
         ctx->core.needs_redraw || ctx->core.cam.is_panning || ctx->core.cam.is_zooming ||
         ctx->screenshot_requested || (ctx->core.m_tour.phase != TOUR_IDLE) ||
