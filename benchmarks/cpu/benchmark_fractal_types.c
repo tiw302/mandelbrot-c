@@ -9,11 +9,11 @@
 #include <stdlib.h>
 #include <time.h>
 
-#include "core_math.h"
-#include "burning_ship.h"
-#include "tricorn.h"
-#include "celtic.h"
 #include "buffalo.h"
+#include "burning_ship.h"
+#include "celtic.h"
+#include "core_math.h"
+#include "tricorn.h"
 
 #define MAX_ITERATIONS 1000
 #define GRID_WIDTH 1024
@@ -38,12 +38,12 @@ void benchmark_fractal(const char* name, fractal_check_func func) {
     double re_max = 1.0;
     double im_min = -1.5;
     double im_max = 1.5;
-    
+
     double dx = (re_max - re_min) / GRID_WIDTH;
     double dy = (im_max - im_min) / GRID_HEIGHT;
 
     double start_time = get_time_sec();
-    
+
     // volatile to prevent the compiler from optimizing away the loop
     volatile double dummy_sum = 0.0;
 
@@ -58,7 +58,7 @@ void benchmark_fractal(const char* name, fractal_check_func func) {
 
     double end_time = get_time_sec();
     double duration = end_time - start_time;
-    
+
     printf("%6.3f seconds (sum: %f)\n", duration, dummy_sum);
 }
 

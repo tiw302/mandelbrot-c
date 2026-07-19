@@ -7,6 +7,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <time.h>
+
 #include "perturbation.h"
 
 #define MAX_ITERATIONS 10000
@@ -27,7 +28,7 @@ int main(void) {
     precise_float center_im = 0.131825904205330;
 
     int num_runs = 100;
-    
+
     printf("Computing reference orbit and SA coefficients %d times...\n", num_runs);
     double start = get_time_sec();
 
