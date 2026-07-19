@@ -16,6 +16,9 @@ static uint32_t* palette_lut_argb = NULL;
 static int lut_size = 0;
 static int current_max_iterations = 1000;
 
+static double global_color_offset = 0.0;
+static double global_color_density = 1.0;
+
 #define MAX_OLD_LUTS 32
 static uint32_t* old_luts[MAX_OLD_LUTS];
 static int num_old_luts = 0;
@@ -45,6 +48,7 @@ static const char* builtin_palette_names[NUM_BUILTIN_PALETTES] = {"Sine Wave",
                                                                   "Silver Crimson (GPU)"};
 
 static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_t* b) {
+    fi = (fi * global_color_density) + (global_color_offset * current_max_iterations);
     double i_val = floor(fi);
     double fract = fi - i_val;
     double a[3], b_vec[3];
@@ -249,6 +253,11 @@ static void get_builtin_color(double fi, int pal, uint8_t* r, uint8_t* g, uint8_
     *r = (uint8_t)((a[0] + (b_vec[0] - a[0]) * fract) * 255.0);
     *g = (uint8_t)((a[1] + (b_vec[1] - a[1]) * fract) * 255.0);
     *b = (uint8_t)((a[2] + (b_vec[2] - a[2]) * fract) * 255.0);
+}
+
+void set_color_tuning(double offset, double density) {
+    global_color_offset = offset;
+    global_color_density = density;
 }
 
 int get_palette_count(void) {

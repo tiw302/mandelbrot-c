@@ -12,6 +12,9 @@
  * on failure. */
 int init_color_palette(int max_iterations, int palette_idx);
 
+// sets global color tuning parameters (offset, density)
+void set_color_tuning(double offset, double density);
+
 // gets the number of available built-in palettes
 int get_palette_count(void);
 

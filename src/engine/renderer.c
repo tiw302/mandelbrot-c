@@ -40,13 +40,14 @@ static inline int sys_mutex_init(sys_mutex_t* m) { InitializeCriticalSection(m);
 static inline void sys_mutex_lock(sys_mutex_t* m) { EnterCriticalSection(m); }
 static inline void sys_mutex_unlock(sys_mutex_t* m) { LeaveCriticalSection(m); }
 static inline void sys_mutex_destroy(sys_mutex_t* m) { DeleteCriticalSection(m); }
+#if !defined(__EMSCRIPTEN__)
 static inline int sys_cond_init(sys_cond_t* c) { InitializeConditionVariable(c); return 0; }
 static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) { SleepConditionVariableCS(c, m, INFINITE); }
 static inline void sys_cond_broadcast(sys_cond_t* c) { WakeAllConditionVariable(c); }
 static inline void sys_cond_signal(sys_cond_t* c) { WakeConditionVariable(c); }
 static inline void sys_cond_destroy(sys_cond_t* c) { (void)c; }
 static inline int sys_thread_create(sys_thread_t* t, SYS_THREAD_FUNC (*func)(void*), void* arg) {
-    *t = CreateThread(NULL, 0, func, arg, 0, NULL);
+    *t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)func, arg, 0, NULL);
     return *t ? 0 : 1;
 }
 static inline int sys_thread_join(sys_thread_t t) {
@@ -54,6 +55,7 @@ static inline int sys_thread_join(sys_thread_t t) {
     CloseHandle(t);
     return 0;
 }
+#endif
 #else
 #include <pthread.h>
 #include <unistd.h>
@@ -66,6 +68,7 @@ static inline int sys_mutex_init(sys_mutex_t* m) { return pthread_mutex_init(m, 
 static inline void sys_mutex_lock(sys_mutex_t* m) { pthread_mutex_lock(m); }
 static inline void sys_mutex_unlock(sys_mutex_t* m) { pthread_mutex_unlock(m); }
 static inline void sys_mutex_destroy(sys_mutex_t* m) { pthread_mutex_destroy(m); }
+#if !defined(__EMSCRIPTEN__)
 static inline int sys_cond_init(sys_cond_t* c) { return pthread_cond_init(c, NULL); }
 static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) { pthread_cond_wait(c, m); }
 static inline void sys_cond_broadcast(sys_cond_t* c) { pthread_cond_broadcast(c); }
@@ -77,6 +80,7 @@ static inline int sys_thread_create(sys_thread_t* t, SYS_THREAD_FUNC (*func)(voi
 static inline int sys_thread_join(sys_thread_t t) {
     return pthread_join(t, NULL);
 }
+#endif
 #endif
 
 
@@ -516,8 +520,10 @@ RendererContext* init_renderer(int max_iterations, int palette_idx) {
     atomic_store(&pool.next_tile, 0);
 
     sys_mutex_init(&pool.mutex);
+#if !defined(__EMSCRIPTEN__)
     sys_cond_init(&pool.work_ready);
     sys_cond_init(&pool.work_done);
+#endif
 
     pool.threads = malloc(sizeof(sys_thread_t) * pool.actual_thread_count);
     if (!pool.threads) {

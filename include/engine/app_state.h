@@ -47,6 +47,13 @@ typedef struct {
     char log_fontcolor[32];     // "white", "yellow", "cyan", "green", etc.
     char output_filename[256];  // output file path
 
+    float color_cycle_speed;
+    char audio_track_path[256];
+    int pixel_format_idx;
+    int bitrate_mode;
+    int target_bitrate_kbps;
+    int motion_blur_samples;
+
     // background video export state
     volatile float export_progress_percent;
     volatile int export_cancelled;
@@ -87,6 +94,13 @@ typedef struct {
 
     // video studio state
     VideoStudioSettings video_settings;
+
+    // advanced renderer & visual settings
+    double bailout_radius;
+    int render_tile_size;
+    int resolution_scale;
+    double color_offset;
+    double color_density;
 
     // notification system (max 5 active stacked notifications)
     struct {
