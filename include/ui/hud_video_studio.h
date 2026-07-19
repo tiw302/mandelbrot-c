@@ -12,4 +12,4 @@
 void hud_render_video_studio(struct ImFont* custom_font, AppCommonState* state, int win_w,
                              int win_h, int* cpu_precision_128, uint32_t now);
 
-#endif
+#endif // HUD_VIDEO_STUDIO_H
