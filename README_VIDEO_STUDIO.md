@@ -61,11 +61,17 @@ Run with `-h` or `--help` to view all options:
 * `--codec <h264|h265>`: Output encoder format (default: `h264`).
 * `--aa <1|2|4>`: Supersampling anti-aliasing level (default: `1` = no anti-aliasing).
 
+| AA Level | Description | Render Cost |
+| :--- | :--- | :--- |
+| `1` | No anti-aliasing (fastest) | 1× |
+| `2` | 2×2 supersampling — smooths jagged edges | 4× |
+| `4` | 4×4 supersampling — cinema-quality output | 16× |
+
 ### Animation Options
 * `-p, --path <scenic|bookmarks|custom>`: Animation path type:
   * `scenic`: Animates along built-in preset points.
   * `bookmarks`: Animates sequentially between your saved bookmarks.
-  * `custom`: Zooms directly to a specific target coordinate.
+  * `custom`: Zooms directly to a specific target coordinate set in the GUI settings panel or via `settings.txt`.
 * `--curve <0-3>`: Camera movement interpolation ease curve:
   * `0`: Ease In/Out (Smoothstep) (default)
   * `1`: Linear (Constant speed)
@@ -105,3 +111,22 @@ Generates a fast, low-resolution preview video:
 ```bash
 ./build_video/mandelbrot_video --headless -w 640 -g 480 -f 30 -d 3 -c 28 -s ultrafast --out draft.mp4
 ```
+
+### D. High-Quality with Anti-Aliasing
+Renders a smooth 1080p video with 2× supersampling for cleaner edges:
+```bash
+./build_video/mandelbrot_video --headless -w 1920 -g 1080 -f 60 -d 10 --aa 2 -c 18 -s slow --out hq_aa.mp4
+```
+
+---
+
+## 4. Tips
+
+> [!TIP]
+> **Workflow recommendation:** Run a fast draft first (`-w 640 -g 480 -s ultrafast`) to verify the animation path and timing, then re-render at full quality.
+
+> [!TIP]
+> **Codec choice:** Use `h264` (default) for maximum compatibility. Switch to `h265` for smaller file sizes when uploading to platforms that support it (YouTube, Vimeo).
+
+> [!NOTE]
+> **Anti-aliasing cost:** AA level `4` renders at 4× the resolution internally before downsampling. On an 8-core machine, a 10-second 1080p render at AA=4 can take several minutes. Use `--aa 2` as a good balance between quality and speed.
