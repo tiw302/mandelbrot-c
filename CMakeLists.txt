@@ -122,10 +122,16 @@ configure_file(
 set(GENERATED_SHADERS_DIR "${CMAKE_CURRENT_BINARY_DIR}/generated")
 file(MAKE_DIRECTORY ${GENERATED_SHADERS_DIR})
 
+if(WIN32)
+    set(COMPILE_SHADERS_CMD ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compile_shaders.bat)
+else()
+    set(COMPILE_SHADERS_CMD ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compile_shaders.sh)
+endif()
+
 add_custom_command(
     OUTPUT ${CMAKE_CURRENT_SOURCE_DIR}/src/app/shaders.h
-    COMMAND ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compile_shaders.sh
-    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mandelbrot.glsl ${CMAKE_CURRENT_SOURCE_DIR}/scripts/compile_shaders.sh
+    COMMAND ${COMPILE_SHADERS_CMD}
+    DEPENDS ${CMAKE_CURRENT_SOURCE_DIR}/shaders/mandelbrot.glsl ${COMPILE_SHADERS_CMD}
     COMMENT "Compiling shaders with sokol-shdc..."
 )
 
