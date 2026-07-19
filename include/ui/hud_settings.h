@@ -12,4 +12,4 @@
 void hud_render_settings_window(AppCommonState* state, int win_w, int win_h, int gpu_mode,
                                 int* high_precision_mode, int* use_perturbation);
 
-#endif  // HUD_SETTINGS_H
+#endif // HUD_SETTINGS_H
