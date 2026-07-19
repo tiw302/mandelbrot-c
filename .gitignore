@@ -122,3 +122,17 @@ files.txt
 clang_tidy_*.txt
 scripts/old_patches/
 assets/icons/generate_icons.py
+patch_workflows.py
+
+# advanced build systems & IDEs
+.ninja_deps
+.ninja_log
+.ccls-cache/
+.vs/
+cmake-build-*/
+*.ilk
+*.exp
+*.sdf
+*.opendb
+*.xcodeproj/
+*.xcworkspace/
