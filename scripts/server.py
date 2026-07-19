@@ -1,3 +1,8 @@
+# server.py
+#
+# local http server for testing the webassembly build.
+# sets up required http headers (coop/coep) for sharedarraybuffer support.
+
 import http.server
 import socketserver
 import os
