@@ -40,4 +40,4 @@ const Bookmark* get_bookmarks_array(int* out_count);
 // frees the bookmark cache
 void bookmark_cache_free(void);
 
-#endif
+#endif // BOOKMARK_H
