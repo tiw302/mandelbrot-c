@@ -3,6 +3,7 @@
  * compiled glsl shaders for gpu rendering.
  */
 #pragma once
+// clang-format off
 /*
     #version:1# (machine generated, don't edit!)
 

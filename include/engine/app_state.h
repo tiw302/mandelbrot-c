@@ -199,4 +199,4 @@ typedef struct {
 
 extern CLIArgs g_cli_args;
 
-#endif // APP_STATE_H
+#endif  // APP_STATE_H

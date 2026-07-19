@@ -336,8 +336,9 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
                  safe_fontpath,
                  s_log_path, x_pos, y_pos, log_fontsize > 0 ? log_fontsize : 20,
                  (log_fontcolor && log_fontcolor[0] != '\0') ? log_fontcolor : "white");
-        size_t rem = sizeof(vf_chain) - strlen(vf_chain) - 1;
-        strncat(vf_chain, drawtext_filter, rem);
+        size_t curr_len = strlen(vf_chain);
+        size_t rem = sizeof(vf_chain) - curr_len;
+        snprintf(vf_chain + curr_len, rem, "%s", drawtext_filter);
     }
 
     if (is_bgra_topdown) {

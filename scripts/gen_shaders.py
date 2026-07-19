@@ -45,6 +45,8 @@ def main():
 #ifndef SHADERS_H
 #define SHADERS_H
 
+// clang-format off
+
 static const char* vs_src =
 {escape_glsl(vs_web)};
 

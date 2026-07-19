@@ -33,4 +33,4 @@ void get_color(double iterations, int max_iterations, uint8_t* r, uint8_t* g, ui
 // releases resources allocated for palette management
 void cleanup_color_palette(void);
 
-#endif // CORE_COLOR_H
+#endif  // CORE_COLOR_H

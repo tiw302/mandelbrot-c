@@ -28,7 +28,6 @@
 #include <emscripten/threading.h>
 #endif
 
-
 #if defined(_WIN32) || defined(_WIN64)
 #include <windows.h>
 typedef HANDLE sys_thread_t;
@@ -36,16 +35,36 @@ typedef CRITICAL_SECTION sys_mutex_t;
 typedef CONDITION_VARIABLE sys_cond_t;
 #define SYS_THREAD_FUNC DWORD WINAPI
 #define SYS_THREAD_RETURN(val) return (DWORD)(uintptr_t)(val)
-static inline int sys_mutex_init(sys_mutex_t* m) { InitializeCriticalSection(m); return 0; }
-static inline void sys_mutex_lock(sys_mutex_t* m) { EnterCriticalSection(m); }
-static inline void sys_mutex_unlock(sys_mutex_t* m) { LeaveCriticalSection(m); }
-static inline void sys_mutex_destroy(sys_mutex_t* m) { DeleteCriticalSection(m); }
+static inline int sys_mutex_init(sys_mutex_t* m) {
+    InitializeCriticalSection(m);
+    return 0;
+}
+static inline void sys_mutex_lock(sys_mutex_t* m) {
+    EnterCriticalSection(m);
+}
+static inline void sys_mutex_unlock(sys_mutex_t* m) {
+    LeaveCriticalSection(m);
+}
+static inline void sys_mutex_destroy(sys_mutex_t* m) {
+    DeleteCriticalSection(m);
+}
 #if !defined(__EMSCRIPTEN__)
-static inline int sys_cond_init(sys_cond_t* c) { InitializeConditionVariable(c); return 0; }
-static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) { SleepConditionVariableCS(c, m, INFINITE); }
-static inline void sys_cond_broadcast(sys_cond_t* c) { WakeAllConditionVariable(c); }
-static inline void sys_cond_signal(sys_cond_t* c) { WakeConditionVariable(c); }
-static inline void sys_cond_destroy(sys_cond_t* c) { (void)c; }
+static inline int sys_cond_init(sys_cond_t* c) {
+    InitializeConditionVariable(c);
+    return 0;
+}
+static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) {
+    SleepConditionVariableCS(c, m, INFINITE);
+}
+static inline void sys_cond_broadcast(sys_cond_t* c) {
+    WakeAllConditionVariable(c);
+}
+static inline void sys_cond_signal(sys_cond_t* c) {
+    WakeConditionVariable(c);
+}
+static inline void sys_cond_destroy(sys_cond_t* c) {
+    (void)c;
+}
 static inline int sys_thread_create(sys_thread_t* t, SYS_THREAD_FUNC (*func)(void*), void* arg) {
     *t = CreateThread(NULL, 0, (LPTHREAD_START_ROUTINE)func, arg, 0, NULL);
     return *t ? 0 : 1;
@@ -64,16 +83,34 @@ typedef pthread_mutex_t sys_mutex_t;
 typedef pthread_cond_t sys_cond_t;
 #define SYS_THREAD_FUNC void*
 #define SYS_THREAD_RETURN(val) return (val)
-static inline int sys_mutex_init(sys_mutex_t* m) { return pthread_mutex_init(m, NULL); }
-static inline void sys_mutex_lock(sys_mutex_t* m) { pthread_mutex_lock(m); }
-static inline void sys_mutex_unlock(sys_mutex_t* m) { pthread_mutex_unlock(m); }
-static inline void sys_mutex_destroy(sys_mutex_t* m) { pthread_mutex_destroy(m); }
+static inline int sys_mutex_init(sys_mutex_t* m) {
+    return pthread_mutex_init(m, NULL);
+}
+static inline void sys_mutex_lock(sys_mutex_t* m) {
+    pthread_mutex_lock(m);
+}
+static inline void sys_mutex_unlock(sys_mutex_t* m) {
+    pthread_mutex_unlock(m);
+}
+static inline void sys_mutex_destroy(sys_mutex_t* m) {
+    pthread_mutex_destroy(m);
+}
 #if !defined(__EMSCRIPTEN__)
-static inline int sys_cond_init(sys_cond_t* c) { return pthread_cond_init(c, NULL); }
-static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) { pthread_cond_wait(c, m); }
-static inline void sys_cond_broadcast(sys_cond_t* c) { pthread_cond_broadcast(c); }
-static inline void sys_cond_signal(sys_cond_t* c) { pthread_cond_signal(c); }
-static inline void sys_cond_destroy(sys_cond_t* c) { pthread_cond_destroy(c); }
+static inline int sys_cond_init(sys_cond_t* c) {
+    return pthread_cond_init(c, NULL);
+}
+static inline void sys_cond_wait(sys_cond_t* c, sys_mutex_t* m) {
+    pthread_cond_wait(c, m);
+}
+static inline void sys_cond_broadcast(sys_cond_t* c) {
+    pthread_cond_broadcast(c);
+}
+static inline void sys_cond_signal(sys_cond_t* c) {
+    pthread_cond_signal(c);
+}
+static inline void sys_cond_destroy(sys_cond_t* c) {
+    pthread_cond_destroy(c);
+}
 static inline int sys_thread_create(sys_thread_t* t, SYS_THREAD_FUNC (*func)(void*), void* arg) {
     return pthread_create(t, NULL, func, arg);
 }
@@ -82,7 +119,6 @@ static inline int sys_thread_join(sys_thread_t t) {
 }
 #endif
 #endif
-
 
 /* persistent thread pool
  *
@@ -129,8 +165,8 @@ struct RendererContext {
     sys_mutex_t dispatch_mutex;
     sys_cond_t work_ready;  // main -> workers: new frame posted
     sys_cond_t work_done;   // workers -> main: all rows consumed
-    int frame_id;               // monotonically increasing, workers compare against last seen
-    int threads_idle;           // workers that finished current frame
+    int frame_id;           // monotonically increasing, workers compare against last seen
+    int threads_idle;       // workers that finished current frame
 
     // threads list
     sys_thread_t* threads;

@@ -20,6 +20,12 @@
 #include <stdlib.h>
 #include <string.h>
 
+#if defined(_WIN32) || defined(_WIN64)
+#define SYS_REALPATH(rel, abs) _fullpath((abs), (rel), 512)
+#else
+#define SYS_REALPATH(rel, abs) realpath((rel), (abs))
+#endif
+
 #define SAFE_STRCPY(dest, src)                       \
     do {                                             \
         snprintf((dest), sizeof(dest), "%s", (src)); \
@@ -413,7 +419,7 @@ void app_state_resolve_asset_path(const char* relative_path, char* out_path, siz
             /* resolve to absolute path so downstream tools (e.g. ffmpeg drawtext)
              * can locate the file regardless of working directory. */
             char abs[512];
-            if (realpath(temp, abs) != NULL) {
+            if (SYS_REALPATH(temp, abs) != NULL) {
                 strncpy(out_path, abs, max_len - 1);
             } else {
                 strncpy(out_path, temp, max_len - 1);
@@ -424,7 +430,7 @@ void app_state_resolve_asset_path(const char* relative_path, char* out_path, siz
     }
     // fallback if not found — try realpath on the raw relative path as-is
     char abs[512];
-    if (realpath(relative_path, abs) != NULL) {
+    if (SYS_REALPATH(relative_path, abs) != NULL) {
         strncpy(out_path, abs, max_len - 1);
     } else {
         strncpy(out_path, relative_path, max_len - 1);
