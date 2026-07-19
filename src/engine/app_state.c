@@ -269,7 +269,7 @@ void app_state_load_next_bookmark(AppCommonState* state) {
     }
 }
 
-/* returns the window title for a given base fractal mode.
+/* map base fractal mode to window title.
  * touring=1 appends "[Auto-Zoom]" for the tour state. */
 static const char* fractal_display_name(int base_fractal, int touring) {
     /* use static buffers — only one title is active at a time */
