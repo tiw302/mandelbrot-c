@@ -36,10 +36,7 @@ void call_update_debug_info(int gpu_mode, int julia_mode, int base_fractal, int 
     _call_update_debug_info_js(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im, thread_count, render_time_ms);
 }
 
-/*
- * [WASM EXPORT] wasm_reset_view
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_reset_view */
 EMSCRIPTEN_KEEPALIVE
 void wasm_reset_view(void) {
     if (g_state) {
@@ -49,10 +46,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_undo_zoom
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_undo_zoom */
 EMSCRIPTEN_KEEPALIVE
 void wasm_undo_zoom(void) {
     if (g_state && g_state->cam.history_count > 0) {
@@ -63,10 +57,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_next_palette
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_next_palette */
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
     if (g_state) {
@@ -78,10 +69,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_cycle_fractal
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_cycle_fractal */
 EMSCRIPTEN_KEEPALIVE
 void wasm_cycle_fractal(void) {
     if (g_state && !g_state->julia_mode) {
@@ -92,10 +80,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_set_fractal_mode
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_set_fractal_mode */
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_fractal_mode(int mode) {
     if (g_state && !g_state->julia_mode) {
@@ -106,10 +91,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_set_palette
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_set_palette */
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_palette(int p) {
     if (g_state) {
@@ -121,10 +103,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_toggle_julia
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_toggle_julia */
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia(void) {
     if (g_state) {
@@ -136,10 +115,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_toggle_tour
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_toggle_tour */
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_tour(void) {
     if (g_state) {
@@ -149,10 +125,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_toggle_julia_lock
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_toggle_julia_lock */
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia_lock(void) {
     if (g_state) {
@@ -162,10 +135,7 @@ void wasm_toggle_julia_lock(void) {
     }
 }
 
-/*
- * [WASM EXPORT] wasm_set_tour_speed
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_set_tour_speed */
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_tour_speed(double speed) {
     if (g_state) {
@@ -176,10 +146,7 @@ void wasm_set_tour_speed(double speed) {
     }
 }
 
-/*
- * [WASM EXPORT] wasm_mouse_down
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_mouse_down */
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_down(double x, double y) {
     if (g_state) {
@@ -194,10 +161,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_mouse_up
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_mouse_up */
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_up(double x, double y) {
     if (g_state) {
@@ -212,10 +176,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_mouse_move
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_mouse_move */
 EMSCRIPTEN_KEEPALIVE
 void wasm_mouse_move(double x, double y) {
     if (g_state) {
@@ -229,10 +190,7 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_wheel
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_wheel */
 EMSCRIPTEN_KEEPALIVE
 void wasm_wheel(double dx, double dy) {
     if (g_state) {
@@ -245,67 +203,46 @@ pthread_mutex_lock(&g_state->state_mutex);
     }
 }
 
-/*
- * [WASM EXPORT] wasm_get_registered_count
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_get_registered_count */
 EMSCRIPTEN_KEEPALIVE
 int wasm_get_registered_count(void) {
     return 5;
 }
 
-/*
- * [WASM EXPORT] wasm_get_registered_name
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_get_registered_name */
 EMSCRIPTEN_KEEPALIVE
 const char* wasm_get_registered_name(int idx) {
     const FractalDefinition* def = get_fractal_by_index(idx);
     return def ? def->name : "unknown";
 }
 
-/*
- * [WASM EXPORT] wasm_get_registered_display_name
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_get_registered_display_name */
 EMSCRIPTEN_KEEPALIVE
 const char* wasm_get_registered_display_name(int idx) {
     const FractalDefinition* def = get_fractal_by_index(idx);
     return def ? def->display_name : "Unknown";
 }
 
-/*
- * [WASM EXPORT] wasm_get_registered_mode
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_get_registered_mode */
 EMSCRIPTEN_KEEPALIVE
 int wasm_get_registered_mode(int idx) {
     const FractalDefinition* def = get_fractal_by_index(idx);
     return def ? def->mode : 0;
 }
 
-/*
- * [WASM EXPORT] wasm_get_palette_count
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_get_palette_count */
 EMSCRIPTEN_KEEPALIVE
 int wasm_get_palette_count(void) {
     return get_palette_count();
 }
 
-/*
- * [WASM EXPORT] wasm_get_palette_name
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_get_palette_name */
 EMSCRIPTEN_KEEPALIVE
 const char* wasm_get_palette_name(int idx) {
     return get_palette_name(idx);
 }
 
-/*
- * [WASM EXPORT] wasm_adjust_iterations
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_adjust_iterations */
 EMSCRIPTEN_KEEPALIVE
 void wasm_adjust_iterations(int delta) {
     if (g_state) {
@@ -319,10 +256,7 @@ void wasm_adjust_iterations(int delta) {
     }
 }
 
-/*
- * [WASM EXPORT] wasm_is_julia_locked
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_is_julia_locked */
 EMSCRIPTEN_KEEPALIVE
 int wasm_is_julia_locked(void) {
     if (g_state) {
@@ -331,10 +265,7 @@ int wasm_is_julia_locked(void) {
     return 0;
 }
 
-/*
- * [WASM EXPORT] wasm_set_view
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_set_view */
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_view(double re, double im, double z) {
     if (g_state) {
@@ -347,10 +278,7 @@ void wasm_set_view(double re, double im, double z) {
     }
 }
 
-/*
- * [WASM EXPORT] wasm_set_state
- * exported to javascript to allow the web ui to call this functionality.
- */
+/* [wasm export] wasm_set_state */
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_state(int is_julia, double jre, double jim, int iters, int pal) {
     if (g_state) {
