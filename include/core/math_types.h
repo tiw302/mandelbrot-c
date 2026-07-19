@@ -39,4 +39,4 @@ typedef struct {
     precise_float zoom;
 } ViewState;
 
-#endif  // math_types_h
+#endif // MATH_TYPES_H
