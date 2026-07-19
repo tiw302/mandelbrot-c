@@ -1,3 +1,9 @@
+/* imgui_impl.cc
+ *
+ * sokol and cimgui implementation wrapper.
+ * compiles the dear imgui c++ implementation files and sokol imgui backend.
+ */
+
 #if defined(__EMSCRIPTEN__)
 #define SOKOL_GLES3
 #else
