@@ -820,8 +820,27 @@ static void event(const sapp_event* ev, void* user_data) {
             break;
 
         case SAPP_EVENTTYPE_KEY_DOWN:
+#ifdef __EMSCRIPTEN__
+            if (!ev->key_repeat) {
+                if (ev->key_code == SAPP_KEYCODE_I) {
+                    EM_ASM({ if (typeof toggleInfo === 'function') toggleInfo(); });
+                } else if (ev->key_code == SAPP_KEYCODE_O) {
+                    EM_ASM({ if (typeof toggleSettings === 'function') toggleSettings(); });
+                } else if (ev->key_code == SAPP_KEYCODE_C) {
+                    EM_ASM({ if (typeof copyLink === 'function') copyLink(); });
+                } else if (ev->key_code == SAPP_KEYCODE_L) {
+                    EM_ASM({ if (typeof toggleJuliaLock === 'function') toggleJuliaLock(); });
+                }
+            }
+#endif
             ie.type = INPUT_KEY_DOWN;
             ie.key = map_sokol_key(ev->key_code);
+#ifdef __EMSCRIPTEN__
+            if (ev->key_code == SAPP_KEYCODE_I || ev->key_code == SAPP_KEYCODE_O || 
+                ev->key_code == SAPP_KEYCODE_C || ev->key_code == SAPP_KEYCODE_L) {
+                ie.key = KEY_UNKNOWN;
+            }
+#endif
             ie.mod_shift = (ev->modifiers & SAPP_MODIFIER_SHIFT) ? 1 : 0;
             ie.mod_ctrl = (ev->modifiers & SAPP_MODIFIER_CTRL) ? 1 : 0;
             break;
@@ -829,6 +848,12 @@ static void event(const sapp_event* ev, void* user_data) {
         case SAPP_EVENTTYPE_KEY_UP:
             ie.type = INPUT_KEY_UP;
             ie.key = map_sokol_key(ev->key_code);
+#ifdef __EMSCRIPTEN__
+            if (ev->key_code == SAPP_KEYCODE_I || ev->key_code == SAPP_KEYCODE_O || 
+                ev->key_code == SAPP_KEYCODE_C || ev->key_code == SAPP_KEYCODE_L) {
+                ie.key = KEY_UNKNOWN;
+            }
+#endif
             ie.mod_shift = (ev->modifiers & SAPP_MODIFIER_SHIFT) ? 1 : 0;
             ie.mod_ctrl = (ev->modifiers & SAPP_MODIFIER_CTRL) ? 1 : 0;
             break;

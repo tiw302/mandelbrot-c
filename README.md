@@ -127,10 +127,10 @@ The URL format encodes the following parameters:
 Example: `?re=-0.74364388797764&im=0.13182590414575&z=1.234568e+4&it=500&p=0&f=0`
 
 - **Hi-Lo Precision GPU Math:** 64-bit precision emulation in GLSL shaders (Dekker double-single arithmetic) for deep-zoom without pixelation artifacts.
-- **Perturbation Theory Engine:** A reference-orbit system (`perturbation.c`) enables accurate rendering at extreme zoom depths ($>10^{14}$) by computing a single high-precision center orbit on the CPU, then calculating all other pixels as low-precision deltas. Includes Series Approximation (SA) coefficients (A, B, C) for skipping early iterations.
-- **Interactive Tour Mode:** Automated exploration with two independent tour systems. The Mandelbrot tour cycles through 10 hand-picked deep-zoom coordinates using a three-phase sequence — Pan (1.8s), Zoom In (4.0s), Zoom Out (3.2s) — with smoothstep easing and a zoom depth of 6000×. On desktop, the Julia tour interpolates between 12 preset c-parameter keyframes. On web, the Julia tour uses a continuous circular orbit (`c = 0.7885 × e^(it)`).
+- **Perturbation Theory Engine:** A reference-orbit system (`perturbation.c`) enables accurate rendering at extreme zoom depths ($>10^{14}$) by computing a single high-precision center orbit on the CPU, then calculating all other pixels as low-precision deltas.
+- **Interactive Tour Mode:** Automated exploration with two independent tour systems. The Mandelbrot tour cycles through 20 hand-picked deep-zoom coordinates using a three-phase sequence — Pan (1.8s), Zoom In (4.0s), Zoom Out (3.2s) — with smoothstep easing and a zoom depth of 6000×. On desktop, the Julia tour interpolates between 12 preset c-parameter keyframes. On web, the Julia tour uses a continuous circular orbit (`c = 0.7885 × e^(it)`).
 - **Mandelbrot Video Studio:** A dedicated GUI application (`mandelbrot_video`) for rendering fractal zoom animations to `.mp4` via FFmpeg. Supports GUI and headless CLI modes, scenic/bookmark/custom paths, supersampling AA, and telemetry overlay. See [README_VIDEO_STUDIO.md](README_VIDEO_STUDIO.md) for full documentation.
-- **Professional Screenshot System:** Deferred GPU readback ensures correct frame capture. Desktop saves via `stb_image_write` with ARGB→RGBA conversion. Web downloads directly from the canvas. Filename format: `mandelbrot_YYYYMMDD_HHMMSS.png`.
+- **Professional Screenshot System:** Deferred GPU readback ensures correct frame capture. Desktop saves via `stb_image_write` with ARGB→RGBA conversion. Web downloads directly from the canvas. Filename format: `screenshot_<unix_timestamp>_<counter>.png` (e.g. `screenshot_1784210988_1.png`).
 - **Mega Screenshot (8K):** Desktop-only `X` key triggers a tiled 8K render using the CPU engine, exported as a `.tga` file.
 - **Dynamic HUD:** Responsive Heads-Up Display showing 14-decimal precision coordinates, palette name, engine mode, and iteration count.
 
@@ -240,7 +240,7 @@ User Input
     └─> app_runner.c (Sokol event)
             └─> input_handler.c
                     └─> app_state.c (update uniforms)
-                            ├─> [if zoom < 1e-6] perturbation.c
+                            ├─> [if zoom < 1e-13] perturbation.c
                             │       ├─> compute reference orbit (CPU, double precision)
                             │       ├─> compute SA coefficients A, B, C
                             │       └─> upload orbit as GPU texture
@@ -318,7 +318,7 @@ One of the core engineering challenges in a fractal renderer is floating-point p
 > [!IMPORTANT]
 > BigNum is used exclusively for computing the single **reference orbit** in Perturbation Theory — not per-pixel. All other pixels are rendered as fast 32-bit delta offsets relative to that reference point, which is why extreme zoom remains interactive.
 
-The engine auto-selects the right level: Perturbation Theory activates automatically when `zoom < PERTURBATION_ZOOM_THRESHOLD` (`1e-6`) on Mandelbrot GPU mode. The precision mode can be toggled at runtime with `E`.
+The engine auto-selects the right level: Perturbation Theory activates automatically when `zoom < PERTURBATION_ZOOM_THRESHOLD` (`1e-13`) on Mandelbrot GPU mode. The precision mode can be toggled at runtime with `E`.
 
 ---
 
@@ -664,6 +664,9 @@ ctest --test-dir build_cpu --output-on-failure
 | `test_app_state` | Validates app state serialization, restoration, and cross-backend consistency |
 | `test_perturbation` | Verifies perturbation theory math consistency against the reference scalar path |
 | `test_bignum` | Validates the software arbitrary-precision BigNum engine — addition, multiplication, and division correctness |
+| `test_camera` | Verifies view transform, zoom history stack, and undo/redo correctness |
+| `test_fractal` | Validates fractal registry dispatch and per-type SIMD/scalar consistency |
+| `test_input_handler` | Validates keyboard and mouse event dispatch and state transitions |
 
 > AVX2/AVX-512 tests are compiled and run automatically if the host CPU supports them. On machines without SIMD support, the scalar path is used and consistency tests are skipped.
 
@@ -722,7 +725,6 @@ ctest --test-dir build_cpu --output-on-failure
 ├── third_party/         # Vendored external libraries
 │   ├── sokol/          # Sokol headers (GFX, App, GL, Time)
 │   ├── stb/            # stb_image_write for PNG/TGA export
-│   ├── fons/           # Fontstash for HUD text rendering
 │   ├── simd-f128/      # AVX2-accelerated 128-bit double-double precision
 │   ├── cimgui/         # Dear ImGui C bindings (Video Studio GUI)
 │   └── cjsonx/         # Lightweight JSON parser (bookmark I/O)

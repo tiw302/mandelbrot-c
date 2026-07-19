@@ -22,19 +22,21 @@ void wasm_bridge_init(AppCommonState* state) {
     g_state = state;
 }
 
+// clang-format off
 EM_JS(void, _call_update_debug_info_js,
       (int gpu_mode, int julia_mode, int base_fractal, int max_iters, double zoom, double center_re,
        double center_im, int palette_idx, int tour_phase, double julia_re, double julia_im,
        int high_precision, int tour_target_idx, int tour_total_targets, double tour_target_re,
        double tour_target_im, int thread_count, int render_time_ms),
       {
-          if (typeof window.updateDebugInfo == = 'function') {
+          if (typeof window.updateDebugInfo === 'function') {
               window.updateDebugInfo(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re,
                                      center_im, palette_idx, tour_phase, julia_re, julia_im,
                                      high_precision, tour_target_idx, tour_total_targets,
                                      tour_target_re, tour_target_im, thread_count, render_time_ms);
           }
       })
+// clang-format on
 
 void call_update_debug_info(int gpu_mode, int julia_mode, int base_fractal, int max_iters,
                             double zoom, double center_re, double center_im, int palette_idx,

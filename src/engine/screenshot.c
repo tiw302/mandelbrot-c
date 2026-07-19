@@ -443,11 +443,12 @@ void save_screenshot(AppCommonState* state, const uint32_t* pixels, int width, i
 #pragma clang diagnostic ignored "-Wvariadic-macro-arguments-omitted"
 #pragma clang diagnostic ignored "-Wgnu-zero-variadic-macro-arguments"
 #pragma clang diagnostic ignored "-Wdollar-in-identifier-extension"
+    // clang-format off
     EM_ASM(
         {
             try {
                 if (window.downloadScreenshotData) {
-                    var heap = (typeof HEAPU8 != = 'undefined') ? HEAPU8 : Module.HEAPU8;
+                    var heap = (typeof HEAPU8 !== 'undefined') ? HEAPU8 : Module.HEAPU8;
                     window.downloadScreenshotData($0, $1, $2, heap, $3);
                 }
             } catch (e) {
@@ -455,6 +456,7 @@ void save_screenshot(AppCommonState* state, const uint32_t* pixels, int width, i
             }
         },
         (void*)(rgba_pixels ? rgba_pixels : pixels), width, height, is_bottom_up);
+// clang-format on
 #pragma clang diagnostic pop
 
     if (rgba_pixels) free(rgba_pixels);

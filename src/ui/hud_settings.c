@@ -152,11 +152,14 @@ void hud_render_settings_window(AppCommonState* state, int win_w, int win_h, int
         if (igButton("Open Video Studio", (ImVec2){-1, 0})) {
 #ifdef __linux__
             if (access("./build_deep/mandelbrot_video", X_OK) != -1) {
-                if (system("./build_deep/mandelbrot_video &")) {}
+                if (system("./build_deep/mandelbrot_video &")) {
+                }
             } else if (access("./build_cpu/mandelbrot_video", X_OK) != -1) {
-                if (system("./build_cpu/mandelbrot_video &")) {}
+                if (system("./build_cpu/mandelbrot_video &")) {
+                }
             } else if (access("./mandelbrot_video", X_OK) != -1) {
-                if (system("./mandelbrot_video &")) {}
+                if (system("./mandelbrot_video &")) {
+                }
             } else {
                 fprintf(stderr, "mandelbrot_video executable not found\n");
             }
