@@ -129,7 +129,7 @@ void hud_render_sokol_gpu(struct ImFont* custom_font, AppCommonState* state, int
         igText("[RENDER]    Zoom: %.6g | Iters: %d | Palette: %s", (double)state->cam.view.zoom,
                state->max_iterations, get_palette_name(state->palette_idx % get_palette_count()));
 
-        // Tour text removed as requested for deep zoom
+        // tour text removed as requested for deep zoom
         igEnd();
     }
 
