@@ -243,10 +243,30 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
     if (custom_filename && custom_filename[0] != '\0') {
         strncpy(filename, custom_filename, sizeof(filename) - 1);
         filename[sizeof(filename) - 1] = '\0';
+        
+        /* sanitize filename to prevent command injection */
+        for (int i = 0; filename[i] != '\0'; i++) {
+            if (strchr("\"'\\$;|&<>`\n\r", filename[i])) {
+                filename[i] = '_';
+            }
+        }
     } else {
         time_t now = time(NULL);
         struct tm* t = localtime(&now);
         strftime(filename, sizeof(filename), "mandelbrot_video_%Y%m%d_%H%M%S.mp4", t);
+    }
+
+    char safe_fontpath[512] = "assets/fonts/font.ttf";
+    if (log_fontpath && log_fontpath[0] != '\0') {
+        strncpy(safe_fontpath, log_fontpath, sizeof(safe_fontpath) - 1);
+        safe_fontpath[sizeof(safe_fontpath) - 1] = '\0';
+        
+        /* sanitize fontpath to prevent command injection */
+        for (int i = 0; safe_fontpath[i] != '\0'; i++) {
+            if (strchr("\"'\\$;|&<>`\n\r", safe_fontpath[i])) {
+                safe_fontpath[i] = '_';
+            }
+        }
     }
 
     /* use a large unified command buffer to avoid truncation.
@@ -274,14 +294,16 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
     }
 
     if (show_log) {
-        /* resolve absolute path for video_log.txt so both fopen() and ffmpeg         * can find it
-         * regardless of working directory. */
-        char cwd[384];
-        if (getcwd(cwd, sizeof(cwd)) != NULL) {
-            snprintf(s_log_path, sizeof(s_log_path), "%s/video_log.txt", cwd);
-        } else {
-            strncpy(s_log_path, "video_log.txt", sizeof(s_log_path) - 1);
-        }
+        /* use system temp directory instead of cwd to avoid permission issues */
+#ifdef _WIN32
+        const char* tmp_dir = getenv("TEMP");
+        if (!tmp_dir) tmp_dir = getenv("TMP");
+        if (!tmp_dir) tmp_dir = ".";
+#else
+        const char* tmp_dir = getenv("TMPDIR");
+        if (!tmp_dir) tmp_dir = "/tmp";
+#endif
+        snprintf(s_log_path, sizeof(s_log_path), "%s/video_log.txt", tmp_dir);
 
         // initialize empty log file — each frame appends one line
         FILE* log_f = fopen(s_log_path, "w");
@@ -311,7 +333,7 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
         snprintf(drawtext_filter, sizeof(drawtext_filter),
                  ",drawtext=fontfile='%s':textfile='%s':reload=1:x=%s:y=%s:fontsize=%d:"
                  "fontcolor=%s:line_spacing=2:expansion=none",
-                 (log_fontpath && log_fontpath[0] != '\0') ? log_fontpath : "assets/fonts/font.ttf",
+                 safe_fontpath,
                  s_log_path, x_pos, y_pos, log_fontsize > 0 ? log_fontsize : 20,
                  (log_fontcolor && log_fontcolor[0] != '\0') ? log_fontcolor : "white");
         size_t rem = sizeof(vf_chain) - strlen(vf_chain) - 1;
