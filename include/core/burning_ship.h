@@ -50,4 +50,4 @@ void burning_ship_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterati
 #ifdef __ARM_NEON
 #include <arm_neon.h>
 void burning_ship_check_neon(float64x2_t cre, float64x2_t cim, int max_iterations, double* results);
-#endif
+#endif // BURNING_SHIP_H
