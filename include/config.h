@@ -77,4 +77,4 @@
  * precision range) so this threshold is never reached in practice. */
 #define BIGNUM_ZOOM_THRESHOLD 1e-60
 
-#endif // CONFIG_H
+#endif  // CONFIG_H

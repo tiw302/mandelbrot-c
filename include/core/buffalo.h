@@ -31,4 +31,4 @@ void buffalo_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations, 
 #endif
 #endif
 
-#endif // BUFFALO_H
+#endif  // BUFFALO_H

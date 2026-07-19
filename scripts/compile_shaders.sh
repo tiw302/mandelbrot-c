@@ -32,4 +32,5 @@ fi
 
 echo "Compiling shaders..."
 "$SHDC_BIN" -i "$PROJECT_DIR/shaders/mandelbrot.glsl" -o "$PROJECT_DIR/src/app/shaders.h" -l glsl410:glsl300es:wgsl -f sokol
+echo "// clang-format off" | cat - "$PROJECT_DIR/src/app/shaders.h" > temp && mv temp "$PROJECT_DIR/src/app/shaders.h"
 echo "Shaders compiled successfully."

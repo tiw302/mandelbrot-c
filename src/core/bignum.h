@@ -87,4 +87,4 @@ int bn_cmp_mag(const BigNum* a, const BigNum* b);
  * radius check (full bignum comparison not needed here) */
 double bn_mag_sq_to_double(const BigNum* z_re, const BigNum* z_im);
 
-#endif // BIGNUM_H
+#endif  // BIGNUM_H

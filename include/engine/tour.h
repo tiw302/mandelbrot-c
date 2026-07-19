@@ -79,4 +79,4 @@ double get_tour_target_im(const TourState* state, int base_fractal);
 int get_julia_tour_target_idx(const JuliaTourState* state);
 int get_num_julia_tour_targets(void);
 
-#endif // TOUR_H
+#endif  // TOUR_H

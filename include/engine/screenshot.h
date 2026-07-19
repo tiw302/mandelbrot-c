@@ -40,4 +40,4 @@ void append_video_frame(const uint32_t* pixels, int width, int height);
 void stop_video_recording(void);
 int is_video_recording(void);
 
-#endif // SCREENSHOT_H
+#endif  // SCREENSHOT_H

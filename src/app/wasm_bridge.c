@@ -9,11 +9,12 @@
 
 #if defined(__EMSCRIPTEN__)
 #include <emscripten.h>
-#include "tour.h"
+
 #include "bookmark.h"
 #include "color.h"
 #include "input_handler.h"
 #include "sokol/sokol_time.h"
+#include "tour.h"
 
 static AppCommonState* g_state = NULL;
 
@@ -21,26 +22,36 @@ void wasm_bridge_init(AppCommonState* state) {
     g_state = state;
 }
 
-EM_JS(void, _call_update_debug_info_js, (int gpu_mode, int julia_mode, int base_fractal, int max_iters, 
-                            double zoom, double center_re, double center_im, 
-                            int palette_idx, int tour_phase, double julia_re, double julia_im, 
-                            int high_precision, int tour_target_idx, int tour_total_targets, 
-                            double tour_target_re, double tour_target_im,
-                            int thread_count, int render_time_ms), {
-    if (typeof window.updateDebugInfo === 'function') {
-        window.updateDebugInfo(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im, thread_count, render_time_ms);
-    }
-})
+EM_JS(void, _call_update_debug_info_js,
+      (int gpu_mode, int julia_mode, int base_fractal, int max_iters, double zoom, double center_re,
+       double center_im, int palette_idx, int tour_phase, double julia_re, double julia_im,
+       int high_precision, int tour_target_idx, int tour_total_targets, double tour_target_re,
+       double tour_target_im, int thread_count, int render_time_ms),
+      {
+          if (typeof window.updateDebugInfo == = 'function') {
+              window.updateDebugInfo(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re,
+                                     center_im, palette_idx, tour_phase, julia_re, julia_im,
+                                     high_precision, tour_target_idx, tour_total_targets,
+                                     tour_target_re, tour_target_im, thread_count, render_time_ms);
+          }
+      })
 
-void call_update_debug_info(int gpu_mode, int julia_mode, int base_fractal, int max_iters, double zoom, double center_re, double center_im, int palette_idx, int tour_phase, double julia_re, double julia_im, int high_precision, int tour_target_idx, int tour_total_targets, double tour_target_re, double tour_target_im, int thread_count, int render_time_ms) {
-    _call_update_debug_info_js(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re, center_im, palette_idx, tour_phase, julia_re, julia_im, high_precision, tour_target_idx, tour_total_targets, tour_target_re, tour_target_im, thread_count, render_time_ms);
+void call_update_debug_info(int gpu_mode, int julia_mode, int base_fractal, int max_iters,
+                            double zoom, double center_re, double center_im, int palette_idx,
+                            int tour_phase, double julia_re, double julia_im, int high_precision,
+                            int tour_target_idx, int tour_total_targets, double tour_target_re,
+                            double tour_target_im, int thread_count, int render_time_ms) {
+    _call_update_debug_info_js(gpu_mode, julia_mode, base_fractal, max_iters, zoom, center_re,
+                               center_im, palette_idx, tour_phase, julia_re, julia_im,
+                               high_precision, tour_target_idx, tour_total_targets, tour_target_re,
+                               tour_target_im, thread_count, render_time_ms);
 }
 
 /* [wasm export] wasm_reset_view */
 EMSCRIPTEN_KEEPALIVE
 void wasm_reset_view(void) {
     if (g_state) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_state_reset(g_state, NULL);
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -50,7 +61,7 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_undo_zoom(void) {
     if (g_state && g_state->cam.history_count > 0) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         g_state->cam.view = g_state->cam.history[--g_state->cam.history_count];
         g_state->needs_redraw = 1;
         pthread_mutex_unlock(&g_state->state_mutex);
@@ -61,7 +72,7 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_next_palette(void) {
     if (g_state) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         g_state->palette_idx = (g_state->palette_idx + 1) % get_palette_count();
         init_color_palette(g_state->max_iterations, g_state->palette_idx);
         g_state->needs_redraw = 1;
@@ -73,7 +84,7 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_cycle_fractal(void) {
     if (g_state && !g_state->julia_mode) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         g_state->base_fractal = (g_state->base_fractal + 1) % 5;
         g_state->needs_redraw = 1;
         pthread_mutex_unlock(&g_state->state_mutex);
@@ -84,7 +95,7 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_fractal_mode(int mode) {
     if (g_state && !g_state->julia_mode) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         g_state->base_fractal = mode;
         g_state->needs_redraw = 1;
         pthread_mutex_unlock(&g_state->state_mutex);
@@ -95,7 +106,7 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_set_palette(int p) {
     if (g_state) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         g_state->palette_idx = p % get_palette_count();
         init_color_palette(g_state->max_iterations, g_state->palette_idx);
         g_state->needs_redraw = 1;
@@ -107,9 +118,11 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_julia(void) {
     if (g_state) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_state_toggle_julia(g_state, NULL);
-        app_state_push_notification(g_state, g_state->julia_mode ? "julia mode: active" : "julia mode: inactive", stm_ms(stm_now()));
+        app_state_push_notification(
+            g_state, g_state->julia_mode ? "julia mode: active" : "julia mode: inactive",
+            stm_ms(stm_now()));
         g_state->needs_redraw = 1;
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -119,7 +132,7 @@ pthread_mutex_lock(&g_state->state_mutex);
 EMSCRIPTEN_KEEPALIVE
 void wasm_toggle_tour(void) {
     if (g_state) {
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_state_toggle_tour(g_state, stm_ms(stm_now()), NULL);
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -155,7 +168,7 @@ void wasm_mouse_down(double x, double y) {
         ie.mouse_x = x;
         ie.mouse_y = y;
         ie.mouse_btn = 1;
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_handle_input(g_state, &ie, (uint32_t)stm_ms(stm_now()));
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -170,7 +183,7 @@ void wasm_mouse_up(double x, double y) {
         ie.mouse_x = x;
         ie.mouse_y = y;
         ie.mouse_btn = 1;
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_handle_input(g_state, &ie, (uint32_t)stm_ms(stm_now()));
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -184,7 +197,7 @@ void wasm_mouse_move(double x, double y) {
         ie.type = INPUT_MOUSE_MOVE;
         ie.mouse_x = x;
         ie.mouse_y = y;
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_handle_input(g_state, &ie, (uint32_t)stm_ms(stm_now()));
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -197,7 +210,7 @@ void wasm_wheel(double dx, double dy) {
         AppInputEvent ie = {0};
         ie.type = INPUT_MOUSE_SCROLL;
         ie.scroll_y = dy;
-pthread_mutex_lock(&g_state->state_mutex);
+        pthread_mutex_lock(&g_state->state_mutex);
         app_handle_input(g_state, &ie, (uint32_t)stm_ms(stm_now()));
         pthread_mutex_unlock(&g_state->state_mutex);
     }
@@ -249,7 +262,8 @@ void wasm_adjust_iterations(int delta) {
         pthread_mutex_lock(&g_state->state_mutex);
         g_state->max_iterations += delta;
         if (g_state->max_iterations < 10) g_state->max_iterations = 10;
-        if (g_state->max_iterations > MAX_ITERATIONS_LIMIT) g_state->max_iterations = MAX_ITERATIONS_LIMIT;
+        if (g_state->max_iterations > MAX_ITERATIONS_LIMIT)
+            g_state->max_iterations = MAX_ITERATIONS_LIMIT;
         init_color_palette(g_state->max_iterations, g_state->palette_idx);
         g_state->needs_redraw = 1;
         pthread_mutex_unlock(&g_state->state_mutex);

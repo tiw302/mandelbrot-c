@@ -26,4 +26,4 @@ void sokol_handle_mouse(AppCommonState* state, const struct sapp_event* event);
 int sokol_handle_common_keydown(AppCommonState* state, const struct sapp_event* event,
                                 uint32_t now);
 
-#endif // HUD_SOKOL_H
+#endif  // HUD_SOKOL_H

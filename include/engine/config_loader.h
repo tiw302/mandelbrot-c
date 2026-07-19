@@ -15,4 +15,4 @@ double get_config_escape_radius(void);
 int get_config_default_thread_count(void);
 int get_config_default_palette(void);
 
-#endif // CONFIG_LOADER_H
+#endif  // CONFIG_LOADER_H

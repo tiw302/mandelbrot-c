@@ -9,6 +9,7 @@
  */
 
 #include <stdio.h>
+
 #include "app_runner.h"
 
 sapp_desc sokol_main(int argc, char* argv[]) {

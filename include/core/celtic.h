@@ -31,4 +31,4 @@ void celtic_check_f128x4(simd_f128x4 cre, simd_f128x4 cim, int max_iterations, d
 #endif
 #endif
 
-#endif // CELTIC_H
+#endif  // CELTIC_H

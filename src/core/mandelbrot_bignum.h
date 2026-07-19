@@ -25,4 +25,4 @@ double mandelbrot_check_bignum(const BigNum* c_re, const BigNum* c_im, int max_i
 int mandelbrot_bignum_orbit(const BigNum* c_re, const BigNum* c_im, int max_iterations,
                             double* orbit_re_out, double* orbit_im_out);
 
-#endif // MANDELBROT_BIGNUM_H
+#endif  // MANDELBROT_BIGNUM_H

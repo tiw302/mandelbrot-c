@@ -48,4 +48,4 @@ void render_fractal_threaded(RendererContext* ctx, const RenderJob* job);
 void set_cpu_precision(RendererContext* ctx, int use_128bit);
 int get_cpu_precision(const RendererContext* ctx);
 
-#endif // RENDER_H
+#endif  // RENDER_H

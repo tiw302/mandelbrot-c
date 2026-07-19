@@ -86,7 +86,7 @@ void camera_handle_wheel(Camera* cam, double y_delta, int mouse_x, int mouse_y) 
     cam->view.center_im += offset_im * (1.0 - factor);
 
     /* clamp zoom to 1e-14 limit.
-     * zooming past this threshold breaks double-single GPU precision and 
+     * zooming past this threshold breaks double-single GPU precision and
      * introduces heavy perturbation glitches. */
     if (cam->view.zoom < 1e-14) cam->view.zoom = 1e-14;
 }
@@ -128,7 +128,7 @@ bool camera_handle_mouse_up(Camera* cam, int button) {
             camera_push_history(cam);
 
             /* center_offset preserves the sign of zoom_rect.w/h.
-             * if the user dragged right-to-left, w is negative, and x + w/2 
+             * if the user dragged right-to-left, w is negative, and x + w/2
              * correctly identifies the midpoint of the dragged rectangle. */
             precise_float center_offset_x =
                 ((precise_float)cam->zoom_rect.x + (precise_float)cam->zoom_rect.w / 2.0) /

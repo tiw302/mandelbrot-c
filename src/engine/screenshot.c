@@ -243,7 +243,7 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
     if (custom_filename && custom_filename[0] != '\0') {
         strncpy(filename, custom_filename, sizeof(filename) - 1);
         filename[sizeof(filename) - 1] = '\0';
-        
+
         /* sanitize filename to prevent command injection */
         for (int i = 0; filename[i] != '\0'; i++) {
             if (strchr("\"'\\$;|&<>`\n\r", filename[i])) {
@@ -260,7 +260,7 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
     if (log_fontpath && log_fontpath[0] != '\0') {
         strncpy(safe_fontpath, log_fontpath, sizeof(safe_fontpath) - 1);
         safe_fontpath[sizeof(safe_fontpath) - 1] = '\0';
-        
+
         /* sanitize fontpath to prevent command injection */
         for (int i = 0; safe_fontpath[i] != '\0'; i++) {
             if (strchr("\"'\\$;|&<>`\n\r", safe_fontpath[i])) {
@@ -333,8 +333,7 @@ int start_video_recording(int width, int height, int fps, int is_bgra_topdown, i
         snprintf(drawtext_filter, sizeof(drawtext_filter),
                  ",drawtext=fontfile='%s':textfile='%s':reload=1:x=%s:y=%s:fontsize=%d:"
                  "fontcolor=%s:line_spacing=2:expansion=none",
-                 safe_fontpath,
-                 s_log_path, x_pos, y_pos, log_fontsize > 0 ? log_fontsize : 20,
+                 safe_fontpath, s_log_path, x_pos, y_pos, log_fontsize > 0 ? log_fontsize : 20,
                  (log_fontcolor && log_fontcolor[0] != '\0') ? log_fontcolor : "white");
         size_t curr_len = strlen(vf_chain);
         size_t rem = sizeof(vf_chain) - curr_len;
@@ -448,7 +447,7 @@ void save_screenshot(AppCommonState* state, const uint32_t* pixels, int width, i
         {
             try {
                 if (window.downloadScreenshotData) {
-                    var heap = (typeof HEAPU8 !== 'undefined') ? HEAPU8 : Module.HEAPU8;
+                    var heap = (typeof HEAPU8 != = 'undefined') ? HEAPU8 : Module.HEAPU8;
                     window.downloadScreenshotData($0, $1, $2, heap, $3);
                 }
             } catch (e) {

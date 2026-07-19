@@ -56,4 +56,4 @@ void init_fractal_registry(void);
 int get_fractal_registry_count(void);
 const FractalDefinition* get_fractal_by_index(int idx);
 
-#endif // FRACTAL_H
+#endif  // FRACTAL_H

@@ -13,4 +13,4 @@
 void hud_render_sdl(SDL_Renderer* renderer, TTF_Font* font, AppCommonState* state, int win_w,
                     int win_h, int cpu_precision_128, uint32_t now);
 
-#endif // HUD_SDL_H
+#endif  // HUD_SDL_H

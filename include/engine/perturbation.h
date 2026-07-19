@@ -62,4 +62,4 @@ typedef struct {
 RefPoint find_best_ref_point(precise_float center_re, precise_float center_im, precise_float zoom,
                              precise_float aspect, int max_iters, int grid_size);
 
-#endif // PERTURBATION_H
+#endif  // PERTURBATION_H

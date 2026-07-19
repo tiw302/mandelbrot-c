@@ -47,4 +47,4 @@ void julia_check_neon(float64x2_t zre, float64x2_t zim, float64x2_t cre, float64
                       int max_iterations, double* results);
 #endif
 
-#endif // JULIA_H
+#endif  // JULIA_H
