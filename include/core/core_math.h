@@ -46,4 +46,4 @@
 #include "mandelbrot.h"
 #include "tricorn.h"
 
-#endif
+#endif // CORE_MATH_H
